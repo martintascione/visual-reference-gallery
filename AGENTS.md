@@ -9,4 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- App is built in TanStack Start SPA mode (static `dist/client`, `.htaccess` fallback) — no createServerFn or server routes; all logic and data access must run client-side, because it is hosted on Hostinger without a server.
+- App is built in TanStack Start SPA mode (static `.output/public`, `.htaccess` fallback) — no createServerFn or server routes; all logic and data access must run client-side, because it is hosted on Hostinger without a server.

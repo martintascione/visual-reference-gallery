@@ -8,20 +8,22 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/app-shell";
+import { StoreProvider, useStore } from "@/lib/store";
+import { Loading, Login } from "@/components/login";
 
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página no encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          La página que buscás no existe o se movió.
         </p>
         <div className="mt-6">
           <Link
@@ -47,10 +49,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          Esta página no cargó
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Algo salió mal. Probá recargar o volver al inicio.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -91,7 +93,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+      },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
   }),
@@ -117,13 +122,40 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // En modo SPA el shell prerenderizado no lleva contenido y el cliente arranca igual:
+  // así no hay diferencias al hidratar (los datos viven en el navegador).
+  if (router.isShell() || !mounted) return <div className="min-h-screen" />;
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <AppShell>
-        <Outlet />
-      </AppShell>
+      <StoreProvider>
+        <Gate>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+        </Gate>
+      </StoreProvider>
     </QueryClientProvider>
+  );
+}
+
+/** Pide login y espera la carga de la base antes de mostrar el panel. */
+function Gate({ children }: { children: ReactNode }) {
+  const { session, ready, syncError } = useStore();
+  if (!session) return <Login />;
+  if (!ready) return <Loading text={syncError ?? "Cargando datos…"} />;
+  return (
+    <>
+      {syncError && (
+        <div className="fixed inset-x-3 top-3 z-50 rounded-full bg-danger-soft px-4 py-2 text-center text-xs text-danger-soft-foreground shadow-soft">
+          {syncError}
+        </div>
+      )}
+      {children}
+    </>
   );
 }

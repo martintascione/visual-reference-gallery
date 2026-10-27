@@ -1,16 +1,458 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EmptyPage } from "@/components/empty-page";
+import { useState } from "react";
+import {
+  Building2,
+  CreditCard,
+  Plus,
+  Receipt,
+  RotateCcw,
+  Settings2,
+  Trash2,
+  Truck,
+} from "lucide-react";
+import type { Bank, FixedExpense, MethodConfig, PaymentMethod, Zone } from "@/lib/types";
+import { useStore } from "@/lib/store";
+import { ars, uid } from "@/lib/format";
+import {
+  Card,
+  Field,
+  Input,
+  NumberInput,
+  PageHeader,
+  Select,
+  Toggle,
+  btn,
+  tr,
+  Table,
+} from "@/components/ui-bits";
 
 export const Route = createFileRoute("/configuracion")({
   head: () => ({
     meta: [
       { title: "Configuración · Corralón" },
-      { name: "description", content: "Configuración del corralón." },
-      { property: "og:title", content: "Configuración · Corralón" },
-      { property: "og:description", content: "Configuración del corralón." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { name: "description", content: "Bancos, pasarelas, comisiones, fletes y gastos fijos." },
     ],
   }),
-  component: () => <EmptyPage title="Configuración" />,
+  component: Configuracion,
 });
+
+const banks: Bank[] = ["Caja", "BBVA", "Provincia"];
+const methodNames: Record<PaymentMethod, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  debito: "Débito",
+  credito: "Crédito",
+  cheque: "Cheque",
+  cta_cte: "Cuenta corriente",
+};
+
+function Configuracion() {
+  const { db, updateSettings, resetDemo } = useStore();
+  const s = db.settings;
+
+  const setMethods = (methods: MethodConfig[]) => updateSettings({ methods });
+  const updM = (id: string, patch: Partial<MethodConfig>) =>
+    setMethods(s.methods.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const addM = () =>
+    setMethods([
+      ...s.methods,
+      {
+        id: uid(),
+        label: "Nuevo medio",
+        method: "debito",
+        bank: "BBVA",
+        gateway: "Payway",
+        feePct: 0,
+        settleDays: 0,
+        active: true,
+      },
+    ]);
+  const delM = (id: string) => setMethods(s.methods.filter((m) => m.id !== id));
+
+  const setZones = (zones: Zone[]) => updateSettings({ zones });
+  const setFixed = (fixedExpenses: FixedExpense[]) => updateSettings({ fixedExpenses });
+
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  return (
+    <>
+      <PageHeader
+        title="Configuración"
+        subtitle="Valores que usan la calculadora, las ventas y el cierre del día"
+      >
+        {confirmReset ? (
+          <>
+            <span className="text-xs text-muted-foreground">
+              ¿Borrar todas las ventas, productos y clientes? No se puede deshacer.
+            </span>
+            <button
+              className={btn.danger}
+              onClick={() => {
+                resetDemo();
+                setConfirmReset(false);
+              }}
+            >
+              Sí, borrar todo
+            </button>
+            <button className={btn.soft} onClick={() => setConfirmReset(false)}>
+              No
+            </button>
+          </>
+        ) : (
+          <button className={btn.ghost} onClick={() => setConfirmReset(true)}>
+            <RotateCcw className="h-3.5 w-3.5" /> Borrar todos los datos
+          </button>
+        )}
+      </PageHeader>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card title="Negocio y valores por defecto" icon={Settings2}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field label="Nombre del negocio" className="col-span-2 sm:col-span-3">
+              <Input
+                value={s.businessName}
+                onChange={(e) => updateSettings({ businessName: e.target.value })}
+              />
+            </Field>
+            <Field label="Kg por bolsón">
+              <NumberInput value={s.bagKg} onChange={(v) => updateSettings({ bagKg: v })} />
+            </Field>
+            <Field label="Embalaje por bolsón ($)">
+              <NumberInput
+                value={s.packagingPerBag}
+                onChange={(v) => updateSettings({ packagingPerBag: v })}
+              />
+            </Field>
+            <Field label="Descarga por tonelada ($)">
+              <NumberInput
+                value={s.unloadPerTon}
+                onChange={(v) => updateSettings({ unloadPerTon: v })}
+              />
+            </Field>
+            <Field label="IVA % por defecto">
+              <NumberInput value={s.ivaPct} onChange={(v) => updateSettings({ ivaPct: v })} />
+            </Field>
+            <Field label="Margen mínimo % (alerta)">
+              <NumberInput
+                value={s.minMarginPct}
+                onChange={(v) => updateSettings({ minMarginPct: v })}
+              />
+            </Field>
+            <Field label="Validez presupuesto (días)">
+              <NumberInput
+                value={s.quoteValidDays}
+                onChange={(v) => updateSettings({ quoteValidDays: v })}
+              />
+            </Field>
+            <Field label="Seguimiento a los (días)">
+              <NumberInput
+                value={s.followUpDays}
+                onChange={(v) => updateSettings({ followUpDays: v })}
+              />
+            </Field>
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Los valores por defecto se proponen al crear un producto nuevo; cada producto puede
+            cambiarlos.
+          </p>
+        </Card>
+
+        <Card title="Cuentas" icon={Building2}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {banks.map((b) => (
+              <div key={b} className="rounded-3xl bg-surface p-4">
+                <p className="text-xs text-muted-foreground">
+                  {b === "Caja" ? "Efectivo en el local" : "Cuenta bancaria"}
+                </p>
+                <p className="mt-1 text-lg font-bold">{b}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Cada venta, cobro, gasto y débito se asigna a una de estas cuentas. En Caja y bancos se
+            ve el saldo de cada una.
+          </p>
+        </Card>
+
+        <Card
+          title="Medios de cobro, pasarelas y comisiones"
+          icon={CreditCard}
+          className="xl:col-span-2"
+          action={
+            <button className={btn.ghost} onClick={addM}>
+              <Plus className="h-3.5 w-3.5" /> Agregar medio
+            </button>
+          }
+        >
+          <p className="mb-3 text-xs text-muted-foreground">
+            Acá se define con qué banco liquida cada producto de Payway, qué comisión cobra y en
+            cuántos días acredita. Las comisiones cargadas son de ejemplo: hay que reemplazarlas por
+            las reales del contrato con Payway y cada banco.
+          </p>
+          <Table
+            head={[
+              "Nombre",
+              "Tipo",
+              "Pasarela",
+              "Acredita en",
+              { label: "Comisión %", right: true },
+              { label: "Días", right: true },
+              "Activo",
+              "",
+            ]}
+            min={820}
+          >
+            {s.methods.map((m) => (
+              <tr key={m.id} className={tr}>
+                <td>
+                  <Input
+                    value={m.label}
+                    onChange={(e) => updM(m.id, { label: e.target.value })}
+                    className="h-9 min-w-44"
+                  />
+                </td>
+                <td>
+                  <Select
+                    value={m.method}
+                    onChange={(e) => updM(m.id, { method: e.target.value as PaymentMethod })}
+                    className="h-9 min-w-36"
+                  >
+                    {(Object.keys(methodNames) as PaymentMethod[]).map((k) => (
+                      <option key={k} value={k}>
+                        {methodNames[k]}
+                      </option>
+                    ))}
+                  </Select>
+                </td>
+                <td>
+                  <Select
+                    value={m.gateway ?? ""}
+                    onChange={(e) => updM(m.id, { gateway: e.target.value ? "Payway" : undefined })}
+                    className="h-9 min-w-28"
+                  >
+                    <option value="">Ninguna</option>
+                    <option value="Payway">Payway</option>
+                  </Select>
+                </td>
+                <td>
+                  <Select
+                    value={m.bank}
+                    onChange={(e) => updM(m.id, { bank: e.target.value as Bank })}
+                    className="h-9 min-w-28"
+                  >
+                    {banks.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </Select>
+                </td>
+                <td>
+                  <NumberInput
+                    value={m.feePct}
+                    onChange={(v) => updM(m.id, { feePct: v })}
+                    step="0.1"
+                    className="h-9 w-20"
+                  />
+                </td>
+                <td>
+                  <NumberInput
+                    value={m.settleDays}
+                    onChange={(v) => updM(m.id, { settleDays: v })}
+                    className="h-9 w-16"
+                  />
+                </td>
+                <td>
+                  <Toggle checked={m.active} onChange={(v) => updM(m.id, { active: v })} />
+                </td>
+                <td className="text-right">
+                  <button className={btn.icon} onClick={() => delM(m.id)} aria-label="Quitar">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </Card>
+
+        <Card
+          title="Zonas de flete"
+          icon={Truck}
+          action={
+            <button
+              className={btn.ghost}
+              onClick={() =>
+                setZones([...s.zones, { id: uid(), name: "Nueva zona", price: 0, cost: 0 }])
+              }
+            >
+              <Plus className="h-3.5 w-3.5" /> Agregar zona
+            </button>
+          }
+        >
+          <Table
+            head={[
+              "Zona",
+              { label: "Cobra al cliente", right: true },
+              { label: "Costo del viaje", right: true },
+              { label: "Gana", right: true },
+              "",
+            ]}
+            min={460}
+          >
+            {s.zones.map((z) => (
+              <tr key={z.id} className={tr}>
+                <td>
+                  <Input
+                    value={z.name}
+                    onChange={(e) =>
+                      setZones(
+                        s.zones.map((x) => (x.id === z.id ? { ...x, name: e.target.value } : x)),
+                      )
+                    }
+                    className="h-9"
+                  />
+                </td>
+                <td>
+                  <NumberInput
+                    value={z.price}
+                    onChange={(v) =>
+                      setZones(s.zones.map((x) => (x.id === z.id ? { ...x, price: v } : x)))
+                    }
+                    className="h-9 w-28"
+                  />
+                </td>
+                <td>
+                  <NumberInput
+                    value={z.cost}
+                    onChange={(v) =>
+                      setZones(s.zones.map((x) => (x.id === z.id ? { ...x, cost: v } : x)))
+                    }
+                    className="h-9 w-28"
+                  />
+                </td>
+                <td
+                  className={`text-right tabular-nums ${z.price - z.cost < 0 ? "text-danger-soft-foreground" : ""}`}
+                >
+                  {ars(z.price - z.cost)}
+                </td>
+                <td className="text-right">
+                  <button
+                    className={btn.icon}
+                    onClick={() => setZones(s.zones.filter((x) => x.id !== z.id))}
+                    aria-label="Quitar"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            El costo del viaje (gasoil, chofer, peajes) se descuenta de la ganancia de la venta. Si
+            una zona da pérdida aparece en rojo.
+          </p>
+        </Card>
+
+        <Card
+          title="Gastos fijos mensuales"
+          icon={Receipt}
+          action={
+            <button
+              className={btn.ghost}
+              onClick={() =>
+                setFixed([
+                  ...s.fixedExpenses,
+                  { id: uid(), concept: "Nuevo gasto", amount: 0, account: "BBVA", day: 10 },
+                ])
+              }
+            >
+              <Plus className="h-3.5 w-3.5" /> Agregar
+            </button>
+          }
+        >
+          <Table
+            head={[
+              "Concepto",
+              { label: "Monto", right: true },
+              "Cuenta",
+              { label: "Día", right: true },
+              "",
+            ]}
+            min={460}
+          >
+            {s.fixedExpenses.map((f) => (
+              <tr key={f.id} className={tr}>
+                <td>
+                  <Input
+                    value={f.concept}
+                    onChange={(e) =>
+                      setFixed(
+                        s.fixedExpenses.map((x) =>
+                          x.id === f.id ? { ...x, concept: e.target.value } : x,
+                        ),
+                      )
+                    }
+                    className="h-9"
+                  />
+                </td>
+                <td>
+                  <NumberInput
+                    value={f.amount}
+                    onChange={(v) =>
+                      setFixed(
+                        s.fixedExpenses.map((x) => (x.id === f.id ? { ...x, amount: v } : x)),
+                      )
+                    }
+                    className="h-9 w-32"
+                  />
+                </td>
+                <td>
+                  <Select
+                    value={f.account}
+                    onChange={(e) =>
+                      setFixed(
+                        s.fixedExpenses.map((x) =>
+                          x.id === f.id ? { ...x, account: e.target.value as Bank } : x,
+                        ),
+                      )
+                    }
+                    className="h-9 w-28"
+                  >
+                    {banks.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </Select>
+                </td>
+                <td>
+                  <NumberInput
+                    value={f.day}
+                    onChange={(v) =>
+                      setFixed(s.fixedExpenses.map((x) => (x.id === f.id ? { ...x, day: v } : x)))
+                    }
+                    className="h-9 w-16"
+                  />
+                </td>
+                <td className="text-right">
+                  <button
+                    className={btn.icon}
+                    onClick={() => setFixed(s.fixedExpenses.filter((x) => x.id !== f.id))}
+                    aria-label="Quitar"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Total {ars(s.fixedExpenses.reduce((a, f) => a + f.amount, 0))} por mes ·{" "}
+            {ars(Math.round(s.fixedExpenses.reduce((a, f) => a + f.amount, 0) / 30))} por día se
+            prorratea en cada cierre.
+          </p>
+        </Card>
+      </div>
+    </>
+  );
+}

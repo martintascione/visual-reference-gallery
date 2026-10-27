@@ -12,9 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CajaRouteImport } from './routes/caja'
 import { Route as CalendarioRouteImport } from './routes/calendario'
+import { Route as CatalogoRouteImport } from './routes/catalogo'
+import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as GastosRouteImport } from './routes/gastos'
+import { Route as MasRouteImport } from './routes/mas'
 import { Route as NotificacionesRouteImport } from './routes/notificaciones'
 import { Route as NuevaVentaRouteImport } from './routes/nueva-venta'
 import { Route as PresupuestosRouteImport } from './routes/presupuestos'
@@ -37,6 +40,16 @@ const CalendarioRoute = CalendarioRouteImport.update({
   path: '/calendario',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CatalogoRoute = CatalogoRouteImport.update({
+  id: '/catalogo',
+  path: '/catalogo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CierreRoute = CierreRouteImport.update({
+  id: '/cierre',
+  path: '/cierre',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
@@ -50,6 +63,11 @@ const ConfiguracionRoute = ConfiguracionRouteImport.update({
 const GastosRoute = GastosRouteImport.update({
   id: '/gastos',
   path: '/gastos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasRoute = MasRouteImport.update({
+  id: '/mas',
+  path: '/mas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificacionesRoute = NotificacionesRouteImport.update({
@@ -87,9 +105,12 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
+  '/catalogo': typeof CatalogoRoute
+  '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
   '/presupuestos': typeof PresupuestosRoute
@@ -101,9 +122,12 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
+  '/catalogo': typeof CatalogoRoute
+  '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
   '/presupuestos': typeof PresupuestosRoute
@@ -116,9 +140,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
+  '/catalogo': typeof CatalogoRoute
+  '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
   '/presupuestos': typeof PresupuestosRoute
@@ -132,9 +159,12 @@ export interface FileRouteTypes {
     | '/'
     | '/caja'
     | '/calendario'
+    | '/catalogo'
+    | '/cierre'
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
     | '/presupuestos'
@@ -146,9 +176,12 @@ export interface FileRouteTypes {
     | '/'
     | '/caja'
     | '/calendario'
+    | '/catalogo'
+    | '/cierre'
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
     | '/presupuestos'
@@ -160,9 +193,12 @@ export interface FileRouteTypes {
     | '/'
     | '/caja'
     | '/calendario'
+    | '/catalogo'
+    | '/cierre'
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
     | '/presupuestos'
@@ -175,9 +211,12 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CajaRoute: typeof CajaRoute
   CalendarioRoute: typeof CalendarioRoute
+  CatalogoRoute: typeof CatalogoRoute
+  CierreRoute: typeof CierreRoute
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   GastosRoute: typeof GastosRoute
+  MasRoute: typeof MasRoute
   NotificacionesRoute: typeof NotificacionesRoute
   NuevaVentaRoute: typeof NuevaVentaRoute
   PresupuestosRoute: typeof PresupuestosRoute
@@ -209,6 +248,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CalendarioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/catalogo': {
+      id: '/catalogo'
+      path: '/catalogo'
+      fullPath: '/catalogo'
+      preLoaderRoute: typeof CatalogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cierre': {
+      id: '/cierre'
+      path: '/cierre'
+      fullPath: '/cierre'
+      preLoaderRoute: typeof CierreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/clientes': {
       id: '/clientes'
       path: '/clientes'
@@ -228,6 +281,13 @@ declare module '@tanstack/react-router' {
       path: '/gastos'
       fullPath: '/gastos'
       preLoaderRoute: typeof GastosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mas': {
+      id: '/mas'
+      path: '/mas'
+      fullPath: '/mas'
+      preLoaderRoute: typeof MasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notificaciones': {
@@ -279,9 +339,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CajaRoute: CajaRoute,
   CalendarioRoute: CalendarioRoute,
+  CatalogoRoute: CatalogoRoute,
+  CierreRoute: CierreRoute,
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   GastosRoute: GastosRoute,
+  MasRoute: MasRoute,
   NotificacionesRoute: NotificacionesRoute,
   NuevaVentaRoute: NuevaVentaRoute,
   PresupuestosRoute: PresupuestosRoute,
