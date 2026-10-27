@@ -85,7 +85,11 @@ function Catalogo() {
         <button className={btn.soft} onClick={() => setBulk(true)}>
           <Percent className="h-4 w-4" strokeWidth={1.6} /> Actualizar precios
         </button>
-        <button className={btn.primary} onClick={() => setEditing("new")}>
+        <button
+          data-tour="catalogo-nuevo"
+          className={btn.primary}
+          onClick={() => setEditing("new")}
+        >
           <Plus className="h-4 w-4" /> Nuevo producto
         </button>
       </PageHeader>

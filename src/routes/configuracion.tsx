@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { fmtDate } from "@/lib/format";
 import {
   Building2,
+  CircleHelp,
   CreditCard,
   Lightbulb,
   Plus,
@@ -102,9 +103,17 @@ function Configuracion() {
             </button>
           </>
         ) : (
-          <button className={btn.ghost} onClick={() => setConfirmReset(true)}>
-            <RotateCcw className="h-3.5 w-3.5" /> Borrar todos los datos
-          </button>
+          <>
+            <button
+              className={btn.soft}
+              onClick={() => window.dispatchEvent(new Event("abrir-tour"))}
+            >
+              <CircleHelp className="h-3.5 w-3.5" /> Recorrido guiado
+            </button>
+            <button className={btn.ghost} onClick={() => setConfirmReset(true)}>
+              <RotateCcw className="h-3.5 w-3.5" /> Borrar todos los datos
+            </button>
+          </>
         )}
       </PageHeader>
 

@@ -128,3 +128,75 @@ export async function saveFeatureRequest(
   });
   return !error;
 }
+
+// ---------- Historial de conversaciones (tabla chat_messages) ----------
+
+export type Conversation = { id: string; startedAt: string; preview: string; count: number };
+
+export async function loadConversations(): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("conversation_id, created_at, role, content")
+    .order("created_at", { ascending: true })
+    .limit(2000);
+  if (error || !data) return [];
+  const map = new Map<string, Conversation>();
+  for (const r of data as {
+    conversation_id: string;
+    created_at: string;
+    role: string;
+    content: string;
+  }[]) {
+    const c = map.get(r.conversation_id);
+    if (!c)
+      map.set(r.conversation_id, {
+        id: r.conversation_id,
+        startedAt: r.created_at,
+        preview: r.role === "user" ? r.content.slice(0, 60) : "",
+        count: 1,
+      });
+    else {
+      c.count += 1;
+      if (!c.preview && r.role === "user") c.preview = r.content.slice(0, 60);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+export async function loadMessages(conversationId: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("role, content, botones, nota")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true })
+    .limit(400);
+  if (error || !data) return [];
+  return (
+    data as {
+      role: "user" | "assistant";
+      content: string;
+      botones: AssistantButton[] | null;
+      nota: string | null;
+    }[]
+  ).map((m) => ({
+    role: m.role,
+    content: m.content,
+    botones: m.botones ?? undefined,
+    nota: m.nota ?? undefined,
+  }));
+}
+
+export async function saveMessage(conversationId: string, m: ChatMessage, user?: string) {
+  const { error } = await supabase.from("chat_messages").insert({
+    conversation_id: conversationId,
+    role: m.role,
+    content: m.content,
+    botones: m.botones ?? null,
+    nota: m.nota ?? null,
+    user_email: user ?? null,
+  });
+  return !error;
+}
+
+export const newConversationId = () =>
+  "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);

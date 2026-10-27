@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Mic, MicOff, Send, Sparkles, X } from "lucide-react";
+import { History, Mic, MicOff, Plus, Send, Sparkles, X } from "lucide-react";
 import {
   askAssistant,
+  loadConversations,
+  loadMessages,
+  newConversationId,
   routeFor,
   saveFeatureRequest,
+  saveMessage,
   type AssistantAction,
   type ChatMessage,
+  type Conversation,
 } from "@/lib/assistant";
+import { DEMO } from "@/lib/store";
+import { fmtDate } from "@/lib/format";
 import { fullContext } from "@/lib/assistant-context";
 import { useStore } from "@/lib/store";
 import { btn } from "./ui-bits";
@@ -57,6 +64,38 @@ export function Assistant() {
     return () => window.removeEventListener("abrir-asistente", on);
   }, []);
   const [msgs, setMsgs] = useState<ChatMessage[]>([welcome]);
+  const [convId, setConvId] = useState<string>(() => newConversationId());
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // Al abrir por primera vez: retoma la última conversación guardada.
+  useEffect(() => {
+    if (!open || loaded || DEMO) return;
+    setLoaded(true);
+    void (async () => {
+      const list = await loadConversations();
+      setConvs(list);
+      const last = list[0];
+      if (last) {
+        setConvId(last.id);
+        const m = await loadMessages(last.id);
+        if (m.length) setMsgs([welcome, ...m]);
+      }
+    })();
+  }, [open, loaded]);
+
+  const openConversation = async (id: string) => {
+    setConvId(id);
+    setShowHistory(false);
+    const m = await loadMessages(id);
+    setMsgs([welcome, ...m]);
+  };
+  const startNew = () => {
+    setConvId(newConversationId());
+    setMsgs([welcome]);
+    setShowHistory(false);
+  };
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -71,10 +110,12 @@ export function Assistant() {
   const send = async (text: string) => {
     const t = text.trim();
     if (!t || busy) return;
-    const next: ChatMessage[] = [...msgs, { role: "user", content: t }];
+    const userMsg: ChatMessage = { role: "user", content: t };
+    const next: ChatMessage[] = [...msgs, userMsg];
     setMsgs(next);
     setInput("");
     setBusy(true);
+    if (!DEMO) void saveMessage(convId, userMsg, session?.user.email);
     const reply = await askAssistant(
       next.filter((m) => m !== welcome),
       fullContext(db),
@@ -86,17 +127,19 @@ export function Assistant() {
         ? `Mejora anotada para el programador: "${reply.mejora.titulo}"`
         : "No pude guardar la mejora (revisá la conexión).";
     }
-    setMsgs([
-      ...next,
-      reply.error
-        ? {
-            role: "assistant",
-            content: `No pude responder ahora. ${reply.error.includes("ANTHROPIC_API_KEY") ? "Falta configurar la clave del asistente en Supabase." : "Probá de nuevo en un momento."}`,
-            nota: reply.error,
-          }
-        : { role: "assistant", content: reply.texto, botones: reply.botones, nota },
-    ]);
+    const botMsg: ChatMessage = reply.error
+      ? {
+          role: "assistant",
+          content: `No pude responder ahora. ${reply.error.includes("ANTHROPIC_API_KEY") ? "Falta configurar la clave del asistente en Supabase." : "Probá de nuevo en un momento."}`,
+          nota: reply.error,
+        }
+      : { role: "assistant", content: reply.texto, botones: reply.botones, nota };
+    setMsgs([...next, botMsg]);
     setBusy(false);
+    if (!DEMO && !reply.error) {
+      await saveMessage(convId, botMsg, session?.user.email);
+      setConvs(await loadConversations());
+    }
   };
 
   const run = (a: AssistantAction) => {
@@ -156,10 +199,50 @@ export function Assistant() {
                 <p className="text-[11px] text-muted-foreground">Te enseña a usar el panel</p>
               </div>
             </div>
-            <button className={btn.icon} onClick={() => setOpen(false)} aria-label="Cerrar">
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                className={btn.icon}
+                onClick={() => setShowHistory((v) => !v)}
+                aria-label="Historial"
+                title="Conversaciones anteriores"
+              >
+                <History className="h-4 w-4" strokeWidth={1.6} />
+              </button>
+              <button
+                className={btn.icon}
+                onClick={startNew}
+                aria-label="Nueva conversación"
+                title="Nueva conversación"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.6} />
+              </button>
+              <button className={btn.icon} onClick={() => setOpen(false)} aria-label="Cerrar">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+          {showHistory && (
+            <div className="max-h-56 overflow-y-auto border-b border-border bg-surface px-3 py-2">
+              <p className="px-1 pb-1 text-[11px] font-semibold text-muted-foreground">
+                Conversaciones guardadas
+              </p>
+              {convs.length === 0 && (
+                <p className="px-1 py-2 text-xs text-muted-foreground">
+                  Todavía no hay conversaciones guardadas.
+                </p>
+              )}
+              {convs.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => void openConversation(c.id)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-left text-xs transition-colors hover:bg-card ${c.id === convId ? "bg-card font-medium" : ""}`}
+                >
+                  <span className="truncate">{c.preview || "(sin texto)"}</span>
+                  <span className="shrink-0 text-muted-foreground">{fmtDate(c.startedAt)}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {msgs.map((m, i) => (

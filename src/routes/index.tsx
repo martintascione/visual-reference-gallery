@@ -225,7 +225,10 @@ function Index() {
       {firstRun && <FirstSteps />}
 
       {/* Acciones del día a día */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div
+        data-tour="inicio-acciones"
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6"
+      >
         {quick.map((q) => (
           <Link
             key={q.to}
@@ -253,7 +256,7 @@ function Index() {
         {/* Centro */}
         <div className="flex min-w-0 flex-col gap-5">
           <section className="card-soft flex flex-col gap-6 p-5 md:p-6">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div data-tour="inicio-kpis" className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {[
                 {
                   l: "Ventas de hoy",
@@ -291,7 +294,7 @@ function Index() {
               ))}
             </div>
 
-            <div>
+            <div data-tour="inicio-plata">
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wallet className="h-4 w-4" strokeWidth={1.6} />

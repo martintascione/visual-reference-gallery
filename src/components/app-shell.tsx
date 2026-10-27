@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   ChartColumn,
+  CircleHelp,
   FileText,
   Home,
   Landmark,
@@ -25,6 +26,7 @@ import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { GlobalSearch } from "./global-search";
 import { Assistant } from "./assistant";
+import { Tour } from "./tour";
 
 const nav = [
   { to: "/", label: "Inicio", icon: Home },
@@ -63,11 +65,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link to="/" className="flex shrink-0 items-center" aria-label="Inicio">
             <img src={logo} alt="Áridos Petreos" className="h-9 w-auto md:h-10" />
           </Link>
-          <div className="hidden min-w-0 flex-1 justify-center md:flex">
+          <div data-tour="buscador" className="hidden min-w-0 flex-1 justify-center md:flex">
             <GlobalSearch />
           </div>
           <div className="ml-auto flex items-center gap-2">
             <button
+              data-tour="asistente"
               onClick={() => window.dispatchEvent(new Event("abrir-asistente"))}
               className="group relative flex h-11 items-center gap-2 rounded-full bg-card px-4 text-sm font-medium shadow-soft transition-colors hover:bg-accent"
               aria-label="Asistente"
@@ -77,6 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <Link
               to="/notificaciones"
+              data-tour="avisos"
               className={`relative ${circle}`}
               aria-label="Avisos"
               activeProps={{ className: activeCircle }}
@@ -86,6 +90,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-destructive ring-2 ring-card" />
               )}
             </Link>
+            <button
+              onClick={() => window.dispatchEvent(new Event("abrir-tour"))}
+              className={`hidden lg:grid ${circle}`}
+              aria-label="Recorrido guiado"
+              title="Recorrido guiado"
+            >
+              <CircleHelp className="h-[18px] w-[18px]" strokeWidth={1.6} />
+            </button>
             <Link
               to="/calendario"
               className={`hidden sm:grid ${circle}`}
@@ -96,6 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <Link
               to="/configuracion"
+              data-tour="configuracion"
               className={`hidden sm:grid ${circle}`}
               aria-label="Configuración"
               activeProps={{ className: activeCircle }}
@@ -104,6 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <Link
               to="/nueva-venta"
+              data-tour="nueva-venta"
               className="hidden h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 md:flex"
             >
               <Plus className="h-4 w-4" /> Nueva venta
@@ -142,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1" data-tour="page">
           <div className="mb-4 md:hidden">
             <GlobalSearch />
           </div>
@@ -151,6 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <Assistant />
+      <Tour />
 
       {/* Barra inferior en el celular */}
       <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-full bg-card px-2 py-2 shadow-soft md:hidden">

@@ -323,6 +323,7 @@ export function SaleForm({
           <label className="flex h-11 items-center gap-2 rounded-full bg-surface px-4">
             <Search className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
             <input
+              data-tour="venta-productos"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar y agregar producto"
