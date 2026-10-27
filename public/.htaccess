@@ -1,0 +1,22 @@
+# Hostinger / Apache: servir archivos existentes y redirigir el resto a index.html (SPA)
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+
+# Si el archivo o la carpeta existen (JS, CSS, imágenes...), servirlos tal cual
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Todo lo demás va al shell de la app
+RewriteRule ^ index.html [L]
+
+# Cache: assets con hash por 1 año, index.html sin cache
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
