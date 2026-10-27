@@ -27,6 +27,10 @@ import type {
   StockMove,
 } from "./types";
 import { emptyDB } from "./seed";
+import { demoDB } from "./demo-seed";
+
+/** Modo demo: datos de ejemplo en memoria, sin Supabase (para previsualizar y probar). */
+export const DEMO = import.meta.env["VITE_DEMO"] === "1";
 import { addDays, dayOf, todayISO, uid } from "./format";
 import { fromRow, supabase, toRow } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -178,6 +182,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Sesión
   useEffect(() => {
+    if (DEMO) {
+      setSession({ user: { email: "demo@aridospetreos.com" } } as unknown as Session);
+      setDbState(demoDB());
+      setReady(true);
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
@@ -185,6 +195,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Carga inicial cuando hay sesión
   useEffect(() => {
+    if (DEMO) return;
     if (!session) {
       setReady(false);
       return;
@@ -210,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const next = fn(structuredClone(prev));
     dbRef.current = next;
     setDbState(next);
+    if (DEMO) return;
     queue.current = queue.current
       .then(() => persistDiff(prev, next))
       .then(() => setSyncError(null))

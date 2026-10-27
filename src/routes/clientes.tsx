@@ -7,6 +7,7 @@ import { ars, daysBetween, fmtDate, todayISO, uid } from "@/lib/format";
 import {
   Badge,
   Card,
+  Empty,
   Field,
   Input,
   Modal,
@@ -152,6 +153,22 @@ function Clientes() {
               </tr>
             ))}
           </Table>
+          {rows.length === 0 && (
+            <Empty
+              text={
+                db.clients.length
+                  ? "No hay clientes con ese nombre."
+                  : "Todavía no hay clientes. Los que compran a cuenta corriente conviene cargarlos con teléfono y límite de crédito; los demás se crean solos al vender."
+              }
+              action={
+                !db.clients.length && (
+                  <button className={btn.primary} onClick={() => setEdit("new")}>
+                    <Plus className="h-4 w-4" /> Nuevo cliente
+                  </button>
+                )
+              }
+            />
+          )}
         </Card>
 
         <Card icon={Wallet} title={selected ? `Cuenta de ${selected.name}` : "Cuenta corriente"}>
@@ -288,7 +305,7 @@ function Account({ client }: { client: Client }) {
       >
         <div className="flex flex-col gap-3">
           <Field label="Monto">
-            <NumberInput value={amount} onChange={setAmount} />
+            <NumberInput value={amount} onChange={setAmount} prefix="$" />
           </Field>
           <Field label="Cómo paga">
             <Select value={methodId} onChange={(e) => setMethodId(e.target.value)}>
@@ -358,7 +375,11 @@ function ClientEditor({
           />
         </Field>
         <Field label="Límite de crédito" hint="0 = sin límite">
-          <NumberInput value={c.creditLimit} onChange={(v) => setC({ ...c, creditLimit: v })} />
+          <NumberInput
+            value={c.creditLimit}
+            onChange={(v) => setC({ ...c, creditLimit: v })}
+            prefix="$"
+          />
         </Field>
         <Field label="Nota">
           <Input value={c.note ?? ""} onChange={(e) => setC({ ...c, note: e.target.value })} />

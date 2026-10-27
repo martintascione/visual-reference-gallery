@@ -8,6 +8,7 @@ import { marginOnPrice, round, simplePrice, stoneCalc, stoneKgForArea } from "@/
 import {
   Badge,
   Card,
+  Empty,
   Field,
   Modal,
   NumberInput,
@@ -159,9 +160,21 @@ function Catalogo() {
           })}
         </Table>
         {list.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No hay productos para mostrar.
-          </p>
+          <Empty
+            title={db.products.some((p) => p.active) ? "Nada por acá" : "Todavía no hay productos"}
+            text={
+              db.products.some((p) => p.active)
+                ? "Probá con otra búsqueda o categoría."
+                : "Cargá tu primer producto con el precio del proveedor: la calculadora arma el precio de venta por kg, bolsón y tonelada."
+            }
+            action={
+              !db.products.some((p) => p.active) && (
+                <button className={btn.primary} onClick={() => setEditing("new")}>
+                  <Plus className="h-4 w-4" /> Cargar primer producto
+                </button>
+              )
+            }
+          />
         )}
       </Card>
 
@@ -244,7 +257,7 @@ function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
             </Select>
           </Field>
           <Field label="Porcentaje" hint="Negativo para bajar">
-            <NumberInput value={pct} onChange={setPct} />
+            <NumberInput value={pct} onChange={setPct} suffix="%" />
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -292,10 +305,10 @@ function QtyCalculator({ open, onClose }: { open: boolean; onClose: () => void }
             </Select>
           </Field>
           <Field label="Superficie (m²)">
-            <NumberInput value={m2} onChange={setM2} />
+            <NumberInput value={m2} onChange={setM2} suffix="m²" />
           </Field>
           <Field label="Espesor (cm)">
-            <NumberInput value={cm} onChange={setCm} />
+            <NumberInput value={cm} onChange={setCm} suffix="cm" />
           </Field>
         </div>
         {p && (

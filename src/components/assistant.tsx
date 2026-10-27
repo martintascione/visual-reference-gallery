@@ -51,6 +51,11 @@ export function Assistant() {
   const { db, session, setPendingAction } = useStore();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const on = () => setOpen(true);
+    window.addEventListener("abrir-asistente", on);
+    return () => window.removeEventListener("abrir-asistente", on);
+  }, []);
   const [msgs, setMsgs] = useState<ChatMessage[]>([welcome]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -139,14 +144,6 @@ export function Assistant() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Abrir asistente"
-        className={`fixed bottom-24 right-4 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-soft transition-opacity hover:opacity-90 md:bottom-6 md:right-6 ${open ? "hidden" : ""}`}
-      >
-        <Sparkles className="h-4 w-4" strokeWidth={1.6} /> Asistente
-      </button>
-
       {open && (
         <div className="fixed inset-x-3 bottom-3 top-16 z-50 flex flex-col overflow-hidden rounded-3xl bg-card shadow-soft md:inset-auto md:bottom-6 md:right-6 md:h-[620px] md:w-[400px]">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">

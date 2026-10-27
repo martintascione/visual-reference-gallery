@@ -224,7 +224,12 @@ function Cierre() {
                 <span className="font-semibold tabular-nums">{ars(cashExpected)}</span>
               </p>
               <Field label="Efectivo contado en caja">
-                <NumberInput value={cash} onChange={setCash} className="h-12 text-lg" />
+                <NumberInput
+                  value={cash}
+                  onChange={setCash}
+                  prefix="$"
+                  className="h-12 text-lg font-semibold"
+                />
               </Field>
               {cash > 0 && (
                 <p

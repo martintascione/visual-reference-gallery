@@ -271,14 +271,14 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
             />
           </Field>
           <Field label="Precio de la mercadería ($)">
-            <NumberInput value={price} onChange={setPrice} />
+            <NumberInput value={price} onChange={setPrice} prefix="$" />
           </Field>
           <Field label="Flete pagado ($)">
-            <NumberInput value={freight} onChange={setFreight} />
+            <NumberInput value={freight} onChange={setFreight} prefix="$" />
           </Field>
           {isStone && (
             <Field label="Descarga ($)">
-              <NumberInput value={unload} onChange={setUnload} />
+              <NumberInput value={unload} onChange={setUnload} prefix="$" />
             </Field>
           )}
         </div>

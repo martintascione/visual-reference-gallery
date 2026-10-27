@@ -383,7 +383,7 @@ function NewCheque({ open, onClose }: { open: boolean; onClose: () => void }) {
           />
         </Field>
         <Field label="Monto">
-          <NumberInput value={c.amount} onChange={(v) => setC({ ...c, amount: v })} />
+          <NumberInput value={c.amount} onChange={(v) => setC({ ...c, amount: v })} prefix="$" />
         </Field>
         <div className="flex items-end pb-2">
           <Toggle checked={c.echeq} onChange={(v) => setC({ ...c, echeq: v })} label="Es e-cheq" />
@@ -421,7 +421,7 @@ function NewIncome({ open, onClose }: { open: boolean; onClose: () => void }) {
           />
         </Field>
         <Field label="Monto">
-          <NumberInput value={amount} onChange={setAmount} />
+          <NumberInput value={amount} onChange={setAmount} prefix="$" />
         </Field>
         <Field label="Entra en">
           <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>

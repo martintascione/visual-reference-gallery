@@ -5,7 +5,17 @@ import type { Sale } from "@/lib/types";
 import { feeFor, useStore } from "@/lib/store";
 import { addDays, ars, dayOf, fmtDate, fmtTime, num, todayISO } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
-import { Card, PageHeader, Segmented, Stat, Table, Toggle, btn, tr } from "@/components/ui-bits";
+import {
+  Card,
+  Empty,
+  PageHeader,
+  Segmented,
+  Stat,
+  Table,
+  Toggle,
+  btn,
+  tr,
+} from "@/components/ui-bits";
 import { PayChips, SaleDetail } from "@/components/sale-detail";
 
 export const Route = createFileRoute("/ventas")({
@@ -142,9 +152,18 @@ function Ventas() {
             ))}
           </Table>
           {list.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No hay ventas en este período.
-            </p>
+            <Empty
+              text={
+                db.sales.length
+                  ? "No hay ventas en este período."
+                  : "Todavía no se cargó ninguna venta. Desde Nueva venta se arma en un minuto: productos, cliente, flete y cómo cobra."
+              }
+              action={
+                <Link to="/nueva-venta" className={btn.primary}>
+                  <Plus className="h-4 w-4" /> Nueva venta
+                </Link>
+              }
+            />
           )}
         </Card>
 

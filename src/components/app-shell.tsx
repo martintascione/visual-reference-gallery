@@ -1,10 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, type ReactNode } from "react";
-import { buildAlerts } from "@/lib/alerts";
-import { useStore } from "@/lib/store";
-import { GlobalSearch } from "./global-search";
-import { Assistant } from "./assistant";
-import { supabase } from "@/lib/supabase";
 import {
   Bell,
   CalendarDays,
@@ -12,6 +7,7 @@ import {
   FileText,
   Home,
   Landmark,
+  Lock,
   LogOut,
   Menu,
   Package,
@@ -19,10 +15,16 @@ import {
   Receipt,
   Settings,
   ShoppingCart,
+  Sparkles,
   Tags,
   Users,
-  Mountain,
 } from "lucide-react";
+import logo from "@/assets/aridos-petreos-logo.png";
+import { buildAlerts } from "@/lib/alerts";
+import { useStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
+import { GlobalSearch } from "./global-search";
+import { Assistant } from "./assistant";
 
 const nav = [
   { to: "/", label: "Inicio", icon: Home },
@@ -32,7 +34,8 @@ const nav = [
   { to: "/stock", label: "Stock", icon: Package },
   { to: "/clientes", label: "Clientes y cuentas corrientes", icon: Users },
   { to: "/caja", label: "Caja y bancos", icon: Landmark },
-  { to: "/gastos", label: "Gastos", icon: Receipt },
+  { to: "/gastos", label: "Gastos y débitos", icon: Receipt },
+  { to: "/cierre", label: "Cierre del día", icon: Lock },
   { to: "/reportes", label: "Reportes", icon: ChartColumn },
 ] as const;
 
@@ -51,90 +54,108 @@ function Tip({ label }: { label: string }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const { db } = useStore();
   const alertCount = useMemo(() => buildAlerts(db).filter((a) => a.urgent).length, [db]);
-  return (
-    <div className="flex min-h-screen w-full gap-4 p-3 pb-24 md:p-5 md:pb-5">
-      {/* Sidebar */}
-      <aside className="sticky top-5 hidden h-[calc(100vh-2.5rem)] w-11 shrink-0 flex-col items-center md:flex">
-        <div className={circle}>
-          <Mountain className="h-5 w-5" strokeWidth={1.6} />
-        </div>
-        <nav className="my-auto flex flex-col gap-3">
-          {nav.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`group relative ${circle}`}
-              activeProps={{ className: activeCircle }}
-              activeOptions={{ exact: true }}
-              aria-label={label}
-            >
-              <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
-              <Tip label={label} />
-            </Link>
-          ))}
-        </nav>
-        <div className="flex flex-col items-center gap-3">
-          <Link
-            to="/configuracion"
-            className={`group relative ${circle}`}
-            activeProps={{ className: activeCircle }}
-            aria-label="Configuración"
-          >
-            <Settings className="h-[18px] w-[18px]" strokeWidth={1.6} />
-            <Tip label="Configuración" />
-          </Link>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className={`group relative ${circle}`}
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="h-[18px] w-[18px]" strokeWidth={1.6} />
-            <Tip label="Cerrar sesión" />
-          </button>
-        </div>
-      </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        {/* Top bar */}
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-          <GlobalSearch />
-          <div className="flex items-center gap-2">
-            <Link to="/notificaciones" className={`relative ${circle}`} aria-label="Avisos">
+  return (
+    <div className="min-h-screen w-full">
+      {/* Cabecera fija: logo, buscador y accesos. Siempre visible, en todas las secciones. */}
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-[72px] max-w-[1480px] items-center gap-4 px-4 md:px-6">
+          <Link to="/" className="flex shrink-0 items-center" aria-label="Inicio">
+            <img src={logo} alt="Áridos Petreos" className="h-9 w-auto md:h-10" />
+          </Link>
+          <div className="hidden min-w-0 flex-1 justify-center md:flex">
+            <GlobalSearch />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => window.dispatchEvent(new Event("abrir-asistente"))}
+              className="group relative flex h-11 items-center gap-2 rounded-full bg-card px-4 text-sm font-medium shadow-soft transition-colors hover:bg-accent"
+              aria-label="Asistente"
+            >
+              <Sparkles className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              <span className="hidden lg:inline">Asistente</span>
+            </button>
+            <Link
+              to="/notificaciones"
+              className={`relative ${circle}`}
+              aria-label="Avisos"
+              activeProps={{ className: activeCircle }}
+            >
               <Bell className="h-[18px] w-[18px]" strokeWidth={1.6} />
               {alertCount > 0 && (
-                <span className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-destructive" />
+                <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-destructive ring-2 ring-card" />
               )}
             </Link>
-            <Link to="/calendario" className={`hidden sm:grid ${circle}`} aria-label="Agenda">
+            <Link
+              to="/calendario"
+              className={`hidden sm:grid ${circle}`}
+              aria-label="Agenda"
+              activeProps={{ className: activeCircle }}
+            >
               <CalendarDays className="h-[18px] w-[18px]" strokeWidth={1.6} />
             </Link>
             <Link
               to="/configuracion"
               className={`hidden sm:grid ${circle}`}
               aria-label="Configuración"
+              activeProps={{ className: activeCircle }}
             >
               <Settings className="h-[18px] w-[18px]" strokeWidth={1.6} />
             </Link>
             <Link
               to="/nueva-venta"
-              className="hidden h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground md:flex"
+              className="hidden h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 md:flex"
             >
               <Plus className="h-4 w-4" /> Nueva venta
             </Link>
           </div>
-        </header>
-        <main className="min-w-0 flex-1">{children}</main>
-        <Assistant />
+        </div>
+      </header>
+
+      <div className="mx-auto flex max-w-[1480px] gap-5 px-4 pb-28 pt-5 md:px-6 md:pb-8">
+        {/* Menú lateral */}
+        <aside className="sticky top-[92px] hidden h-[calc(100vh-112px)] w-11 shrink-0 flex-col items-center md:flex">
+          <nav className="flex flex-col gap-3">
+            {nav.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className={`group relative ${circle}`}
+                activeProps={{ className: activeCircle }}
+                activeOptions={{ exact: to === "/" }}
+                aria-label={label}
+              >
+                <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+                <Tip label={label} />
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-auto flex flex-col items-center gap-3">
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className={`group relative ${circle}`}
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              <Tip label="Cerrar sesión" />
+            </button>
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1">
+          <div className="mb-4 md:hidden">
+            <GlobalSearch />
+          </div>
+          {children}
+        </main>
       </div>
 
-      {/* Mobile bottom nav */}
+      <Assistant />
+
+      {/* Barra inferior en el celular */}
       <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-full bg-card px-2 py-2 shadow-soft md:hidden">
-        {[
-          { to: "/", label: "Inicio", icon: Home },
-          { to: "/ventas", label: "Ventas", icon: ShoppingCart },
-        ].map(({ to, label, icon: Icon }) => (
-          <MobileItem key={to} to={to} label={label} icon={Icon} />
-        ))}
+        <MobileItem to="/" label="Inicio" icon={Home} exact />
+        <MobileItem to="/ventas" label="Ventas" icon={ShoppingCart} />
         <Link
           to="/nueva-venta"
           aria-label="Nueva venta"
@@ -142,18 +163,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Plus className="h-6 w-6" />
         </Link>
-        <MobileItem to="/stock" label="Stock" icon={Package} />
+        <MobileItem to="/catalogo" label="Precios" icon={Tags} />
         <MobileItem to="/mas" label="Más" icon={Menu} />
       </nav>
     </div>
   );
 }
 
-function MobileItem({ to, label, icon: Icon }: { to: string; label: string; icon: typeof Home }) {
+function MobileItem({
+  to,
+  label,
+  icon: Icon,
+  exact,
+}: {
+  to: string;
+  label: string;
+  icon: typeof Home;
+  exact?: boolean;
+}) {
   return (
     <Link
       to={to}
-      activeOptions={{ exact: true }}
+      activeOptions={{ exact: !!exact }}
       className="flex flex-col items-center gap-0.5 px-2 text-[10px] text-muted-foreground"
       activeProps={{ className: "!text-foreground font-semibold" }}
     >

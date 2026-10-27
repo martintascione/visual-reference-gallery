@@ -387,14 +387,12 @@ export function SaleForm({
                       onChange={(v) => updLine(i, { qty: v })}
                       min={0}
                       step={l.unit === "t" ? 0.5 : 1}
-                      className="h-9"
                     />
                   </Field>
                   <Field label="Unidad">
                     <Select
                       value={l.unit}
                       onChange={(e) => updLine(i, { unit: e.target.value as SaleUnit })}
-                      className="h-9"
                     >
                       {saleUnitsFor(p).map((u) => (
                         <option key={u} value={u}>
@@ -407,7 +405,7 @@ export function SaleForm({
                     <NumberInput
                       value={l.price ?? listPrice(p, l.unit)}
                       onChange={(v) => updLine(i, { price: v })}
-                      className="h-9"
+                      prefix="$"
                     />
                   </Field>
                   <div className="text-right">
@@ -471,12 +469,14 @@ export function SaleForm({
                 <NumberInput
                   value={delivery.price}
                   onChange={(v) => setDelivery({ ...delivery, price: v })}
+                  prefix="$"
                 />
               </Field>
               <Field label="Costo del viaje">
                 <NumberInput
                   value={delivery.cost}
                   onChange={(v) => setDelivery({ ...delivery, cost: v })}
+                  prefix="$"
                 />
               </Field>
               <Field label="Fecha de entrega" className="col-span-2">
@@ -612,7 +612,6 @@ export function SaleForm({
                               ),
                             )
                           }
-                          className="h-9"
                         >
                           {methods.map((m) => (
                             <option key={m.id} value={m.id}>
@@ -628,7 +627,7 @@ export function SaleForm({
                             setTouched(true);
                             setPays(pays.map((x, j) => (j === i ? { ...x, amount: v } : x)));
                           }}
-                          className="h-9"
+                          prefix="$"
                         />
                       </Field>
                       <button
@@ -663,7 +662,6 @@ export function SaleForm({
                               ),
                             )
                           }
-                          className="h-9"
                         >
                           {[1, 3, 6, 12].map((n) => (
                             <option key={n} value={n}>
@@ -683,7 +681,6 @@ export function SaleForm({
                                 pays.map((x, j) => (j === i ? { ...x, dues: Math.max(1, v) } : x)),
                               )
                             }
-                            className="h-9"
                           />
                         </Field>
                         <p className="pb-2 text-[11px] text-muted-foreground">
@@ -697,14 +694,12 @@ export function SaleForm({
                           <Input
                             value={cheque.number}
                             onChange={(e) => setCheque({ ...cheque, number: e.target.value })}
-                            className="h-9"
                           />
                         </Field>
                         <Field label="Banco emisor">
                           <Input
                             value={cheque.bank}
                             onChange={(e) => setCheque({ ...cheque, bank: e.target.value })}
-                            className="h-9"
                             placeholder="Nación, Galicia…"
                           />
                         </Field>
@@ -712,7 +707,6 @@ export function SaleForm({
                           <Input
                             value={cheque.drawer}
                             onChange={(e) => setCheque({ ...cheque, drawer: e.target.value })}
-                            className="h-9"
                             placeholder={clientName}
                           />
                         </Field>
@@ -721,7 +715,6 @@ export function SaleForm({
                             type="date"
                             value={cheque.dueDate}
                             onChange={(e) => setCheque({ ...cheque, dueDate: e.target.value })}
-                            className="h-9"
                           />
                         </Field>
                         <div className="col-span-2">
@@ -784,7 +777,7 @@ export function SaleForm({
           <Card title="Presupuesto" icon={FileText}>
             <div className="flex flex-col gap-3">
               <Field label="Válido por (días)">
-                <NumberInput value={validDays} onChange={setValidDays} />
+                <NumberInput value={validDays} onChange={setValidDays} suffix="días" />
               </Field>
               <p className="text-xs text-muted-foreground">
                 Vence el {fmtDate(addDays(todayISO(), validDays))} · recordatorio de seguimiento en{" "}

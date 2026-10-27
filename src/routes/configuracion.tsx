@@ -118,54 +118,71 @@ function Configuracion() {
               />
             </Field>
             <Field label="Kg por bolsón">
-              <NumberInput value={s.bagKg} onChange={(v) => updateSettings({ bagKg: v })} />
+              <NumberInput
+                value={s.bagKg}
+                onChange={(v) => updateSettings({ bagKg: v })}
+                suffix="kg"
+              />
             </Field>
-            <Field label="Embalaje por bolsón ($)">
+            <Field label="Embalaje por bolsón">
               <NumberInput
                 value={s.packagingPerBag}
                 onChange={(v) => updateSettings({ packagingPerBag: v })}
+                prefix="$"
               />
             </Field>
-            <Field label="Descarga por tonelada ($)">
+            <Field label="Descarga por tonelada">
               <NumberInput
                 value={s.unloadPerTon}
                 onChange={(v) => updateSettings({ unloadPerTon: v })}
+                prefix="$"
+                suffix="/ t"
               />
             </Field>
             <Field
-              label="Flete de compra por tonelada ($)"
+              label="Flete de compra por tonelada"
               hint="Lo que te cobra el camión que trae la piedra"
             >
               <NumberInput
                 value={s.freightPerTon ?? 0}
                 onChange={(v) => updateSettings({ freightPerTon: v })}
+                prefix="$"
+                suffix="/ t"
               />
             </Field>
-            <Field label="Margen de ganancia % habitual" hint="Se propone en cada producto nuevo">
+            <Field label="Margen de ganancia habitual" hint="Se propone en cada producto nuevo">
               <NumberInput
                 value={s.defaultMarginPct ?? 40}
                 onChange={(v) => updateSettings({ defaultMarginPct: v })}
+                suffix="%"
               />
             </Field>
-            <Field label="IVA % por defecto">
-              <NumberInput value={s.ivaPct} onChange={(v) => updateSettings({ ivaPct: v })} />
+            <Field label="IVA por defecto">
+              <NumberInput
+                value={s.ivaPct}
+                onChange={(v) => updateSettings({ ivaPct: v })}
+                suffix="%"
+              />
             </Field>
-            <Field label="Margen mínimo % (alerta)">
+            <Field label="Margen mínimo (avisa en rojo)">
               <NumberInput
                 value={s.minMarginPct}
                 onChange={(v) => updateSettings({ minMarginPct: v })}
+                suffix="%"
               />
             </Field>
-            <Field label="Validez presupuesto (días)">
+            <Field label="Validez de presupuestos">
               <NumberInput
                 value={s.quoteValidDays}
                 onChange={(v) => updateSettings({ quoteValidDays: v })}
+                suffix="días"
               />
             </Field>
-            <Field label="Seguimiento a los (días)">
+            <Field label="Recordar seguimiento a los">
               <NumberInput
                 value={s.followUpDays}
                 onChange={(v) => updateSettings({ followUpDays: v })}
+                suffix="días"
               />
             </Field>
           </div>
@@ -212,8 +229,8 @@ function Configuracion() {
               "Nombre",
               "Tipo",
               "Pasarela",
-              "Acredita en",
-              { label: "Comisión %", right: true },
+              "Banco",
+              { label: "Comisión", right: true },
               { label: "Días", right: true },
               "Activo",
               "",
@@ -226,14 +243,14 @@ function Configuracion() {
                   <Input
                     value={m.label}
                     onChange={(e) => updM(m.id, { label: e.target.value })}
-                    className="h-9 min-w-44"
+                    className="min-w-44"
                   />
                 </td>
                 <td>
                   <Select
                     value={m.method}
                     onChange={(e) => updM(m.id, { method: e.target.value as PaymentMethod })}
-                    className="h-9 min-w-36"
+                    className="min-w-36"
                   >
                     {(Object.keys(methodNames) as PaymentMethod[]).map((k) => (
                       <option key={k} value={k}>
@@ -246,7 +263,7 @@ function Configuracion() {
                   <Select
                     value={m.gateway ?? ""}
                     onChange={(e) => updM(m.id, { gateway: e.target.value ? "Payway" : undefined })}
-                    className="h-9 min-w-28"
+                    className="min-w-28"
                   >
                     <option value="">Ninguna</option>
                     <option value="Payway">Payway</option>
@@ -256,7 +273,7 @@ function Configuracion() {
                   <Select
                     value={m.bank}
                     onChange={(e) => updM(m.id, { bank: e.target.value as Bank })}
-                    className="h-9 min-w-28"
+                    className="min-w-28"
                   >
                     {banks.map((b) => (
                       <option key={b} value={b}>
@@ -270,14 +287,15 @@ function Configuracion() {
                     value={m.feePct}
                     onChange={(v) => updM(m.id, { feePct: v })}
                     step="0.1"
-                    className="h-9 w-20"
+                    suffix="%"
+                    className="w-24"
                   />
                 </td>
                 <td>
                   <NumberInput
                     value={m.settleDays}
                     onChange={(v) => updM(m.id, { settleDays: v })}
-                    className="h-9 w-16"
+                    className="w-20"
                   />
                 </td>
                 <td>
@@ -327,7 +345,6 @@ function Configuracion() {
                         s.zones.map((x) => (x.id === z.id ? { ...x, name: e.target.value } : x)),
                       )
                     }
-                    className="h-9"
                   />
                 </td>
                 <td>
@@ -336,7 +353,8 @@ function Configuracion() {
                     onChange={(v) =>
                       setZones(s.zones.map((x) => (x.id === z.id ? { ...x, price: v } : x)))
                     }
-                    className="h-9 w-28"
+                    prefix="$"
+                    className="w-32"
                   />
                 </td>
                 <td>
@@ -345,7 +363,8 @@ function Configuracion() {
                     onChange={(v) =>
                       setZones(s.zones.map((x) => (x.id === z.id ? { ...x, cost: v } : x)))
                     }
-                    className="h-9 w-28"
+                    prefix="$"
+                    className="w-32"
                   />
                 </td>
                 <td
@@ -410,7 +429,6 @@ function Configuracion() {
                         ),
                       )
                     }
-                    className="h-9"
                   />
                 </td>
                 <td>
@@ -421,7 +439,8 @@ function Configuracion() {
                         s.fixedExpenses.map((x) => (x.id === f.id ? { ...x, amount: v } : x)),
                       )
                     }
-                    className="h-9 w-32"
+                    prefix="$"
+                    className="w-36"
                   />
                 </td>
                 <td>
@@ -434,7 +453,7 @@ function Configuracion() {
                         ),
                       )
                     }
-                    className="h-9 w-28"
+                    className="w-28"
                   >
                     {banks.map((b) => (
                       <option key={b} value={b}>
@@ -449,7 +468,7 @@ function Configuracion() {
                     onChange={(v) =>
                       setFixed(s.fixedExpenses.map((x) => (x.id === f.id ? { ...x, day: v } : x)))
                     }
-                    className="h-9 w-16"
+                    className="w-20"
                   />
                 </td>
                 <td className="text-right">

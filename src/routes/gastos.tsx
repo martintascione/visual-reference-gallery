@@ -298,7 +298,7 @@ function ExpenseModal({
           />
         </Field>
         <Field label="Monto">
-          <NumberInput value={amount} onChange={setAmount} />
+          <NumberInput value={amount} onChange={setAmount} prefix="$" />
         </Field>
         <Field label="Fecha">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

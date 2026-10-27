@@ -10,3 +10,5 @@
 <!-- LOVABLE:END -->
 
 - App is built in TanStack Start SPA mode (static `.output/public`, `.htaccess` fallback) — no createServerFn or server routes; all logic and data access must run client-side, because it is hosted on Hostinger without a server.
+- Modo demo: `VITE_DEMO=1 bun run build` (o `VITE_DEMO=1 bun run dev`) usa datos de ejemplo en memoria sin Supabase, para previsualizar y probar la interfaz. El deploy a Hostinger NO lleva esa variable.
+- Asistente IA: `supabase/functions/asistente/index.ts` (Edge Function, secreto `ANTHROPIC_API_KEY`). La web la llama con `supabase.functions.invoke("asistente")`.

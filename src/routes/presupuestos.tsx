@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Check, FileText, MessageCircle, Plus, X } from "lucide-react";
+import { Check, MessageCircle, Plus, X } from "lucide-react";
 import type { Quote, QuoteStatus } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
-import { Badge, Card, Modal, PageHeader, Segmented, Stat, btn, Input } from "@/components/ui-bits";
+import { Badge, Empty, Modal, PageHeader, Segmented, Stat, btn, Input } from "@/components/ui-bits";
 
 export const Route = createFileRoute("/presupuestos")({
   head: () => ({
@@ -226,11 +226,18 @@ function Presupuestos() {
         })}
       </div>
       {list.length === 0 && (
-        <Card>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <FileText className="h-4 w-4" /> No hay presupuestos en esta pestaña.
-          </p>
-        </Card>
+        <Empty
+          text={
+            db.quotes.length
+              ? "No hay presupuestos en esta pestaña."
+              : 'Todavía no hay presupuestos. Se arman desde Nueva venta eligiendo "Presupuesto" arriba a la derecha, y después se mandan por WhatsApp.'
+          }
+          action={
+            <Link to="/nueva-venta" className={btn.primary}>
+              <Plus className="h-4 w-4" /> Nuevo presupuesto
+            </Link>
+          }
+        />
       )}
 
       <Modal
