@@ -14,6 +14,7 @@ import {
   Truck,
   Wallet,
 } from "lucide-react";
+import logo from "@/assets/aridos-petreos-logo.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -93,7 +94,11 @@ function Index() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
       {/* Left */}
       <section className="order-2 flex flex-col gap-3 lg:order-1">
-        <h2 className="px-2 text-sm font-semibold">Actividad reciente</h2>
+        <div className="card-soft flex flex-col items-center px-6 pb-5 pt-6 text-center">
+          <img src={logo} alt="Áridos Petreos – Piedras naturales" className="w-full max-w-[220px]" />
+          <p className="mt-3 text-[11px] text-muted-foreground">Panel de gestión · Sucursal central</p>
+        </div>
+        <h2 className="mt-1 px-2 text-sm font-semibold">Actividad reciente</h2>
         {activity.map((a) => (
           <article key={a.title} className="card-soft group p-5">
             <div className="flex items-start justify-between gap-2">
