@@ -90,7 +90,7 @@ const week = [
 
 function Index() {
   return (
-    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
       {/* Left */}
       <section className="order-2 flex flex-col gap-3 lg:order-1">
         <h2 className="px-2 text-sm font-semibold">Actividad reciente</h2>
@@ -117,7 +117,7 @@ function Index() {
       </section>
 
       {/* Center */}
-      <section className="card-soft order-1 flex flex-col gap-6 p-5 md:p-7 lg:order-2">
+      <section className="card-soft order-1 flex min-w-0 flex-col gap-6 p-5 md:p-7 lg:order-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-muted-foreground">Martes 27 de octubre, 2026</p>
