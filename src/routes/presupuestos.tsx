@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Check, MessageCircle, Plus, X } from "lucide-react";
+import { Check, FileDown, MessageCircle, Plus, X } from "lucide-react";
+import { openDocumentPdf } from "@/lib/quote-pdf";
 import type { Quote, QuoteStatus } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
@@ -181,6 +182,12 @@ function Presupuestos() {
                   <button className={`${btn.primary} h-9 px-4 text-xs`} onClick={() => convert(q)}>
                     <Check className="h-3.5 w-3.5" /> Aceptado → venta
                   </button>
+                  <button
+                    className={btn.ghost}
+                    onClick={() => openDocumentPdf(db, q, "presupuesto")}
+                  >
+                    <FileDown className="h-3.5 w-3.5" /> PDF
+                  </button>
                   <a
                     href={`https://wa.me/${q.phone ? "54" + q.phone.replace(/\D/g, "") : ""}?text=${waText(q)}`}
                     target="_blank"
@@ -206,6 +213,14 @@ function Presupuestos() {
                     <X className="h-3.5 w-3.5" /> Perdido
                   </button>
                 </div>
+              )}
+              {tab !== "abiertos" && (
+                <button
+                  className={`${btn.ghost} self-start`}
+                  onClick={() => openDocumentPdf(db, q, "presupuesto")}
+                >
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </button>
               )}
               {tab === "cerrados" && q.status !== "aceptado" && (
                 <button

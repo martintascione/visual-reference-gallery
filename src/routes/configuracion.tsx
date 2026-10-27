@@ -117,6 +117,36 @@ function Configuracion() {
                 onChange={(e) => updateSettings({ businessName: e.target.value })}
               />
             </Field>
+            <Field label="WhatsApp" hint="Va al pie de presupuestos">
+              <Input
+                value={s.phone ?? ""}
+                onChange={(e) => updateSettings({ phone: e.target.value })}
+              />
+            </Field>
+            <Field label="Instagram">
+              <Input
+                value={s.instagram ?? ""}
+                onChange={(e) => updateSettings({ instagram: e.target.value })}
+              />
+            </Field>
+            <Field label="Dirección">
+              <Input
+                value={s.address ?? ""}
+                onChange={(e) => updateSettings({ address: e.target.value })}
+              />
+            </Field>
+            <Field label="Localidad">
+              <Input
+                value={s.city ?? ""}
+                onChange={(e) => updateSettings({ city: e.target.value })}
+              />
+            </Field>
+            <Field label="Saludo del presupuesto" className="col-span-2">
+              <Input
+                value={s.quoteFooter ?? ""}
+                onChange={(e) => updateSettings({ quoteFooter: e.target.value })}
+              />
+            </Field>
             <Field label="Kg por bolsón">
               <NumberInput
                 value={s.bagKg}

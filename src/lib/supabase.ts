@@ -1,10 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
 // Claves públicas (van en el navegador). Se pueden cambiar por variables de entorno en .env
-const url = import.meta.env["VITE_SUPABASE_URL"] ?? "https://iledqhvyuvgwpgedmjtj.supabase.co";
+const env = import.meta.env as Record<string, string | undefined>;
+const url = env["VITE_SUPABASE_URL"] ?? "https://iledqhvyuvgwpgedmjtj.supabase.co";
 const key =
-  import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ??
-  "sb_publishable_LAK_V8uI2X7AUPGFO1ut7A_Xs5pblHp";
+  env["VITE_SUPABASE_PUBLISHABLE_KEY"] ?? "sb_publishable_LAK_V8uI2X7AUPGFO1ut7A_Xs5pblHp";
 
 export const supabase = createClient(url, key, {
   auth: { persistSession: true, autoRefreshToken: true },
@@ -52,6 +52,7 @@ const numericKeys = new Set([
   "paid",
   "qty",
   "fee_pct",
+  "discount_pct",
   "sales_total",
   "cost_total",
   "fees_total",

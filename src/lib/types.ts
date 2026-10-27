@@ -94,6 +94,9 @@ export type Sale = {
   note?: string | undefined;
   closureId?: string | undefined;
   fromQuoteId?: string | undefined;
+  /** Marca "factura: HACER" de la planilla. */
+  invoicePending?: boolean | undefined;
+  discountPct?: number | undefined;
 };
 
 export type QuoteStatus =
@@ -117,6 +120,8 @@ export type Quote = {
   status: QuoteStatus;
   note?: string | undefined;
   lostReason?: string | undefined;
+  /** Bonificación % sobre el subtotal. */
+  discountPct?: number | undefined;
 };
 
 export type Client = {
@@ -125,6 +130,9 @@ export type Client = {
   phone?: string | undefined;
   cuit?: string | undefined;
   address?: string | undefined;
+  city?: string | undefined;
+  dni?: string | undefined;
+  ivaCategory?: string | undefined;
   creditLimit: number;
   note?: string | undefined;
 };
@@ -245,6 +253,11 @@ export type Zone = { id: string; name: string; price: number; cost: number };
 
 export type Settings = {
   businessName: string;
+  phone?: string | undefined;
+  instagram?: string | undefined;
+  address?: string | undefined;
+  city?: string | undefined;
+  quoteFooter?: string | undefined;
   bagKg: number;
   packagingPerBag: number;
   unloadPerTon: number;

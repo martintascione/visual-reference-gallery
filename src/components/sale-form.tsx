@@ -76,6 +76,8 @@ export function SaleForm({
     echeq: false,
   });
   const [validDays, setValidDays] = useState(s.quoteValidDays);
+  const [discountPct, setDiscountPct] = useState(0);
+  const [invoicePending, setInvoicePending] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
 
   // Precarga desde el asistente ("vendele 10 bolsones de piedra blanca a Juan")
@@ -126,6 +128,7 @@ export function SaleForm({
     setPhone(fromQuote.phone ?? "");
     setWithIva(fromQuote.withIva);
     setNote(fromQuote.note ?? "");
+    setDiscountPct(fromQuote.discountPct ?? 0);
     if (fromQuote.delivery) {
       setDeliveryOn(true);
       setDelivery({ ...fromQuote.delivery, date: todayISO(), done: false });
@@ -152,18 +155,9 @@ export function SaleForm({
   );
 
   const itemsTotal = items.reduce((a, i) => a + i.subtotal, 0);
-  const subtotal = itemsTotal + (deliveryOn ? delivery.price : 0);
-  const iva = withIva
-    ? Math.round(
-        items.reduce(
-          (a, i) =>
-            a +
-            (i.subtotal * (db.products.find((p) => p.id === i.productId)?.ivaPct ?? s.ivaPct)) /
-              100,
-          0,
-        ) + (deliveryOn ? (delivery.price * s.ivaPct) / 100 : 0),
-      )
-    : 0;
+  const discount = Math.round((itemsTotal * (discountPct || 0)) / 100);
+  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0);
+  const iva = withIva ? Math.round(subtotal * (s.ivaPct / 100)) : 0;
   const total = subtotal + iva;
   const cost = items.reduce((a, i) => a + i.cost, 0) + (deliveryOn ? delivery.cost : 0);
   const paid = pays.reduce((a, p) => a + (p.amount || 0), 0);
@@ -287,6 +281,8 @@ export function SaleForm({
         cost,
         note: note || undefined,
         fromQuoteId: fromQuote?.id,
+        invoicePending: invoicePending || undefined,
+        discountPct: discountPct || undefined,
       },
       chequeDraft,
     );
@@ -313,6 +309,7 @@ export function SaleForm({
       total,
       status: "enviado",
       note: note || undefined,
+      discountPct: discountPct || undefined,
     });
     setSaved("Presupuesto guardado");
     setTimeout(() => nav({ to: "/presupuestos" }), 900);
@@ -529,14 +526,23 @@ export function SaleForm({
                 {client && client.creditLimit > 0 && ` · límite ${ars(client.creditLimit)}`}
               </p>
             )}
-            <Segmented
-              value={withIva ? "con" : "sin"}
-              onChange={(v) => setWithIva(v === "con")}
-              options={[
-                { value: "sin", label: "Sin IVA" },
-                { value: "con", label: `Con IVA ${s.ivaPct}%` },
-              ]}
-            />
+            <div className="flex flex-wrap items-end gap-3">
+              <Segmented
+                value={withIva ? "con" : "sin"}
+                onChange={(v) => setWithIva(v === "con")}
+                options={[
+                  { value: "sin", label: "Sin IVA" },
+                  { value: "con", label: `Con IVA ${s.ivaPct}%` },
+                ]}
+              />
+              <Field label="Bonificación" className="w-28">
+                <NumberInput
+                  value={discountPct}
+                  onChange={(v) => setDiscountPct(Math.min(100, Math.max(0, v)))}
+                  suffix="%"
+                />
+              </Field>
+            </div>
           </div>
         </Card>
 
@@ -546,6 +552,12 @@ export function SaleForm({
               <span>Productos</span>
               <span className="tabular-nums">{ars(itemsTotal)}</span>
             </p>
+            {discount > 0 && (
+              <p className="flex justify-between text-muted-foreground">
+                <span>Bonificación {discountPct}%</span>
+                <span className="tabular-nums">− {ars(discount)}</span>
+              </p>
+            )}
             {deliveryOn && (
               <p className="flex justify-between text-muted-foreground">
                 <span>Flete</span>
@@ -763,6 +775,11 @@ export function SaleForm({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Nota (opcional)"
+              />
+              <Toggle
+                checked={invoicePending}
+                onChange={setInvoicePending}
+                label="Falta hacer la factura"
               />
               <button
                 className={`${btn.primary} h-12 w-full text-base`}

@@ -5,6 +5,11 @@ import type { DB, Settings } from "./types";
 
 export const defaultSettings: Settings = {
   businessName: "Áridos Petreos",
+  phone: "2392-628647",
+  instagram: "aridospetreos",
+  address: "Avellaneda 2545",
+  city: "Trenque Lauquen, Buenos Aires",
+  quoteFooter: "Saludos cordiales, esperamos una pronta respuesta.",
   bagKg: 25,
   packagingPerBag: 350,
   unloadPerTon: 4000,

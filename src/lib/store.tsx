@@ -47,6 +47,7 @@ type Actions = {
   addStockMove: (m: Draft<StockMove>) => void;
   addSale: (s: Omit<Sale, "id" | "number">, cheque?: Draft<Cheque>) => Sale;
   setDeliveryDone: (saleId: string, done: boolean) => void;
+  setInvoicePending: (saleId: string, pending: boolean) => void;
   addQuote: (q: Omit<Quote, "id" | "number">) => Quote;
   updateQuote: (id: string, patch: Partial<Quote>) => void;
   upsertClient: (c: Client) => void;
@@ -333,6 +334,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         return sale;
       },
+      setInvoicePending: (saleId, pending) =>
+        mutate((d) => {
+          const s = d.sales.find((x) => x.id === saleId);
+          if (s) s.invoicePending = pending || undefined;
+          return d;
+        }),
       setDeliveryDone: (saleId, done) =>
         mutate((d) => {
           const s = d.sales.find((x) => x.id === saleId);

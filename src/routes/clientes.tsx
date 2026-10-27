@@ -368,11 +368,33 @@ function ClientEditor({
         <Field label="CUIT (opcional)">
           <Input value={c.cuit ?? ""} onChange={(e) => setC({ ...c, cuit: e.target.value })} />
         </Field>
-        <Field label="Dirección" className="col-span-2">
+        <Field label="Dirección">
           <Input
             value={c.address ?? ""}
             onChange={(e) => setC({ ...c, address: e.target.value })}
           />
+        </Field>
+        <Field label="Localidad">
+          <Input
+            value={c.city ?? ""}
+            onChange={(e) => setC({ ...c, city: e.target.value })}
+            placeholder="Trenque Lauquen"
+          />
+        </Field>
+        <Field label="DNI (si no tiene CUIT)">
+          <Input value={c.dni ?? ""} onChange={(e) => setC({ ...c, dni: e.target.value })} />
+        </Field>
+        <Field label="Categoría de IVA">
+          <Select
+            value={c.ivaCategory ?? ""}
+            onChange={(e) => setC({ ...c, ivaCategory: e.target.value || undefined })}
+          >
+            <option value="">Sin especificar</option>
+            <option value="Consumidor final">Consumidor final</option>
+            <option value="Responsable inscripto">Responsable inscripto</option>
+            <option value="Monotributo">Monotributo</option>
+            <option value="Exento">Exento</option>
+          </Select>
         </Field>
         <Field label="Límite de crédito" hint="0 = sin límite">
           <NumberInput

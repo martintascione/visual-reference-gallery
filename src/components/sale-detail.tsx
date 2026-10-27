@@ -2,7 +2,9 @@ import type { Sale } from "@/lib/types";
 import { feeFor, useStore } from "@/lib/store";
 import { ars, fmtDate, fmtTime, num } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
-import { Badge, Modal } from "./ui-bits";
+import { Badge, Modal, btn } from "./ui-bits";
+import { FileDown } from "lucide-react";
+import { openDocumentPdf } from "@/lib/quote-pdf";
 
 const methodLabel: Record<string, string> = {
   efectivo: "Efectivo",
@@ -34,7 +36,7 @@ export function PayChips({ sale }: { sale: Sale }) {
 }
 
 export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
-  const { db } = useStore();
+  const { db, setInvoicePending } = useStore();
   if (!sale) return null;
   const fees = sale.payments.reduce((a, p) => a + feeFor(db, p), 0);
   return (
@@ -61,6 +63,12 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
               Flete · {sale.delivery.zone} · {sale.delivery.address}
             </span>
             <span className="tabular-nums">{ars(sale.delivery.price)}</span>
+          </p>
+        )}
+        {!!sale.discountPct && (
+          <p className="flex justify-between text-muted-foreground">
+            <span>Bonificación {sale.discountPct}%</span>
+            <span className="tabular-nums">incluida</span>
           </p>
         )}
         {sale.withIva && (
@@ -111,6 +119,17 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
           <p className="opacity-70">Ganancia</p>
           <p className="font-semibold">{ars(sale.subtotal - sale.cost - fees)}</p>
         </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <button className={btn.soft} onClick={() => openDocumentPdf(db, sale, "venta")}>
+          <FileDown className="h-4 w-4" strokeWidth={1.6} /> Comprobante PDF
+        </button>
+        <button
+          className={sale.invoicePending ? btn.danger : btn.ghost}
+          onClick={() => setInvoicePending(sale.id, !sale.invoicePending)}
+        >
+          {sale.invoicePending ? "Falta facturar · marcar hecha" : "Marcar: falta facturar"}
+        </button>
       </div>
     </Modal>
   );

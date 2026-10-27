@@ -102,9 +102,10 @@ function Ventas() {
           tone={pending ? "danger" : undefined}
         />
         <Stat
-          label="Entregas pendientes"
-          value={String(deliveries.length)}
-          sub={deliveries.length ? "ver abajo" : "todo entregado"}
+          label="Facturas por hacer"
+          value={String(db.sales.filter((s) => s.invoicePending).length)}
+          sub={db.sales.some((s) => s.invoicePending) ? "marcadas en cada venta" : "al día"}
+          tone={db.sales.some((s) => s.invoicePending) ? "danger" : undefined}
         />
       </div>
 
@@ -133,7 +134,14 @@ function Ventas() {
                 <td className="whitespace-nowrap text-muted-foreground">
                   {fmtDate(s.date)} {fmtTime(s.date)}
                 </td>
-                <td className="font-medium">{s.clientName}</td>
+                <td className="font-medium">
+                  {s.clientName}
+                  {s.invoicePending && (
+                    <span className="ml-1 rounded-full bg-danger-soft px-2 py-0.5 text-[10px] text-danger-soft-foreground">
+                      factura
+                    </span>
+                  )}
+                </td>
                 <td className="max-w-[260px] truncate text-muted-foreground">
                   {s.items.map((i) => `${qtyUnit(i.qty, i.unit)} ${i.name}`).join(" · ")}
                 </td>
