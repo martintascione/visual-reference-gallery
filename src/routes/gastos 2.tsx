@@ -20,7 +20,7 @@ import {
   tr,
 } from "@/components/ui-bits";
 
-export const Route = createFileRoute("/gastos")({
+export const Route = createFileRoute("/gastos 2")({
   head: () => ({
     meta: [
       { title: "Gastos · Corralón" },

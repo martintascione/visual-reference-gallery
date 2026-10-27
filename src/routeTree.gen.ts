@@ -17,6 +17,7 @@ import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as GastosRouteImport } from './routes/gastos'
+import { Route as Gastos2RouteImport } from './routes/gastos 2'
 import { Route as MasRouteImport } from './routes/mas'
 import { Route as NotificacionesRouteImport } from './routes/notificaciones'
 import { Route as NuevaVentaRouteImport } from './routes/nueva-venta'
@@ -65,6 +66,11 @@ const GastosRoute = GastosRouteImport.update({
   path: '/gastos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Gastos2Route = Gastos2RouteImport.update({
+  id: '/gastos 2',
+  path: '/gastos 2',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MasRoute = MasRouteImport.update({
   id: '/mas',
   path: '/mas',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/gastos 2': typeof Gastos2Route
   '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/gastos 2': typeof Gastos2Route
   '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/gastos': typeof GastosRoute
+  '/gastos 2': typeof Gastos2Route
   '/mas': typeof MasRoute
   '/notificaciones': typeof NotificacionesRoute
   '/nueva-venta': typeof NuevaVentaRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/gastos 2'
     | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/gastos 2'
     | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/gastos'
+    | '/gastos 2'
     | '/mas'
     | '/notificaciones'
     | '/nueva-venta'
@@ -216,6 +228,7 @@ export interface RootRouteChildren {
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   GastosRoute: typeof GastosRoute
+  Gastos2Route: typeof Gastos2Route
   MasRoute: typeof MasRoute
   NotificacionesRoute: typeof NotificacionesRoute
   NuevaVentaRoute: typeof NuevaVentaRoute
@@ -283,6 +296,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GastosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gastos 2': {
+      id: '/gastos 2'
+      path: '/gastos 2'
+      fullPath: '/gastos 2'
+      preLoaderRoute: typeof Gastos2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mas': {
       id: '/mas'
       path: '/mas'
@@ -344,6 +364,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   GastosRoute: GastosRoute,
+  Gastos2Route: Gastos2Route,
   MasRoute: MasRoute,
   NotificacionesRoute: NotificacionesRoute,
   NuevaVentaRoute: NuevaVentaRoute,
