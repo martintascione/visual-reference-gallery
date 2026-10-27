@@ -30,6 +30,7 @@ import { emptyDB } from "./seed";
 import { addDays, dayOf, todayISO, uid } from "./format";
 import { fromRow, supabase, toRow } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
+import type { AssistantAction } from "./assistant";
 
 // Persistencia en Supabase. Las pantallas usan el mismo useStore(): el estado vive en memoria
 // y cada cambio se sincroniza con la base (se guardan solo las filas que cambiaron).
@@ -61,11 +62,13 @@ type Actions = {
   updateSettings: (patch: Partial<Settings>) => void;
   resetDemo: () => void;
   setPendingQuote: (id?: string) => void;
+  setPendingAction: (a?: AssistantAction) => void;
 };
 
 type Ctx = {
   db: DB;
   pendingQuoteId: string | undefined;
+  pendingAction: AssistantAction | undefined;
   session: Session | null;
   ready: boolean;
   syncError: string | null;
@@ -165,6 +168,7 @@ async function persistDiff(prev: DB, next: DB) {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDbState] = useState<DB>(() => emptyDB());
   const [pendingQuoteId, setPendingQuote] = useState<string | undefined>();
+  const [pendingAction, setPendingAction] = useState<AssistantAction | undefined>();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -553,13 +557,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate(() => emptyDB());
       },
       setPendingQuote: (id) => setPendingQuote(id),
+      setPendingAction: (a) => setPendingAction(a),
     }),
     [mutate],
   );
 
   const value = useMemo(
-    () => ({ db, pendingQuoteId, session, ready, syncError, ...actions }),
-    [db, pendingQuoteId, session, ready, syncError, actions],
+    () => ({ db, pendingQuoteId, pendingAction, session, ready, syncError, ...actions }),
+    [db, pendingQuoteId, pendingAction, session, ready, syncError, actions],
   );
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

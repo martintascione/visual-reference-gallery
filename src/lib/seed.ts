@@ -8,8 +8,10 @@ export const defaultSettings: Settings = {
   bagKg: 25,
   packagingPerBag: 350,
   unloadPerTon: 4000,
+  freightPerTon: 0,
   ivaPct: 21,
   minMarginPct: 20,
+  defaultMarginPct: 40,
   quoteValidDays: 7,
   followUpDays: 2,
   methods: [

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Plus, Receipt } from "lucide-react";
 import type { Bank, ExpenseType, PaymentMethod } from "@/lib/types";
 import { useStore } from "@/lib/store";
@@ -47,9 +47,26 @@ const methodLabel: Record<PaymentMethod, string> = {
 };
 
 function Gastos() {
-  const { db } = useStore();
+  const { db, pendingAction, setPendingAction } = useStore();
   const [range, setRange] = useState<"mes" | "semana" | "hoy" | "todo">("mes");
   const [open, setOpen] = useState<ExpenseType | null>(null);
+  const [prefill, setPrefill] = useState<{
+    concept?: string | undefined;
+    amount?: number | undefined;
+    account?: Bank | undefined;
+  } | null>(null);
+  useEffect(() => {
+    if (pendingAction?.tipo === "nuevo_gasto") {
+      setPrefill({
+        concept: pendingAction.concepto,
+        amount: pendingAction.monto,
+        account: pendingAction.cuenta,
+      });
+      setOpen(pendingAction.tipo_gasto ?? "imprevisto");
+      setPendingAction(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction]);
   const today = todayISO();
   const from =
     range === "hoy"
@@ -173,7 +190,14 @@ function Gastos() {
         </Card>
       </div>
 
-      <ExpenseModal type={open} onClose={() => setOpen(null)} />
+      <ExpenseModal
+        type={open}
+        onClose={() => {
+          setOpen(null);
+          setPrefill(null);
+        }}
+        prefill={prefill}
+      />
     </>
   );
 }
@@ -210,7 +234,18 @@ function QuickDebit({
   );
 }
 
-function ExpenseModal({ type, onClose }: { type: ExpenseType | null; onClose: () => void }) {
+function ExpenseModal({
+  type,
+  onClose,
+  prefill,
+}: {
+  type: ExpenseType | null;
+  onClose: () => void;
+  prefill?:
+    | { concept?: string | undefined; amount?: number | undefined; account?: Bank | undefined }
+    | null
+    | undefined;
+}) {
   const { addExpense } = useStore();
   const [t, setT] = useState<ExpenseType>("imprevisto");
   const [concept, setConcept] = useState("");
@@ -225,6 +260,11 @@ function ExpenseModal({ type, onClose }: { type: ExpenseType | null; onClose: ()
     if (type === "debito") {
       setAccount("BBVA");
       setMethod("transferencia");
+    }
+    if (prefill) {
+      if (prefill.concept) setConcept(prefill.concept);
+      if (prefill.amount) setAmount(prefill.amount);
+      if (prefill.account) setAccount(prefill.account);
     }
   }
   const save = () => {

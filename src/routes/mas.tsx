@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Bell,
+  CalendarDays,
   ChartColumn,
   ChevronRight,
   FileText,
@@ -18,6 +20,13 @@ export const Route = createFileRoute("/mas")({
 });
 
 const items = [
+  { to: "/notificaciones", label: "Avisos", d: "Lo que requiere atención hoy", icon: Bell },
+  {
+    to: "/calendario",
+    label: "Agenda",
+    d: "Entregas, cheques, cuotas y débitos",
+    icon: CalendarDays,
+  },
   {
     to: "/presupuestos",
     label: "Presupuestos",

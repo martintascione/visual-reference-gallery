@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { fmtDate } from "@/lib/format";
 import {
   Building2,
   CreditCard,
+  Lightbulb,
   Plus,
   Receipt,
   RotateCcw,
@@ -127,6 +130,21 @@ function Configuracion() {
               <NumberInput
                 value={s.unloadPerTon}
                 onChange={(v) => updateSettings({ unloadPerTon: v })}
+              />
+            </Field>
+            <Field
+              label="Flete de compra por tonelada ($)"
+              hint="Lo que te cobra el camión que trae la piedra"
+            >
+              <NumberInput
+                value={s.freightPerTon ?? 0}
+                onChange={(v) => updateSettings({ freightPerTon: v })}
+              />
+            </Field>
+            <Field label="Margen de ganancia % habitual" hint="Se propone en cada producto nuevo">
+              <NumberInput
+                value={s.defaultMarginPct ?? 40}
+                onChange={(v) => updateSettings({ defaultMarginPct: v })}
               />
             </Field>
             <Field label="IVA % por defecto">
@@ -452,7 +470,83 @@ function Configuracion() {
             prorratea en cada cierre.
           </p>
         </Card>
+        <FeatureRequests />
       </div>
     </>
+  );
+}
+
+type FeatureRequest = {
+  id: string;
+  created_at: string;
+  titulo: string;
+  descripcion: string;
+  flujo: string | null;
+  datos: string | null;
+  prioridad: string;
+  estado: string;
+};
+
+/** Mejoras pedidas desde el asistente, para que el programador las vea. */
+function FeatureRequests() {
+  const [list, setList] = useState<FeatureRequest[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const load = () =>
+    supabase
+      .from("feature_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) setErr(error.message);
+        else setList((data ?? []) as FeatureRequest[]);
+      });
+  useEffect(() => {
+    void load();
+  }, []);
+  const setEstado = async (id: string, estado: string) => {
+    await supabase.from("feature_requests").update({ estado }).eq("id", id);
+    void load();
+  };
+  return (
+    <Card title="Mejoras pedidas desde el asistente" icon={Lightbulb} className="xl:col-span-2">
+      {err && (
+        <p className="text-xs text-danger-soft-foreground">
+          No se pudo leer la lista: {err}. ¿Se corrió el SQL de mejoras.sql?
+        </p>
+      )}
+      {!err && list.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Todavía no hay pedidos. Cuando alguien le pide al asistente algo que el sistema no hace,
+          queda anotado acá con el flujo y los datos que necesita.
+        </p>
+      )}
+      <div className="flex flex-col gap-2">
+        {list.map((f) => (
+          <div key={f.id} className="rounded-2xl bg-surface p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-semibold">{f.titulo}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {fmtDate(f.created_at)} · prioridad {f.prioridad}
+                </p>
+              </div>
+              <Select
+                value={f.estado}
+                onChange={(e) => void setEstado(f.id, e.target.value)}
+                className="h-8 w-40 text-xs"
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="en_desarrollo">En desarrollo</option>
+                <option value="listo">Listo</option>
+                <option value="descartado">Descartado</option>
+              </Select>
+            </div>
+            <p className="mt-2 text-xs">{f.descripcion}</p>
+            {f.flujo && <p className="mt-1 text-xs text-muted-foreground">Flujo: {f.flujo}</p>}
+            {f.datos && <p className="mt-1 text-xs text-muted-foreground">Datos: {f.datos}</p>}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

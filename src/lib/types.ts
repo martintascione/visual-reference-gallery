@@ -248,8 +248,10 @@ export type Settings = {
   bagKg: number;
   packagingPerBag: number;
   unloadPerTon: number;
+  freightPerTon: number;
   ivaPct: number;
   minMarginPct: number;
+  defaultMarginPct: number;
   methods: MethodConfig[];
   zones: Zone[];
   fixedExpenses: FixedExpense[];

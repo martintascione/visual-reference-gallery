@@ -8,9 +8,11 @@ import {
   CalendarClock,
   CreditCard,
   FileCheck2,
+  FileText,
   Lock,
   MapPin,
   Package,
+  Receipt,
   Truck,
   Wallet,
 } from "lucide-react";
@@ -29,6 +31,17 @@ import {
 } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
 import { Badge, type Tone } from "@/components/ui-bits";
+import { buildAlerts, type AlertKind } from "@/lib/alerts";
+
+const alertIcons: Record<AlertKind, typeof Package> = {
+  stock: Package,
+  cuota: Wallet,
+  cheque: CalendarClock,
+  presupuesto: FileText,
+  liquidacion: CreditCard,
+  debito: Receipt,
+  entrega: Truck,
+};
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -196,14 +209,8 @@ function Index() {
   const deliveries = db.sales
     .filter((s) => s.delivery && !s.delivery.done && s.delivery.date <= today)
     .slice(0, 4);
-  const lowStock = db.products.filter((p) => p.active && p.stock < p.minStock).slice(0, 3);
-  const overdueClients = db.clients
-    .map((c) => ({ c, b: clientBalance(db, c.id) }))
-    .filter((x) => x.b.overdue > 0)
-    .slice(0, 2);
-  const pendingSettle = db.movements.filter(
-    (m) => m.settled === false && m.amount > 0 && addDays(dayOf(m.date), m.settleDays ?? 0) < today,
-  );
+  const alerts = useMemo(() => buildAlerts(db), [db]);
+  const firstRun = db.products.filter((p) => p.active).length === 0;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
@@ -242,6 +249,7 @@ function Index() {
 
       {/* Centro */}
       <section className="card-soft order-1 flex min-w-0 flex-col gap-6 p-5 md:p-7 lg:order-2">
+        {firstRun && <FirstSteps />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-muted-foreground">{fmtDateLong(today)}</p>
@@ -415,37 +423,20 @@ function Index() {
           ))}
         </Widget>
 
-        <Widget title="Alertas" icon={AlertTriangle} link="/stock">
-          {lowStock.length + overdueClients.length + pendingSettle.length === 0 && (
-            <p className="text-xs text-muted-foreground">Todo en orden.</p>
+        <Widget title="Avisos" icon={AlertTriangle} link="/notificaciones">
+          {alerts.length === 0 && <p className="text-xs text-muted-foreground">Todo en orden.</p>}
+          {alerts.slice(0, 4).map((a) => (
+            <AlertRow
+              key={a.id}
+              icon={alertIcons[a.kind]}
+              text={a.text}
+              tone={a.urgent ? "danger" : "dark"}
+              label={a.urgent ? "Urgente" : "Pendiente"}
+            />
+          ))}
+          {alerts.length > 4 && (
+            <p className="text-[11px] text-muted-foreground">y {alerts.length - 4} más</p>
           )}
-          {lowStock.map((p) => (
-            <AlertRow
-              key={p.id}
-              icon={Package}
-              text={`${p.name}: quedan ${num(p.stock)} ${p.unit === "m2" ? "m²" : p.unit}`}
-              tone={p.stock <= 0 ? "danger" : "dark"}
-              label={p.stock <= 0 ? "Sin stock" : "Stock bajo"}
-            />
-          ))}
-          {overdueClients.map(({ c, b }) => (
-            <AlertRow
-              key={c.id}
-              icon={Wallet}
-              text={`${c.name}: ${ars(b.overdue)} vencido`}
-              tone="danger"
-              label="Urgente"
-            />
-          ))}
-          {pendingSettle.slice(0, 2).map((m) => (
-            <AlertRow
-              key={m.id}
-              icon={CreditCard}
-              text={`${m.gateway ?? "Depósito"} ${ars(m.amount)} no acreditó en ${m.account}`}
-              tone="danger"
-              label="Revisar"
-            />
-          ))}
         </Widget>
       </section>
     </div>
@@ -482,7 +473,7 @@ function Widget({
 }: {
   title: string;
   icon: typeof Truck;
-  link: "/caja" | "/ventas" | "/stock";
+  link: "/caja" | "/ventas" | "/stock" | "/notificaciones";
   children: React.ReactNode;
 }) {
   return (
@@ -502,6 +493,57 @@ function Widget({
           Ver todos
         </Link>
         <Dots />
+      </div>
+    </div>
+  );
+}
+
+/** Guía de arranque: aparece hasta que haya productos cargados. */
+function FirstSteps() {
+  const { db } = useStore();
+  const steps = [
+    {
+      to: "/configuracion" as const,
+      t: "Configurá comisiones, fletes y gastos fijos",
+      d: "Payway, BBVA, Provincia y las zonas de entrega",
+      done: db.settings.methods.some((m) => m.gateway && m.feePct > 0),
+    },
+    {
+      to: "/catalogo" as const,
+      t: "Cargá tus productos con el precio del proveedor",
+      d: "La calculadora arma el precio de venta con tu margen",
+      done: db.products.some((p) => p.active),
+    },
+    {
+      to: "/clientes" as const,
+      t: "Sumá los clientes que compran a cuenta",
+      d: "Opcional: los demás se crean solos al vender",
+      done: db.clients.length > 0,
+    },
+  ];
+  return (
+    <div className="rounded-3xl bg-primary p-5 text-primary-foreground">
+      <p className="text-sm font-semibold">Primeros pasos</p>
+      <p className="mt-1 text-xs opacity-70">
+        Tres cosas para dejar el sistema listo. Después, todo se maneja desde Nueva venta.
+      </p>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {steps.map((s, i) => (
+          <Link
+            key={s.to}
+            to={s.to}
+            className={`rounded-2xl p-3 transition-opacity hover:opacity-90 ${s.done ? "bg-primary-foreground/10" : "bg-primary-foreground text-foreground"}`}
+          >
+            <p className="text-[11px] opacity-70">
+              Paso {i + 1}
+              {s.done ? " · listo" : ""}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-snug">{s.t}</p>
+            <p className={`mt-1 text-[11px] ${s.done ? "opacity-70" : "text-muted-foreground"}`}>
+              {s.d}
+            </p>
+          </Link>
+        ))}
       </div>
     </div>
   );

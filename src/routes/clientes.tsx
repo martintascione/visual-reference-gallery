@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MessageCircle, Pencil, Plus, Search, Users, Wallet } from "lucide-react";
 import type { Client, Due } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
@@ -30,10 +30,22 @@ export const Route = createFileRoute("/clientes")({
 });
 
 function Clientes() {
-  const { db, upsertClient } = useStore();
+  const { db, upsertClient, pendingAction, setPendingAction } = useStore();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [edit, setEdit] = useState<Client | "new" | null>(null);
+  useEffect(() => {
+    if (pendingAction?.tipo === "nuevo_cliente") {
+      setEdit({
+        id: "c" + Date.now().toString(36),
+        name: pendingAction.nombre ?? "",
+        phone: pendingAction.telefono,
+        creditLimit: 0,
+      });
+      setPendingAction(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction]);
   const today = todayISO();
 
   const rows = useMemo(

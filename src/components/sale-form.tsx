@@ -42,7 +42,8 @@ export function SaleForm({
   mode: "venta" | "presupuesto";
   fromQuote?: Quote | undefined;
 }) {
-  const { db, addSale, addQuote, upsertClient, setPendingQuote } = useStore();
+  const { db, addSale, addQuote, upsertClient, setPendingQuote, pendingAction, setPendingAction } =
+    useStore();
   const nav = useNavigate();
   const s = db.settings;
   const active = db.products.filter((p) => p.active);
@@ -76,6 +77,38 @@ export function SaleForm({
   });
   const [validDays, setValidDays] = useState(s.quoteValidDays);
   const [saved, setSaved] = useState<string | null>(null);
+
+  // Precarga desde el asistente ("vendele 10 bolsones de piedra blanca a Juan")
+  useEffect(() => {
+    if (!pendingAction || pendingAction.tipo !== "nueva_venta") return;
+    const a = pendingAction;
+    setPendingAction(undefined);
+    if (a.cliente) {
+      const c = db.clients.find((x) => x.name.toLowerCase() === a.cliente!.toLowerCase());
+      if (c) {
+        setClientId(c.id);
+        setClientName(c.name);
+        setPhone(c.phone ?? "");
+      } else setClientName(a.cliente);
+    }
+    if (a.items?.length) {
+      const ls: Line[] = [];
+      for (const it of a.items) {
+        const p =
+          active.find((x) => x.name.toLowerCase() === it.producto.toLowerCase()) ??
+          active.find((x) => x.name.toLowerCase().includes(it.producto.toLowerCase()));
+        if (!p) continue;
+        const units = saleUnitsFor(p);
+        const unit: SaleUnit =
+          it.unidad && units.includes(it.unidad)
+            ? it.unidad
+            : (units[p.category === "piedra" ? 1 : 0] ?? "u");
+        ls.push({ productId: p.id, qty: it.cantidad || 1, unit });
+      }
+      if (ls.length) setLines(ls);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction]);
 
   // Precarga desde un presupuesto aceptado
   useEffect(() => {

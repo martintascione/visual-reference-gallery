@@ -1,5 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
+import { buildAlerts } from "@/lib/alerts";
+import { useStore } from "@/lib/store";
+import { GlobalSearch } from "./global-search";
+import { Assistant } from "./assistant";
 import { supabase } from "@/lib/supabase";
 import {
   Bell,
@@ -13,11 +17,9 @@ import {
   Package,
   Plus,
   Receipt,
-  Search,
   Settings,
   ShoppingCart,
   Tags,
-  SlidersHorizontal,
   Users,
   Mountain,
 } from "lucide-react";
@@ -47,6 +49,8 @@ function Tip({ label }: { label: string }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { db } = useStore();
+  const alertCount = useMemo(() => buildAlerts(db).filter((a) => a.urgent).length, [db]);
   return (
     <div className="flex min-h-screen w-full gap-4 p-3 pb-24 md:p-5 md:pb-5">
       {/* Sidebar */}
@@ -93,23 +97,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {/* Top bar */}
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-          <label className="flex h-11 w-full max-w-sm items-center gap-2 rounded-full bg-card px-4 shadow-soft">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
-            <input
-              placeholder="Buscar producto, cliente o venta"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
-            />
-            <SlidersHorizontal
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.6}
-            />
-          </label>
+          <GlobalSearch />
           <div className="flex items-center gap-2">
-            <Link to="/notificaciones" className={`relative ${circle}`} aria-label="Notificaciones">
+            <Link to="/notificaciones" className={`relative ${circle}`} aria-label="Avisos">
               <Bell className="h-[18px] w-[18px]" strokeWidth={1.6} />
-              <span className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-destructive" />
+              {alertCount > 0 && (
+                <span className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-destructive" />
+              )}
             </Link>
-            <Link to="/calendario" className={`hidden sm:grid ${circle}`} aria-label="Calendario">
+            <Link to="/calendario" className={`hidden sm:grid ${circle}`} aria-label="Agenda">
               <CalendarDays className="h-[18px] w-[18px]" strokeWidth={1.6} />
             </Link>
             <Link
@@ -128,6 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="min-w-0 flex-1">{children}</main>
+        <Assistant />
       </div>
 
       {/* Mobile bottom nav */}

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDownToLine, History, Package, SlidersHorizontal } from "lucide-react";
 import type { Bank, Category, PaymentMethod, Product, StockMove } from "@/lib/types";
 import { useStore } from "@/lib/store";
@@ -42,10 +42,21 @@ const reasonLabel: Record<StockMove["reason"], string> = {
 };
 
 function Stock() {
-  const { db } = useStore();
+  const { db, pendingAction, setPendingAction } = useStore();
   const [cat, setCat] = useState<Category | "todos">("todos");
   const [purchase, setPurchase] = useState<Product | null>(null);
   const [adjust, setAdjust] = useState<Product | null>(null);
+  useEffect(() => {
+    if (pendingAction?.tipo === "cargar_stock") {
+      const name = (pendingAction.producto ?? "").toLowerCase();
+      const p =
+        db.products.find((x) => x.active && x.name.toLowerCase().includes(name)) ??
+        db.products.find((x) => x.active);
+      if (p) setPurchase(p);
+      setPendingAction(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction]);
   const products = db.products.filter((p) => p.active && (cat === "todos" || p.category === cat));
   const low = db.products.filter((p) => p.active && p.stock < p.minStock);
   const valued = db.products

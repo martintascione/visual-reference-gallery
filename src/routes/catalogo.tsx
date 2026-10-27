@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calculator, Pencil, Percent, Plus, Search } from "lucide-react";
 import type { Category, Product } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, ars2, num } from "@/lib/format";
-import { marginOnPrice, round, stoneCalc, stoneKgForArea } from "@/lib/pricing";
+import { marginOnPrice, round, simplePrice, stoneCalc, stoneKgForArea } from "@/lib/pricing";
 import {
   Badge,
   Card,
@@ -17,7 +17,7 @@ import {
   btn,
   tr,
 } from "@/components/ui-bits";
-import { CategoryTabs, ProductEditor, StockBadge } from "@/components/product-editor";
+import { CategoryTabs, ProductEditor, StockBadge, blankProduct } from "@/components/product-editor";
 
 export const Route = createFileRoute("/catalogo")({
   head: () => ({
@@ -32,12 +32,33 @@ export const Route = createFileRoute("/catalogo")({
 const unitName: Record<Product["unit"], string> = { kg: "kg", m2: "m²", l: "L", u: "u" };
 
 function Catalogo() {
-  const { db } = useStore();
+  const { db, pendingAction, setPendingAction } = useStore();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<Category | "todos">("todos");
   const [editing, setEditing] = useState<Product | null | "new">(null);
   const [bulk, setBulk] = useState(false);
   const [calc, setCalc] = useState(false);
+  const [prefill, setPrefill] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (!pendingAction) return;
+    if (pendingAction.tipo === "nuevo_producto") {
+      const a = pendingAction;
+      const p = blankProduct(a.categoria ?? "piedra", db.settings);
+      if (a.nombre) p.name = a.nombre;
+      if (p.stoneCost) {
+        if (a.precio_proveedor) p.stoneCost.purchasePerTon = a.precio_proveedor;
+        if (a.margen) p.stoneCost.marginPct = a.margen;
+      } else if (a.precio_proveedor) {
+        p.cost = a.precio_proveedor;
+        p.price = simplePrice(a.precio_proveedor, a.margen ?? db.settings.defaultMarginPct ?? 40);
+      }
+      setPrefill(p);
+      setEditing("new");
+      setPendingAction(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction]);
 
   const list = useMemo(
     () =>
@@ -146,8 +167,12 @@ function Catalogo() {
 
       <ProductEditor
         open={editing !== null}
-        onClose={() => setEditing(null)}
+        onClose={() => {
+          setEditing(null);
+          setPrefill(null);
+        }}
         product={editing === "new" ? null : editing}
+        prefill={editing === "new" ? prefill : null}
       />
       <BulkUpdate open={bulk} onClose={() => setBulk(false)} />
       <QtyCalculator open={calc} onClose={() => setCalc(false)} />

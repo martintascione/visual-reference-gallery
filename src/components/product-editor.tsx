@@ -22,7 +22,14 @@ const categories: { value: Category; label: string }[] = [
 
 export function blankProduct(
   cat: Category,
-  s: { bagKg: number; packagingPerBag: number; unloadPerTon: number; ivaPct: number },
+  s: {
+    bagKg: number;
+    packagingPerBag: number;
+    unloadPerTon: number;
+    freightPerTon?: number | undefined;
+    ivaPct: number;
+    defaultMarginPct?: number | undefined;
+  },
 ): Product {
   const base: Product = {
     id: uid(),
@@ -41,12 +48,12 @@ export function blankProduct(
     base.bagKg = s.bagKg;
     base.stoneCost = {
       purchasePerTon: 0,
-      freightPerTon: 0,
+      freightPerTon: s.freightPerTon ?? 0,
       unloadPerTon: s.unloadPerTon,
       laborPerTon: 0,
       extrasPerTon: 0,
       packagingPerBag: s.packagingPerBag,
-      marginPct: 40,
+      marginPct: s.defaultMarginPct ?? 40,
     };
   }
   if (cat === "liquido") base.liters = 10;
@@ -57,22 +64,27 @@ export function ProductEditor({
   open,
   onClose,
   product,
+  prefill,
 }: {
   open: boolean;
   onClose: () => void;
   product: Product | null;
+  prefill?: Product | null | undefined;
 }) {
   const { db, upsertProduct } = useStore();
   const s = db.settings;
   const [p, setP] = useState<Product>(() => product ?? blankProduct("piedra", s));
-  const [margin, setMargin] = useState(40);
+  const [margin, setMargin] = useState(s.defaultMarginPct ?? 40);
 
   useEffect(() => {
     if (!open) return;
-    const next = product ?? blankProduct("piedra", s);
+    const next = product ?? prefill ?? blankProduct("piedra", s);
     setP(structuredClone(next));
-    setMargin(next.stoneCost?.marginPct ?? (next.cost ? markup(next.cost, next.price) : 40));
-  }, [open, product, s]);
+    setMargin(
+      next.stoneCost?.marginPct ??
+        (next.cost ? markup(next.cost, next.price) : (s.defaultMarginPct ?? 40)),
+    );
+  }, [open, product, prefill, s]);
 
   const calc = useMemo(
     () =>
@@ -143,13 +155,13 @@ export function ProductEditor({
             <div className="rounded-3xl bg-surface p-4">
               <p className="mb-3 text-xs font-semibold">Calculadora de costo · por tonelada</p>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Compra de la piedra">
+                <Field label="Precio del proveedor (por tonelada)">
                   <NumberInput
                     value={p.stoneCost.purchasePerTon}
                     onChange={(v) => setSC({ purchasePerTon: v })}
                   />
                 </Field>
-                <Field label="Flete que paga">
+                <Field label="Flete que paga" hint="Por defecto el de Configuración">
                   <NumberInput
                     value={p.stoneCost.freightPerTon}
                     onChange={(v) => setSC({ freightPerTon: v })}
