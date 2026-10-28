@@ -270,6 +270,30 @@ export type Settings = {
   fixedExpenses: FixedExpense[];
   quoteValidDays: number;
   followUpDays: number;
+  /** Facturalo Fácil: CUITs emisores y puntos de venta. */
+  invoicing?: InvoicingConfig | undefined;
+};
+
+export type IssuerKind = "monotributo" | "ri";
+
+export type PointOfSale = { id: string; number: number; label: string };
+
+/** CUIT desde el que se factura. */
+export type Issuer = {
+  id: string;
+  kind: IssuerKind;
+  name: string;
+  cuit: string;
+  address?: string | undefined;
+  iibb?: string | undefined;
+  activityStart?: string | undefined;
+  points: PointOfSale[];
+};
+
+export type InvoicingConfig = {
+  issuers: Issuer[];
+  /** Conceptos genéricos para facturas sin mucho detalle. */
+  genericItems: string[];
 };
 
 export type DB = {

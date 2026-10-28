@@ -1,7 +1,36 @@
-import type { DB, Settings } from "./types";
+import type { DB, InvoicingConfig, Settings } from "./types";
 
 // Configuración inicial. Las comisiones y plazos son valores de muestra:
 // hay que cargar los reales en Configuración según lo que cobre cada banco y Payway.
+
+export function defaultInvoicing(): InvoicingConfig {
+  return {
+    issuers: [
+      {
+        id: "mono",
+        kind: "monotributo",
+        name: "Áridos Petreos",
+        cuit: "",
+        points: [{ id: "mono-1", number: 1, label: "Mostrador" }],
+      },
+      {
+        id: "ri",
+        kind: "ri",
+        name: "Áridos Petreos S.R.L.",
+        cuit: "",
+        points: [{ id: "ri-1", number: 1, label: "Mostrador" }],
+      },
+    ],
+    genericItems: [
+      "Venta de áridos",
+      "Piedras decorativas",
+      "Materiales de construcción",
+      "Flete y entrega",
+      "Servicio de descarga",
+      "Fijador para piedras",
+    ],
+  };
+}
 
 export const defaultSettings: Settings = {
   businessName: "Áridos Petreos",
@@ -19,6 +48,7 @@ export const defaultSettings: Settings = {
   defaultMarginPct: 40,
   quoteValidDays: 7,
   followUpDays: 2,
+  invoicing: defaultInvoicing(),
   methods: [
     {
       id: "efectivo",

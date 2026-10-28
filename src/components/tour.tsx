@@ -78,6 +78,38 @@ const steps: Step[] = [
     body: "Armás el presupuesto igual que una venta, lo descargás en PDF con el diseño de la marca o lo mandás por WhatsApp. Queda con fecha de vencimiento y seguimiento: cuando el cliente acepta, lo convertís en venta sin volver a cargar nada.",
   },
   {
+    route: "/facturalo",
+    target: "fact-cuit",
+    title: "Facturalo Fácil · desde qué CUIT",
+    body: "Tenés dos emisores: el CUIT monotributo, para facturar a consumidor final sin IVA (Factura C), y el CUIT responsable inscripto, para facturar con IVA 21% (Factura A si el cliente es inscripto, B si no). Tocás la tarjeta del que corresponda y el sistema elige solo el tipo de comprobante.",
+  },
+  {
+    route: "/facturalo",
+    target: "fact-pv",
+    title: "Punto de venta, fecha y comprobante",
+    body: "Cada CUIT tiene sus propios puntos de venta: elegís uno, la fecha, y a la derecha ves qué factura va a salir (A, B o C) según el emisor y la categoría de IVA del cliente.",
+    tip: "Los CUIT, razón social y puntos de venta se cargan una sola vez desde el botón 'CUITs y puntos de venta', arriba a la derecha.",
+  },
+  {
+    route: "/facturalo",
+    target: "fact-cliente",
+    title: "Cliente y presupuesto",
+    body: "Elegís el cliente de tu lista o lo dejás como consumidor final. Si ya le hiciste un presupuesto, lo seleccionás y se cargan sus ítems y el flete sin volver a tipear nada.",
+  },
+  {
+    route: "/facturalo",
+    target: "fact-items",
+    title: "Ítems de la factura",
+    body: "Tres formas de cargar: buscar un producto del catálogo (trae el precio de lista), tocar un ítem genérico como 'Venta de áridos' o 'Flete y entrega' para facturas que no necesitan mucho detalle, o 'Ítem a mano' para escribir lo que quieras. Cada renglón tiene cantidad, unidad y precio editables.",
+    tip: "Si no querés detallar ítems, dejá la lista vacía y cargá el importe total directamente a la derecha.",
+  },
+  {
+    route: "/facturalo",
+    target: "fact-emitir",
+    title: "Importe y emisión",
+    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. El botón 'Emitir factura' va a generar el comprobante electrónico con CAE en ARCA y descargar el PDF: esa conexión está en desarrollo, así que por ahora te avisa que estamos trabajando en eso.",
+  },
+  {
     route: "/caja",
     target: "page",
     title: "Caja y bancos",
@@ -130,6 +162,7 @@ export function Tour() {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  const [cardH, setCardH] = useState(320);
   const step = steps[i] ?? steps[0]!;
 
   // Apertura por evento o primera vez.
@@ -231,7 +264,7 @@ export function Tour() {
   if (!open) return null;
 
   const last = i === steps.length - 1;
-  const pos = cardPosition(rect);
+  const pos = cardPosition(rect, cardH);
 
   return (
     <div className="fixed inset-0 z-[90]" role="dialog" aria-label="Recorrido guiado">
@@ -262,12 +295,13 @@ export function Tour() {
         onPrev={() => setI((n) => Math.max(n - 1, 0))}
         onNext={() => (last ? finish() : setI((n) => n + 1))}
         onClose={finish}
+        onHeight={setCardH}
       />
     </div>
   );
 }
 
-function cardPosition(rect: Rect | null): CSSProperties {
+function cardPosition(rect: Rect | null, cardH: number): CSSProperties {
   if (typeof window === "undefined") return {};
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -279,7 +313,7 @@ function cardPosition(rect: Rect | null): CSSProperties {
       : { left: (vw - w) / 2, top: Math.max(24, vh / 2 - 160), width: w };
   }
   const gap = 14;
-  const h = 300; // alto estimado para decidir arriba/abajo
+  const h = cardH + 8; // alto real de la tarjeta
   let top = rect.top + rect.height + gap;
   if (top + h > vh - 12) top = Math.max(12, rect.top - h - gap);
   // Si tampoco entra arriba, va al costado.
@@ -302,6 +336,7 @@ function TourCard({
   onPrev,
   onNext,
   onClose,
+  onHeight,
   style,
 }: {
   step: Step;
@@ -311,11 +346,21 @@ function TourCard({
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  onHeight: (h: number) => void;
   style: CSSProperties;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>("button[data-next]")?.focus();
+  }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    onHeight(el.offsetHeight);
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
     <div
