@@ -26,7 +26,8 @@ export type AssistantAction =
       tipo_gasto?: ExpenseType;
     }
   | { tipo: "nuevo_cliente"; nombre?: string; telefono?: string }
-  | { tipo: "cargar_stock"; producto?: string };
+  | { tipo: "cargar_stock"; producto?: string }
+  | { tipo: "facturar"; ventaId: string };
 
 export type AssistantButton = { etiqueta: string; accion: AssistantAction };
 
@@ -53,6 +54,7 @@ export const routeFor: Record<AssistantAction["tipo"], string> = {
   nuevo_gasto: "/gastos",
   nuevo_cliente: "/clientes",
   cargar_stock: "/stock",
+  facturar: "/facturalo",
 };
 
 /** Resumen compacto del negocio para que el asistente responda con datos reales. */
@@ -187,14 +189,16 @@ export async function loadMessages(conversationId: string): Promise<ChatMessage[
 }
 
 export async function saveMessage(conversationId: string, m: ChatMessage, user?: string) {
-  const { error } = await supabase.from("chat_messages").insert({
-    conversation_id: conversationId,
-    role: m.role,
-    content: m.content,
-    botones: m.botones ?? null,
-    nota: m.nota ?? null,
-    user_email: user ?? null,
-  });
+  const { error } = await supabase
+    .from("chat_messages")
+    .insert({
+      conversation_id: conversationId,
+      role: m.role,
+      content: m.content,
+      botones: m.botones ?? null,
+      nota: m.nota ?? null,
+      user_email: user ?? null,
+    });
   return !error;
 }
 

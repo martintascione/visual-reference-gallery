@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, Pencil, Plus, Search, Users, Wallet } from "lucide-react";
+import { Loader2, MessageCircle, Pencil, Plus, Search, Users, Wallet } from "lucide-react";
 import type { Client, Due } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
+import { padronLookup } from "@/lib/arca";
 import { ars, daysBetween, fmtDate, todayISO, uid } from "@/lib/format";
 import {
   Badge,
@@ -348,6 +349,28 @@ function ClientEditor({
     setLastKey(key);
     setC(base);
   }
+  const [arcaBusy, setArcaBusy] = useState(false);
+  const [arcaMsg, setArcaMsg] = useState<string | null>(null);
+  const lookup = async () => {
+    setArcaBusy(true);
+    setArcaMsg(null);
+    try {
+      const p = await padronLookup(c.cuit ?? "");
+      setC((prev) => ({
+        ...prev,
+        name: p.nombre || prev.name,
+        cuit: p.cuit,
+        address: p.direccion || prev.address,
+        city: p.localidad || prev.city,
+        ivaCategory: p.condicionIva,
+      }));
+      setArcaMsg(`ARCA: ${p.nombre} · ${p.condicionIva}${p.estado ? ` · ${p.estado}` : ""}`);
+    } catch (e) {
+      setArcaMsg(e instanceof Error ? e.message : "No se pudo consultar ARCA");
+    } finally {
+      setArcaBusy(false);
+    }
+  };
   return (
     <Modal
       open={!!client}
@@ -365,8 +388,31 @@ function ClientEditor({
             placeholder="11 5555-0000"
           />
         </Field>
-        <Field label="CUIT (opcional)">
-          <Input value={c.cuit ?? ""} onChange={(e) => setC({ ...c, cuit: e.target.value })} />
+        <Field
+          label="CUIT (opcional)"
+          hint={arcaMsg ?? "Con 11 números, buscá en ARCA para completar los datos"}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              value={c.cuit ?? ""}
+              onChange={(e) => setC({ ...c, cuit: e.target.value })}
+              inputMode="numeric"
+            />
+            <button
+              type="button"
+              className={btn.icon}
+              aria-label="Buscar en ARCA"
+              title="Buscar en ARCA"
+              disabled={arcaBusy || (c.cuit ?? "").replace(/\D/g, "").length !== 11}
+              onClick={() => void lookup()}
+            >
+              {arcaBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </Field>
         <Field label="Dirección">
           <Input

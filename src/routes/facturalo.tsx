@@ -1,7 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Check, FileCheck, Hammer, Plus, Settings2, Trash2, X } from "lucide-react";
-import type { Client, Issuer, IssuerKind, Quote } from "@/lib/types";
+import {
+  Check,
+  FileCheck,
+  FileDown,
+  History,
+  Loader2,
+  Plus,
+  Search,
+  Settings2,
+  Trash2,
+  X,
+} from "lucide-react";
+import type { Client, Issuer, IssuerKind, Quote, Sale } from "@/lib/types";
+import {
+  arcaEstado,
+  cbteLetter,
+  condicionIvaCode,
+  emitirFactura,
+  invoiceQrUrl,
+  loadInvoices,
+  padronLookup,
+  type ArcaEstado,
+  type Invoice,
+} from "@/lib/arca";
+import { openInvoicePdf } from "@/lib/invoice-pdf";
 import { useStore } from "@/lib/store";
 import { defaultInvoicing } from "@/lib/seed";
 import { ars, fmtDate, todayISO, uid } from "@/lib/format";
@@ -51,8 +74,11 @@ function invoiceType(kind: IssuerKind, client: Client | undefined) {
   return client?.ivaCategory === "Responsable inscripto" ? "A" : "B";
 }
 
+const issuerKey = (k: IssuerKind): "ri" | "mono" => (k === "ri" ? "ri" : "mono");
+
 function Facturalo() {
-  const { db, updateSettings } = useStore();
+  const { db, updateSettings, pendingAction, setPendingAction, upsertClient, setInvoicePending } =
+    useStore();
   const inv = db.settings.invoicing ?? defaultInvoicing();
   const ivaPct = db.settings.ivaPct;
 
@@ -70,8 +96,160 @@ function Facturalo() {
   const [manualTotal, setManualTotal] = useState(0);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayISO());
-  const [working, setWorking] = useState(false);
   const [config, setConfig] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [done, setDone] = useState<Invoice | null>(null);
+  const [saleId, setSaleId] = useState<string | undefined>(undefined);
+  const [estado, setEstado] = useState<ArcaEstado | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [showList, setShowList] = useState(false);
+  const [cuitQ, setCuitQ] = useState("");
+  const [cuitBusy, setCuitBusy] = useState(false);
+  const [cuitMsg, setCuitMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    arcaEstado()
+      .then(setEstado)
+      .catch(() => setEstado(null));
+    loadInvoices()
+      .then(setInvoices)
+      .catch(() => undefined);
+  }, []);
+
+  // Venta a facturar (desde el detalle de venta).
+  useEffect(() => {
+    if (!pendingAction || pendingAction.tipo !== "facturar") return;
+    const sale = db.sales.find((x) => x.id === pendingAction.ventaId);
+    setPendingAction(undefined);
+    if (sale) loadSale(sale);
+  }, [pendingAction]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadSale = (sale: Sale) => {
+    setSaleId(sale.id);
+    if (sale.clientId) setClientId(sale.clientId);
+    const disc = sale.discountPct ?? 0;
+    const factor = (1 - disc / 100) * (sale.withIva ? 1 + ivaPct / 100 : 1);
+    setLines(
+      sale.items.map((it) => ({
+        id: uid(),
+        desc: it.name,
+        qty: it.qty,
+        unit: unitLabel[it.unit],
+        price: Math.round(it.unitPrice * (1 - it.discountPct / 100) * factor * 100) / 100,
+      })),
+    );
+    if (sale.delivery?.price)
+      setLines((ls) => [
+        ...ls,
+        {
+          id: uid(),
+          desc: "Flete y entrega",
+          qty: 1,
+          unit: "u",
+          price:
+            Math.round((sale.delivery?.price ?? 0) * (sale.withIva ? 1 + ivaPct / 100 : 1) * 100) /
+            100,
+        },
+      ]);
+    setNote(`Venta #${sale.number}`);
+    setManualTotal(0);
+  };
+
+  /** Busca el CUIT en ARCA y crea o actualiza el cliente con los datos del padrón. */
+  const lookupCuit = async () => {
+    setCuitBusy(true);
+    setCuitMsg(null);
+    try {
+      const p = await padronLookup(cuitQ);
+      const existing = db.clients.find((c) => (c.cuit ?? "").replace(/\D/g, "") === p.cuit);
+      const c: Client = existing
+        ? {
+            ...existing,
+            name: p.nombre || existing.name,
+            address: p.direccion || existing.address,
+            city: p.localidad || existing.city,
+            ivaCategory: p.condicionIva,
+          }
+        : {
+            id: uid(),
+            name: p.nombre,
+            cuit: p.cuit,
+            address: p.direccion || undefined,
+            city: p.localidad || undefined,
+            ivaCategory: p.condicionIva,
+            creditLimit: 0,
+          };
+      upsertClient(c);
+      setClientId(c.id);
+      setCuitMsg(`${existing ? "Actualizado" : "Creado"}: ${p.nombre} · ${p.condicionIva}`);
+      setCuitQ("");
+    } catch (e) {
+      setCuitMsg(e instanceof Error ? e.message : "No se pudo consultar ARCA");
+    } finally {
+      setCuitBusy(false);
+    }
+  };
+
+  const emitir = async () => {
+    if (!issuer || !point) return;
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const docTipo = client?.cuit ? 80 : client?.dni ? 96 : 99;
+      const docNro = client?.cuit
+        ? client.cuit.replace(/\D/g, "")
+        : client?.dni
+          ? client.dni.replace(/\D/g, "")
+          : "0";
+      const cbteTipo = type === "A" ? 1 : type === "B" ? 6 : 11;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const invoice = await emitirFactura({
+        issuer: issuerKey(kind),
+        ptoVta: point.number,
+        cbteTipo,
+        fecha: date,
+        docTipo,
+        docNro,
+        clientId: client?.id,
+        clientName: client?.name ?? "Consumidor final",
+        clientAddress: client
+          ? [client.address, client.city].filter(Boolean).join(", ") || undefined
+          : undefined,
+        clientIva: client?.ivaCategory ?? "Consumidor final",
+        condicionIvaReceptor: condicionIvaCode(client?.ivaCategory),
+        concepto: 1,
+        items: lines.map((l) => ({
+          desc: l.desc || "Venta",
+          qty: l.qty,
+          unit: l.unit,
+          price: l.price,
+        })),
+        neto: r2(neto),
+        iva: r2(iva),
+        total: r2(total),
+        alicuota: ivaPct,
+        note: note || undefined,
+        saleId,
+        quoteId: quoteId || undefined,
+      });
+      setDone(invoice);
+      setInvoices((xs) => [invoice, ...xs]);
+      if (saleId) setInvoicePending(saleId, false);
+      void openInvoicePdf(db.settings, issuer, invoice);
+      setConfirm(false);
+      setLines([]);
+      setManualTotal(0);
+      setNote("");
+      setQuoteId("");
+      setSaleId(undefined);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Presupuestos del cliente elegido (o todos, si no hay cliente).
   const quotes = useMemo(
@@ -130,6 +308,10 @@ function Facturalo() {
         title="Facturalo Fácil"
         subtitle="Elegí desde qué CUIT facturás, el punto de venta y el cliente; armá los ítems y listo"
       >
+        <button className={btn.soft} onClick={() => setShowList((v) => !v)}>
+          <History className="h-4 w-4" strokeWidth={1.6} /> Emitidas
+          {invoices.length ? ` (${invoices.length})` : ""}
+        </button>
         <button data-tour="fact-config" className={btn.soft} onClick={() => setConfig(true)}>
           <Settings2 className="h-4 w-4" strokeWidth={1.6} /> CUITs y puntos de venta
         </button>
@@ -166,6 +348,15 @@ function Facturalo() {
                     >
                       {kindHint[i.kind]}
                     </span>
+                    {estado && (
+                      <span
+                        className={`mt-1 text-[11px] font-medium ${estado.emisores[issuerKey(i.kind)]?.configurado ? (on ? "opacity-90" : "text-success-foreground") : on ? "opacity-70" : "text-danger-soft-foreground"}`}
+                      >
+                        {estado.emisores[issuerKey(i.kind)]?.configurado
+                          ? "● Conectado a ARCA"
+                          : "○ Sin conectar a ARCA"}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -232,6 +423,34 @@ function Facturalo() {
                 </Select>
               </Field>
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="flex h-10 flex-1 items-center gap-2 rounded-full bg-surface px-4">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <input
+                  value={cuitQ}
+                  onChange={(e) => setCuitQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void lookupCuit();
+                  }}
+                  placeholder="Buscar por CUIT en ARCA (crea o actualiza el cliente)"
+                  className="h-full w-full bg-transparent text-sm outline-hidden"
+                  inputMode="numeric"
+                />
+              </div>
+              <button
+                className={btn.soft}
+                disabled={cuitBusy || cuitQ.replace(/\D/g, "").length !== 11}
+                onClick={() => void lookupCuit()}
+              >
+                {cuitBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}{" "}
+                Consultar padrón
+              </button>
+            </div>
+            {cuitMsg && <p className="mt-2 text-xs text-muted-foreground">{cuitMsg}</p>}
             {client && (
               <p className="mt-3 text-xs text-muted-foreground">
                 {client.ivaCategory ?? "Categoría de IVA sin especificar"}
@@ -411,9 +630,27 @@ function Facturalo() {
               </Field>
             </div>
             <div data-tour="fact-emitir" className="mt-4 flex flex-col gap-2">
-              <button className={btn.primary} disabled={!ready} onClick={() => setWorking(true)}>
+              <button
+                className={btn.primary}
+                disabled={!ready || !estado?.emisores[issuerKey(kind)]?.configurado}
+                onClick={() => {
+                  setErrorMsg(null);
+                  setConfirm(true);
+                }}
+              >
                 <FileCheck className="h-4 w-4" /> Emitir factura {type}
               </button>
+              {estado && !estado.emisores[issuerKey(kind)]?.configurado && (
+                <p className="text-center text-[11px] text-danger-soft-foreground">
+                  Este CUIT todavía no está conectado a ARCA.
+                </p>
+              )}
+              {type === "B" && kind === "ri" && !client && (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  Consumidor final sin identificar: válido hasta el tope que fija ARCA; para
+                  importes mayores cargá DNI o CUIT.
+                </p>
+              )}
               <p className="text-center text-[11px] text-muted-foreground">
                 {issuer?.cuit
                   ? `${kindLabel[kind]} · CUIT ${issuer.cuit}`
@@ -423,44 +660,128 @@ function Facturalo() {
             </div>
           </Card>
 
-          <Card title="Cómo va a funcionar" icon={Hammer}>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Al emitir, la factura va a salir con CAE desde ARCA (AFIP) por el CUIT elegido, se va
-              a descargar en PDF con el diseño de la marca y va a quedar vinculada a la venta o
-              presupuesto. Por ahora podés armarla y revisar los importes.
-            </p>
-          </Card>
+          {done && (
+            <Card title="Última emitida" icon={FileCheck}>
+              <p className="text-sm font-semibold">
+                Factura {cbteLetter(done.cbteTipo)} {String(done.ptoVta).padStart(5, "0")}-
+                {String(done.cbteNro).padStart(8, "0")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {done.clientName} · {ars(done.total)} · CAE {done.cae}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  className={btn.soft}
+                  onClick={() => void openInvoicePdf(db.settings, issuer, done)}
+                >
+                  <FileDown className="h-4 w-4" /> PDF
+                </button>
+                <a className={btn.ghost} href={invoiceQrUrl(done)} target="_blank" rel="noreferrer">
+                  Verificar en ARCA
+                </a>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
 
       <Modal
-        open={working}
-        onClose={() => setWorking(false)}
-        title="Estamos trabajando en esta funcionalidad"
-        subtitle="La emisión electrónica con ARCA todavía no está conectada"
+        open={confirm}
+        onClose={() => !busy && setConfirm(false)}
+        title={`Emitir factura ${type}`}
+        subtitle="Se pide el CAE a ARCA y queda registrada. Esta operación no se puede deshacer."
       >
         <div className="flex flex-col gap-3 text-sm">
           <div className="rounded-2xl bg-surface p-4">
-            <p className="font-semibold">Así quedaría la factura {type}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {issuer?.name} · {kindLabel[kind]} {issuer?.cuit ? `· CUIT ${issuer.cuit}` : ""} · PV{" "}
-              {String(point?.number ?? 0).padStart(5, "0")} · {fmtDate(date)}
+            <p className="font-semibold">
+              {issuer?.name} · {kindLabel[kind]}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
+              CUIT {issuer?.cuit} · PV {String(point?.number ?? 0).padStart(5, "0")} ·{" "}
+              {fmtDate(date)}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
               Cliente: {client?.name ?? "Consumidor final"}
+              {client?.cuit
+                ? ` · CUIT ${client.cuit}`
+                : client?.dni
+                  ? ` · DNI ${client.dni}`
+                  : ""}{" "}
+              · {client?.ivaCategory ?? "Consumidor final"}
             </p>
+            {kind === "ri" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Neto {ars(neto)} · IVA {ars(iva)}
+              </p>
+            )}
             <p className="mt-2 text-base font-bold tabular-nums">{ars(total)}</p>
           </div>
-          <p className="text-muted-foreground">
-            Cuando esté lista, este botón va a emitir el comprobante con CAE y descargar el PDF.
-            Mientras tanto, seguí facturando por el portal de ARCA con estos mismos datos.
-          </p>
+          {errorMsg && (
+            <p className="rounded-2xl bg-danger-soft px-4 py-3 text-xs text-danger-soft-foreground">
+              {errorMsg}
+            </p>
+          )}
         </div>
-        <div className="mt-4 flex justify-end">
-          <button className={btn.primary} onClick={() => setWorking(false)}>
-            Entendido
+        <div className="mt-4 flex justify-end gap-2">
+          <button className={btn.soft} disabled={busy} onClick={() => setConfirm(false)}>
+            Cancelar
+          </button>
+          <button className={btn.primary} disabled={busy} onClick={() => void emitir()}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileCheck className="h-4 w-4" />
+            )}{" "}
+            {busy ? "Pidiendo CAE…" : "Confirmar y emitir"}
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={showList}
+        onClose={() => setShowList(false)}
+        title="Facturas emitidas"
+        subtitle="Las últimas 200, con su CAE"
+        wide
+      >
+        {invoices.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no se emitió ninguna factura desde la plataforma.
+          </p>
+        ) : (
+          <Table
+            head={["Comprobante", "Fecha", "Cliente", { label: "Total", right: true }, "CAE", ""]}
+            min={640}
+          >
+            {invoices.map((f) => (
+              <tr key={f.id} className={tr}>
+                <td className="font-semibold">
+                  {cbteLetter(f.cbteTipo)} {String(f.ptoVta).padStart(5, "0")}-
+                  {String(f.cbteNro).padStart(8, "0")}
+                </td>
+                <td className="whitespace-nowrap">{fmtDate(f.fecha)}</td>
+                <td>{f.clientName}</td>
+                <td className="text-right tabular-nums">{ars(f.total)}</td>
+                <td className="text-xs tabular-nums text-muted-foreground">{f.cae}</td>
+                <td className="text-right">
+                  <button
+                    className={btn.icon}
+                    aria-label="PDF"
+                    onClick={() =>
+                      void openInvoicePdf(
+                        db.settings,
+                        inv.issuers.find((i) => issuerKey(i.kind) === f.issuer),
+                        f,
+                      )
+                    }
+                  >
+                    <FileDown className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
       </Modal>
 
       <IssuersModal

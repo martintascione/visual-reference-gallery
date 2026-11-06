@@ -34,3 +34,4 @@ dist-ssr
 # Archivos de trabajo locales
 *.zip
 .env
+certificados-arca/

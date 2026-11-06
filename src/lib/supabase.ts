@@ -48,6 +48,7 @@ const numericKeys = new Set([
   "subtotal",
   "iva",
   "total",
+  "neto",
   "amount",
   "paid",
   "qty",

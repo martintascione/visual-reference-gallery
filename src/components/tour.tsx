@@ -94,7 +94,7 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-cliente",
     title: "Cliente y presupuesto",
-    body: "Elegís el cliente de tu lista o lo dejás como consumidor final. Si ya le hiciste un presupuesto, lo seleccionás y se cargan sus ítems y el flete sin volver a tipear nada.",
+    body: "Elegís el cliente de tu lista o lo dejás como consumidor final. Si escribís un CUIT y tocás 'Consultar padrón', trae de ARCA la razón social, el domicilio y la condición de IVA y crea el cliente solo. Si ya le hiciste un presupuesto, lo seleccionás y se cargan sus ítems y el flete.",
   },
   {
     route: "/facturalo",
@@ -107,7 +107,7 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-emitir",
     title: "Importe y emisión",
-    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. El botón 'Emitir factura' va a generar el comprobante electrónico con CAE en ARCA y descargar el PDF: esa conexión está en desarrollo, así que por ahora te avisa que estamos trabajando en eso.",
+    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. Con 'Emitir factura' se pide el CAE a ARCA, la factura queda guardada y se abre el PDF con el QR oficial. Desde 'Emitidas' reimprimís cualquier factura, y desde el detalle de una venta podés facturarla directo.",
   },
   {
     route: "/caja",

@@ -7,18 +7,20 @@ export function defaultInvoicing(): InvoicingConfig {
   return {
     issuers: [
       {
-        id: "mono",
-        kind: "monotributo",
-        name: "Áridos Petreos",
-        cuit: "",
-        points: [{ id: "mono-1", number: 1, label: "Mostrador" }],
-      },
-      {
         id: "ri",
         kind: "ri",
-        name: "Áridos Petreos S.R.L.",
-        cuit: "",
-        points: [{ id: "ri-1", number: 1, label: "Mostrador" }],
+        name: "GONZALEZ FELIX OSCAR",
+        cuit: "20-14849915-3",
+        address: "Fleming 271, Trenque Lauquen",
+        points: [{ id: "ri-11", number: 11, label: "Áridos Petreos (web)" }],
+      },
+      {
+        id: "mono",
+        kind: "monotributo",
+        name: "GONZALEZ MARIA JULIA",
+        cuit: "27-34876554-5",
+        address: "Pasteur 596, Trenque Lauquen",
+        points: [{ id: "mono-7", number: 7, label: "Áridos Petreos Piedras Naturales (web)" }],
       },
     ],
     genericItems: [

@@ -3,7 +3,8 @@ import { feeFor, useStore } from "@/lib/store";
 import { ars, fmtDate, fmtTime, num } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
 import { Badge, Modal, btn } from "./ui-bits";
-import { FileDown } from "lucide-react";
+import { FileCheck, FileDown } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { openDocumentPdf } from "@/lib/quote-pdf";
 
 const methodLabel: Record<string, string> = {
@@ -36,7 +37,8 @@ export function PayChips({ sale }: { sale: Sale }) {
 }
 
 export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
-  const { db, setInvoicePending } = useStore();
+  const { db, setInvoicePending, setPendingAction } = useStore();
+  const navigate = useNavigate();
   if (!sale) return null;
   const fees = sale.payments.reduce((a, p) => a + feeFor(db, p), 0);
   return (
@@ -121,9 +123,20 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <button className={btn.soft} onClick={() => openDocumentPdf(db, sale, "venta")}>
-          <FileDown className="h-4 w-4" strokeWidth={1.6} /> Comprobante PDF
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className={btn.soft} onClick={() => openDocumentPdf(db, sale, "venta")}>
+            <FileDown className="h-4 w-4" strokeWidth={1.6} /> Comprobante PDF
+          </button>
+          <button
+            className={btn.soft}
+            onClick={() => {
+              setPendingAction({ tipo: "facturar", ventaId: sale.id });
+              void navigate({ to: "/facturalo" });
+            }}
+          >
+            <FileCheck className="h-4 w-4" strokeWidth={1.6} /> Facturar (ARCA)
+          </button>
+        </div>
         <button
           className={sale.invoicePending ? btn.danger : btn.ghost}
           onClick={() => setInvoicePending(sale.id, !sale.invoicePending)}
