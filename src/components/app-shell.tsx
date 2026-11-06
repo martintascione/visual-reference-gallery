@@ -7,6 +7,7 @@ import {
   CircleHelp,
   FileCheck,
   FileText,
+  Mail,
   Home,
   Landmark,
   Lock,
@@ -34,6 +35,7 @@ const nav = [
   { to: "/ventas", label: "Ventas", icon: ShoppingCart },
   { to: "/presupuestos", label: "Presupuestos", icon: FileText },
   { to: "/facturalo", label: "Facturalo Fácil", icon: FileCheck },
+  { to: "/correo", label: "Casilla", icon: Mail },
   { to: "/catalogo", label: "Catálogo y precios", icon: Tags },
   { to: "/stock", label: "Stock", icon: Package },
   { to: "/clientes", label: "Clientes y cuentas corrientes", icon: Users },
@@ -130,7 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="mx-auto flex max-w-[1480px] gap-5 px-4 pb-28 pt-5 md:px-6 md:pb-8">
         {/* Menú lateral */}
-        <aside className="sticky top-[92px] hidden h-[calc(100vh-112px)] w-11 shrink-0 flex-col items-center md:flex">
+        <aside className="sticky top-[92px] z-30 hidden h-[calc(100vh-112px)] w-11 shrink-0 flex-col items-center md:flex">
           <nav className="flex flex-col gap-3">
             {nav.map(({ to, label, icon: Icon }) => (
               <Link

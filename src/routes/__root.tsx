@@ -12,6 +12,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { installErrorCapture, reportError, setErrorUser } from "@/lib/errors";
 import { AppShell } from "@/components/app-shell";
 import { StoreProvider, useStore } from "@/lib/store";
 import { Loading, Login } from "@/components/login";
@@ -43,6 +44,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportError("pantalla", error, { boundary: "pantalla completa" });
   }, [error]);
 
   return (
@@ -81,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Áridos Petreos · Panel" },
+      { title: "Áridos Petreos · Panel de gestión" },
       { name: "description", content: "Panel administrativo del corralón" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -124,7 +126,10 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    installErrorCapture();
+  }, []);
   // En modo SPA el shell prerenderizado no lleva contenido y el cliente arranca igual:
   // así no hay diferencias al hidratar (los datos viven en el navegador).
   if (router.isShell() || !mounted) return <div className="min-h-screen" />;
@@ -146,6 +151,7 @@ function RootComponent() {
 /** Pide login y espera la carga de la base antes de mostrar el panel. */
 function Gate({ children }: { children: ReactNode }) {
   const { session, ready, syncError } = useStore();
+  useEffect(() => setErrorUser(session?.user.email), [session]);
   if (!session) return <Login />;
   if (!ready) return <Loading text={syncError ?? "Cargando datos…"} />;
   return (

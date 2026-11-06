@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { reportError } from "./errors";
 import type {
   Bank,
   Cheque,
@@ -30,7 +31,7 @@ import { emptyDB } from "./seed";
 import { demoDB } from "./demo-seed";
 
 /** Modo demo: datos de ejemplo en memoria, sin Supabase (para previsualizar y probar). */
-export const DEMO = import.meta.env["VITE_DEMO"] === "1";
+export const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 import { addDays, dayOf, todayISO, uid } from "./format";
 import { fromRow, supabase, toRow } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -140,6 +141,11 @@ async function loadAll(): Promise<DB> {
 }
 
 /** Guarda en la base solo lo que cambió entre dos estados. */
+/** Qué colecciones cambiaron entre dos estados (para el registro de errores). */
+function changedCollections(prev: DB, next: DB) {
+  return (Object.keys(next) as (keyof DB)[]).filter((k) => prev[k] !== next[k]).join(", ");
+}
+
 async function persistDiff(prev: DB, next: DB) {
   const jobs: PromiseLike<{ error: unknown }>[] = [];
   for (const c of collections) {
@@ -210,6 +216,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
       .catch((e: Error) => {
         if (alive) setSyncError(`No se pudo cargar la base: ${e.message}`);
+        reportError("base", e, { op: "cargar" });
       });
     return () => {
       alive = false;
@@ -226,7 +233,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     queue.current = queue.current
       .then(() => persistDiff(prev, next))
       .then(() => setSyncError(null))
-      .catch((e: Error) => setSyncError(`No se pudo guardar: ${e.message}. Revisá la conexión.`));
+      .catch((e: Error) => {
+        setSyncError(`No se pudo guardar: ${e.message}. Revisá la conexión.`);
+        reportError("base", e, { op: "guardar", cambios: changedCollections(prev, next) });
+      });
   }, []);
 
   const methodCfg = (d: DB, p: Payment) =>

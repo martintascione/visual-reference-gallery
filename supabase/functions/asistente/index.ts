@@ -27,6 +27,7 @@ Secciones del sistema y qué hace cada una:
 - Ventas (/ventas): listado, detalle con ganancia y "Comprobante PDF", entregas pendientes, facturas por hacer.
 - Presupuestos (/presupuestos): seguimiento, enviar por WhatsApp, convertir en venta, marcar perdido.
 - Facturalo Fácil (/facturalo): armar facturas desde dos CUIT (monotributo → Factura C a consumidor final; responsable inscripto → Factura A/B con IVA), eligiendo punto de venta, cliente, presupuesto e ítems (catálogo, genéricos o a mano). Emite la factura electrónica real con CAE en ARCA y abre el PDF con QR; 'Emitidas' lista las facturas con CAE; 'Consultar padrón' trae razón social, domicilio y condición de IVA de un CUIT desde ARCA (también está en la ficha del cliente, con la lupa junto al CUIT). Desde el detalle de una venta, 'Facturar (ARCA)' la lleva a Facturalo Fácil con los ítems cargados.
+- Casilla (/correo): el correo del negocio dentro de la plataforma (administracion@aridospetreos.com): recibidos, enviados, buscar, leer con adjuntos, responder, reenviar, redactar con adjuntos.
 - Catálogo y precios (/catalogo): productos con calculadora. Para piedras: precio del proveedor por tonelada + flete + descarga + embalaje + margen % → precio por kg, bolsón de 25 kg y tonelada. Lajas por m², fijador por bidón, unitarios. Descuentos por cantidad. "Actualizar precios" sube todo un %. "Calcular cantidad" dice cuánta piedra necesita el cliente por m² y espesor.
 - Stock (/stock): se descuenta solo al vender. "Compra" carga un camión (suma stock, registra el gasto y actualiza el costo). "Ajuste" para conteo o merma.
 - Clientes y cuentas corrientes (/clientes): cuotas, cobrar cuotas, límite de crédito, recordatorio por WhatsApp.
@@ -178,7 +179,14 @@ Deno.serve(async (req) => {
     const texto = content.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("\n").trim();
     return json({ texto: texto || "No pude armar la respuesta. Probá de nuevo." });
   } catch (e) {
-    return json({ error: (e as Error).message }, 500);
+    const msg = (e as Error).message;
+    try {
+      const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await db.rpc("log_app_error", { p: { source: "asistente", message: msg.slice(0, 500), stack: ((e as Error).stack ?? "").slice(0, 4000) || null, route: "edge:asistente", context: null } });
+    } catch (err) {
+      console.error("logError:", err);
+    }
+    return json({ error: msg }, 500);
   }
 });
 

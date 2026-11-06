@@ -16,6 +16,7 @@ import { Route as CatalogoRouteImport } from './routes/catalogo'
 import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
+import { Route as CorreoRouteImport } from './routes/correo'
 import { Route as FacturaloRouteImport } from './routes/facturalo'
 import { Route as GastosRouteImport } from './routes/gastos'
 import { Route as MasRouteImport } from './routes/mas'
@@ -59,6 +60,11 @@ const ClientesRoute = ClientesRouteImport.update({
 const ConfiguracionRoute = ConfiguracionRouteImport.update({
   id: '/configuracion',
   path: '/configuracion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CorreoRoute = CorreoRouteImport.update({
+  id: '/correo',
+  path: '/correo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FacturaloRoute = FacturaloRouteImport.update({
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
+  '/correo': typeof CorreoRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
+  '/correo': typeof CorreoRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
+  '/correo': typeof CorreoRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/cierre'
     | '/clientes'
     | '/configuracion'
+    | '/correo'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/cierre'
     | '/clientes'
     | '/configuracion'
+    | '/correo'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/cierre'
     | '/clientes'
     | '/configuracion'
+    | '/correo'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -227,6 +239,7 @@ export interface RootRouteChildren {
   CierreRoute: typeof CierreRoute
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
+  CorreoRoute: typeof CorreoRoute
   FacturaloRoute: typeof FacturaloRoute
   GastosRoute: typeof GastosRoute
   MasRoute: typeof MasRoute
@@ -287,6 +300,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracion'
       fullPath: '/configuracion'
       preLoaderRoute: typeof ConfiguracionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/correo': {
+      id: '/correo'
+      path: '/correo'
+      fullPath: '/correo'
+      preLoaderRoute: typeof CorreoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facturalo': {
@@ -363,6 +383,7 @@ const rootRouteChildren: RootRouteChildren = {
   CierreRoute: CierreRoute,
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,
+  CorreoRoute: CorreoRoute,
   FacturaloRoute: FacturaloRoute,
   GastosRoute: GastosRoute,
   MasRoute: MasRoute,

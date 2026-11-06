@@ -128,6 +128,7 @@ export type Client = {
   id: string;
   name: string;
   phone?: string | undefined;
+  email?: string | undefined;
   cuit?: string | undefined;
   address?: string | undefined;
   city?: string | undefined;

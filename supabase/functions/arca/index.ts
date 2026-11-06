@@ -243,6 +243,8 @@ async function padron(db: Db, issuer: Issuer, cuit: string) {
 // ---------- servidor ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  let actionName = "";
+  let issuerName = "";
   try {
     const auth = req.headers.get("Authorization") ?? "";
     const anon = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
@@ -252,6 +254,8 @@ Deno.serve(async (req) => {
 
     const body = (await req.json()) as { action: string; issuer?: string; [k: string]: unknown };
     const issuerKey = String(body.issuer ?? "ri");
+    actionName = body.action;
+    issuerName = issuerKey;
 
     switch (body.action) {
       case "estado": {
@@ -294,6 +298,19 @@ Deno.serve(async (req) => {
         return json({ error: "Acción desconocida" }, 400);
     }
   } catch (e) {
-    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 200);
+    const msg = e instanceof Error ? e.message : String(e);
+    await logError("arca", msg, e instanceof Error ? e.stack : undefined, { action: actionName, issuer: issuerName });
+    return json({ ok: false, error: msg }, 200);
   }
 });
+
+/** Registra el error en app_errors (sin romper la respuesta si falla). */
+async function logError(source: string, message: string, stack: string | undefined, context: Record<string, unknown>) {
+  try {
+    if (/no encontró ese CUIT|ARCA rechazó/i.test(message)) return; // errores de uso, no del sistema
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    await db.rpc("log_app_error", { p: { source, message: message.slice(0, 500), stack: stack?.slice(0, 4000) ?? null, route: "edge:" + source, context } });
+  } catch (err) {
+    console.error("logError:", err);
+  }
+}

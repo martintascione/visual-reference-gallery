@@ -3,6 +3,7 @@
 
 import { supabase, toRow, fromRow } from "./supabase";
 import { uid } from "./format";
+import { reportError } from "./errors";
 
 const env = import.meta.env as Record<string, string | undefined>;
 const DEMO = env["VITE_DEMO"] === "1";
@@ -87,10 +88,23 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     } catch {
       /* sin detalle */
     }
+    reportError("arca", new Error(detail), { action: body["action"], issuer: body["issuer"] });
     throw new Error(detail);
   }
   if (!data) throw new Error("ARCA no respondió.");
-  if (data.ok === false || data.error) throw new Error(data.error ?? "Error de ARCA");
+  if (data.ok === false || data.error) {
+    const msg = data.error ?? "Error de ARCA";
+    // Un CUIT inexistente o un rechazo de ARCA por datos del comprobante son errores de uso; los demás se registran.
+    if (!/no encontró ese CUIT|ARCA rechazó/i.test(msg))
+      reportError("arca", new Error(msg), {
+        action: body["action"],
+        issuer: body["issuer"],
+        cuit: body["cuit"],
+        ptoVta: body["ptoVta"],
+        cbteTipo: body["cbteTipo"],
+      });
+    throw new Error(msg);
+  }
   return data;
 }
 

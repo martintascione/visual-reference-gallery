@@ -388,6 +388,14 @@ function ClientEditor({
             placeholder="11 5555-0000"
           />
         </Field>
+        <Field label="Email" hint="Para mandarle las facturas automáticamente">
+          <Input
+            type="email"
+            value={c.email ?? ""}
+            onChange={(e) => setC({ ...c, email: e.target.value })}
+            placeholder="cliente@correo.com"
+          />
+        </Field>
         <Field
           label="CUIT (opcional)"
           hint={arcaMsg ?? "Con 11 números, buscá en ARCA para completar los datos"}

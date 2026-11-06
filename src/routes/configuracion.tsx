@@ -1,16 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  analyzeError,
+  loadErrors,
+  saveErrorAnalysis,
+  setErrorResolved,
+  type AppError,
+} from "@/lib/errors";
 import { fmtDate } from "@/lib/format";
 import {
+  Activity,
   Building2,
   CircleHelp,
   CreditCard,
   Lightbulb,
+  Loader2,
   Plus,
   Receipt,
   RotateCcw,
   Settings2,
+  Sparkles,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -18,6 +28,7 @@ import type { Bank, FixedExpense, MethodConfig, PaymentMethod, Zone } from "@/li
 import { useStore } from "@/lib/store";
 import { ars, uid } from "@/lib/format";
 import {
+  Badge,
   Card,
   Field,
   Input,
@@ -528,6 +539,7 @@ function Configuracion() {
             prorratea en cada cierre.
           </p>
         </Card>
+        <SystemHealth />
         <FeatureRequests />
       </div>
     </>
@@ -602,6 +614,161 @@ function FeatureRequests() {
             <p className="mt-2 text-xs">{f.descripcion}</p>
             {f.flujo && <p className="mt-1 text-xs text-muted-foreground">Flujo: {f.flujo}</p>}
             {f.datos && <p className="mt-1 text-xs text-muted-foreground">Datos: {f.datos}</p>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+const sourceLabel: Record<string, string> = {
+  pantalla: "Pantalla",
+  base: "Base de datos",
+  arca: "ARCA",
+  asistente: "Asistente",
+  red: "Red",
+  otro: "Otro",
+};
+
+/** Errores detectados por el sistema, para revisarlos antes de que avise el cliente. */
+function SystemHealth() {
+  const [list, setList] = useState<AppError[]>([]);
+  const [showResolved, setShowResolved] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = () =>
+    loadErrors(!showResolved)
+      .then((l) => {
+        setList(l);
+        setErr(null);
+      })
+      .catch((e: Error) => setErr(e.message));
+  useEffect(() => {
+    void load();
+  }, [showResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const analyze = async (e: AppError) => {
+    setBusy(e.id);
+    try {
+      const text = await analyzeError(e);
+      await saveErrorAnalysis(e.id, text);
+      setList((xs) => xs.map((x) => (x.id === e.id ? { ...x, analysis: text } : x)));
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "No se pudo analizar");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const resolve = async (e: AppError, v: boolean) => {
+    await setErrorResolved(e.id, v);
+    void load();
+  };
+  const openCount = list.filter((e) => !e.resolved).length;
+
+  return (
+    <Card
+      title="Salud del sistema"
+      icon={Activity}
+      subtitle="Errores que la plataforma detectó sola (pantalla, base de datos, ARCA, asistente)"
+      className="xl:col-span-2"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm">
+          {openCount === 0 ? (
+            <span className="text-success-foreground">Sin errores abiertos</span>
+          ) : (
+            <span className="font-semibold text-danger-soft-foreground">
+              {openCount} {openCount === 1 ? "error abierto" : "errores abiertos"}
+            </span>
+          )}
+        </p>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showResolved}
+            onChange={(e) => setShowResolved(e.target.checked)}
+          />{" "}
+          Ver también resueltos
+        </label>
+      </div>
+      {err && (
+        <p className="mb-2 text-xs text-danger-soft-foreground">
+          {err}. ¿Se corrió migracion-6.sql?
+        </p>
+      )}
+      {list.length === 0 && !err && (
+        <p className="text-sm text-muted-foreground">
+          Nada registrado. Cuando algo falle, aparece acá con la pantalla, el usuario, el detalle
+          técnico y un botón para pedirle un diagnóstico al asistente.
+        </p>
+      )}
+      <div className="flex flex-col gap-2">
+        {list.map((e) => (
+          <div
+            key={e.id}
+            className={`rounded-2xl p-3 text-sm ${e.resolved ? "bg-surface opacity-70" : "bg-surface"}`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <button
+                className="min-w-0 flex-1 text-left"
+                onClick={() => setOpen(open === e.id ? null : e.id)}
+              >
+                <p className="flex flex-wrap items-center gap-2 font-semibold">
+                  <Badge tone={e.resolved ? "muted" : "danger"}>
+                    {sourceLabel[e.source] ?? e.source}
+                  </Badge>
+                  <span className="break-all">{e.message}</span>
+                  {e.count > 1 && (
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      ×{e.count}
+                    </span>
+                  )}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {fmtDate(e.createdAt)}{" "}
+                  {new Date(e.createdAt).toLocaleTimeString("es-AR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  {e.route ? ` · ${e.route}` : ""}
+                  {e.userEmail ? ` · ${e.userEmail}` : ""}
+                </p>
+              </button>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  className={btn.soft}
+                  disabled={busy === e.id}
+                  onClick={() => void analyze(e)}
+                >
+                  {busy === e.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}{" "}
+                  {e.analysis ? "Re-analizar" : "Analizar con IA"}
+                </button>
+                <button className={btn.ghost} onClick={() => void resolve(e, !e.resolved)}>
+                  {e.resolved ? "Reabrir" : "Resuelto"}
+                </button>
+              </div>
+            </div>
+            {e.analysis && (
+              <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-card p-3 text-xs leading-relaxed">
+                {e.analysis}
+              </p>
+            )}
+            {open === e.id && (
+              <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
+                {e.context && <p className="break-all">Contexto: {JSON.stringify(e.context)}</p>}
+                {e.stack && (
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl bg-card p-2 font-mono text-[10px]">
+                    {e.stack}
+                  </pre>
+                )}
+                {e.userAgent && <p className="break-all">Navegador: {e.userAgent}</p>}
+              </div>
+            )}
           </div>
         ))}
       </div>

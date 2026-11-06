@@ -94,7 +94,7 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-cliente",
     title: "Cliente y presupuesto",
-    body: "Elegís el cliente de tu lista o lo dejás como consumidor final. Si escribís un CUIT y tocás 'Consultar padrón', trae de ARCA la razón social, el domicilio y la condición de IVA y crea el cliente solo. Si ya le hiciste un presupuesto, lo seleccionás y se cargan sus ítems y el flete.",
+    body: "Elegís el cliente de tu lista o lo dejás como consumidor final. Si escribís un CUIT y tocás 'Consultar padrón', trae de ARCA la razón social, el domicilio y la condición de IVA y crea el cliente solo. Abajo aparece el email del cliente: con eso cargado, la factura se le envía automáticamente al emitirla. Si ya le hiciste un presupuesto, lo seleccionás y se cargan sus ítems y el flete.",
   },
   {
     route: "/facturalo",
@@ -107,7 +107,14 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-emitir",
     title: "Importe y emisión",
-    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. Con 'Emitir factura' se pide el CAE a ARCA, la factura queda guardada y se abre el PDF con el QR oficial. Desde 'Emitidas' reimprimís cualquier factura, y desde el detalle de una venta podés facturarla directo.",
+    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. Con 'Emitir factura' se pide el CAE a ARCA, la factura queda guardada y se abre el PDF con el QR oficial. Si el cliente tiene email cargado, la factura se le manda sola: un mail con el diseño de la marca y el PDF adjunto, desde la casilla oficial. Desde 'Emitidas' reimprimís o reenviás cualquier factura, y desde el detalle de una venta podés facturarla directo.",
+  },
+  {
+    route: "/correo",
+    target: "page",
+    title: "Casilla de correo",
+    body: "El correo del negocio adentro de la plataforma: recibidos, enviados, buscar, leer con adjuntos, responder, reenviar y redactar. Lo que mandás sale desde la casilla oficial con la firma del negocio, y las facturas que se envían a los clientes quedan en Enviados.",
+    tip: "Tocá un mensaje para leerlo; con Responder se cita el texto original y se mantiene el hilo.",
   },
   {
     route: "/caja",

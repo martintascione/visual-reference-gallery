@@ -6,6 +6,7 @@ import {
   FileDown,
   History,
   Loader2,
+  Mail,
   Plus,
   Search,
   Settings2,
@@ -25,6 +26,7 @@ import {
   type Invoice,
 } from "@/lib/arca";
 import { openInvoicePdf } from "@/lib/invoice-pdf";
+import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { useStore } from "@/lib/store";
 import { defaultInvoicing } from "@/lib/seed";
 import { ars, fmtDate, todayISO, uid } from "@/lib/format";
@@ -108,6 +110,49 @@ function Facturalo() {
   const [cuitQ, setCuitQ] = useState("");
   const [cuitBusy, setCuitBusy] = useState(false);
   const [cuitMsg, setCuitMsg] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [mailState, setMailState] = useState<{
+    id: string;
+    status: "enviando" | "ok" | "error";
+    msg: string;
+  } | null>(null);
+  const [askEmail, setAskEmail] = useState<Invoice | null>(null);
+  const [askEmailValue, setAskEmailValue] = useState("");
+
+  useEffect(() => {
+    setEmailDraft(client?.email ?? "");
+  }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Guarda el email en la ficha del cliente si cambió. */
+  const saveClientEmail = () => {
+    if (!client) return;
+    const v = emailDraft.trim();
+    if ((client.email ?? "") !== v) upsertClient({ ...client, email: v || undefined });
+  };
+
+  /** Manda la factura por mail (PDF adjunto). Si no hay email, pide uno. */
+  const sendMail = async (f: Invoice, to?: string) => {
+    const dest = (to ?? db.clients.find((c) => c.id === f.clientId)?.email ?? "").trim();
+    if (!dest) {
+      setAskEmail(f);
+      setAskEmailValue("");
+      return;
+    }
+    setMailState({ id: f.id, status: "enviando", msg: `Enviando a ${dest}…` });
+    try {
+      const iss = inv.issuers.find((i) => issuerKey(i.kind) === f.issuer);
+      await sendInvoiceEmail(db.settings, iss, f, dest);
+      setMailState({ id: f.id, status: "ok", msg: `Factura enviada a ${dest}` });
+      const c = db.clients.find((x) => x.id === f.clientId);
+      if (c && c.email !== dest) upsertClient({ ...c, email: dest });
+    } catch (e) {
+      setMailState({
+        id: f.id,
+        status: "error",
+        msg: `No se pudo enviar el mail: ${e instanceof Error ? e.message : "error"}`,
+      });
+    }
+  };
 
   useEffect(() => {
     arcaEstado()
@@ -235,9 +280,12 @@ function Facturalo() {
         quoteId: quoteId || undefined,
       });
       setDone(invoice);
+      saveClientEmail();
+      const dest = emailDraft.trim() || client?.email;
       setInvoices((xs) => [invoice, ...xs]);
       if (saleId) setInvoicePending(saleId, false);
       void openInvoicePdf(db.settings, issuer, invoice);
+      if (dest) void sendMail(invoice, dest);
       setConfirm(false);
       setLines([]);
       setManualTotal(0);
@@ -452,15 +500,38 @@ function Facturalo() {
             </div>
             {cuitMsg && <p className="mt-2 text-xs text-muted-foreground">{cuitMsg}</p>}
             {client && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                {client.ivaCategory ?? "Categoría de IVA sin especificar"}
-                {client.cuit
-                  ? ` · CUIT ${client.cuit}`
-                  : client.dni
-                    ? ` · DNI ${client.dni}`
-                    : " · sin CUIT ni DNI cargado"}
-                {client.address ? ` · ${client.address}` : ""}
-              </p>
+              <>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {client.ivaCategory ?? "Categoría de IVA sin especificar"}
+                  {client.cuit
+                    ? ` · CUIT ${client.cuit}`
+                    : client.dni
+                      ? ` · DNI ${client.dni}`
+                      : " · sin CUIT ni DNI cargado"}
+                  {client.address ? ` · ${client.address}` : ""}
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label="Email del cliente"
+                    hint={
+                      emailDraft.trim()
+                        ? "Al emitir, la factura se le manda sola con el PDF adjunto"
+                        : "Sin email no se envía; igual podés mandarla después"
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <Input
+                        type="email"
+                        value={emailDraft}
+                        onChange={(e) => setEmailDraft(e.target.value)}
+                        onBlur={saveClientEmail}
+                        placeholder="cliente@correo.com"
+                      />
+                    </div>
+                  </Field>
+                </div>
+              </>
             )}
           </Card>
 
@@ -676,10 +747,29 @@ function Facturalo() {
                 >
                   <FileDown className="h-4 w-4" /> PDF
                 </button>
+                <button
+                  className={btn.soft}
+                  disabled={mailState?.id === done.id && mailState.status === "enviando"}
+                  onClick={() => void sendMail(done)}
+                >
+                  {mailState?.id === done.id && mailState.status === "enviando" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}{" "}
+                  Enviar por mail
+                </button>
                 <a className={btn.ghost} href={invoiceQrUrl(done)} target="_blank" rel="noreferrer">
                   Verificar en ARCA
                 </a>
               </div>
+              {mailState?.id === done.id && (
+                <p
+                  className={`mt-2 text-xs ${mailState.status === "error" ? "text-danger-soft-foreground" : mailState.status === "ok" ? "text-success-foreground" : "text-muted-foreground"}`}
+                >
+                  {mailState.msg}
+                </p>
+              )}
             </Card>
           )}
         </div>
@@ -777,11 +867,60 @@ function Facturalo() {
                   >
                     <FileDown className="h-4 w-4" />
                   </button>
+                  <button
+                    className={btn.icon}
+                    aria-label="Enviar por mail"
+                    title={mailState?.id === f.id ? mailState.msg : "Enviar por mail"}
+                    onClick={() => void sendMail(f)}
+                  >
+                    {mailState?.id === f.id && mailState.status === "enviando" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Mail className="h-4 w-4" />
+                    )}
+                  </button>
                 </td>
               </tr>
             ))}
           </Table>
         )}
+      </Modal>
+
+      <Modal
+        open={!!askEmail}
+        onClose={() => setAskEmail(null)}
+        title="¿A qué email la mando?"
+        subtitle={
+          askEmail
+            ? `Factura ${cbteLetter(askEmail.cbteTipo)} ${String(askEmail.ptoVta).padStart(5, "0")}-${String(askEmail.cbteNro).padStart(8, "0")} · ${askEmail.clientName}`
+            : undefined
+        }
+      >
+        <Field label="Email">
+          <Input
+            type="email"
+            value={askEmailValue}
+            onChange={(e) => setAskEmailValue(e.target.value)}
+            placeholder="cliente@correo.com"
+            autoFocus
+          />
+        </Field>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className={btn.soft} onClick={() => setAskEmail(null)}>
+            Cancelar
+          </button>
+          <button
+            className={btn.primary}
+            disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(askEmailValue.trim())}
+            onClick={() => {
+              const f = askEmail;
+              setAskEmail(null);
+              if (f) void sendMail(f, askEmailValue);
+            }}
+          >
+            <Mail className="h-4 w-4" /> Enviar
+          </button>
+        </div>
       </Modal>
 
       <IssuersModal

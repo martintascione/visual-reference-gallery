@@ -1,4 +1,5 @@
 import type { Bank, Category, DB, ExpenseType, SaleUnit } from "./types";
+import { reportError } from "./errors";
 import { supabase } from "./supabase";
 import { accountBalance, clientBalance, periodProfit } from "./store";
 import { addDays, ars, todayISO } from "./format";
@@ -108,6 +109,7 @@ export async function askAssistant(
     } catch {
       /* sin detalle */
     }
+    reportError("asistente", new Error(detail), { mensajes: messages.length });
     return { texto: "", error: detail };
   }
   if (!data) return { texto: "", error: "Sin respuesta" };

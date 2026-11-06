@@ -5,6 +5,7 @@ import {
   ChartColumn,
   ChevronRight,
   FileCheck,
+  Mail,
   FileText,
   Landmark,
   Lock,
@@ -35,6 +36,7 @@ const items = [
     icon: FileText,
   },
   { to: "/facturalo", label: "Facturalo Fácil", d: "Facturas desde los dos CUIT", icon: FileCheck },
+  { to: "/correo", label: "Casilla", d: "Correo del negocio", icon: Mail },
   { to: "/catalogo", label: "Catálogo y precios", d: "Calculadora de costos", icon: Tags },
   {
     to: "/clientes",
