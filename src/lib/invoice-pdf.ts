@@ -188,8 +188,8 @@ export async function buildInvoicePdf(
     ? inv.items
     : [{ desc: "Venta", qty: 1, unit: "", price: discriminated ? inv.neto : inv.total }];
   for (const it of items) {
-    const unit =
-      discriminated && inv.items.length ? it.price / (1 + settings.ivaPct / 100) : it.price;
+    // Los ítems ya vienen sin IVA (precio de lista); en Factura A el IVA se suma en los totales.
+    const unit = it.price;
     const desc = doc.splitTextToSize(it.desc || "Venta", cols.qty - L - 30) as string[];
     const rowH = Math.max(1, desc.length) * 4.4 + 4.5;
     if (y + rowH > 248) {

@@ -15,6 +15,7 @@ import {
   Badge,
   Field,
   FormSection,
+  HelpTip,
   Input,
   Modal,
   NumberInput,
@@ -143,8 +144,8 @@ export function ProductEditor({
       title={product ? "Editar producto" : "Nuevo producto"}
       subtitle={
         p.category === "piedra"
-          ? "Cargá el precio del proveedor y el margen: el precio de venta se arma solo."
-          : "Cargá el costo y el margen: el precio de venta se arma solo."
+          ? "Cargá el precio del proveedor y el margen: el precio de venta se arma solo. Todos los precios son sin IVA."
+          : "Cargá el costo y el margen: el precio de venta se arma solo. Todos los precios son sin IVA."
       }
       wide
       footer={
@@ -260,7 +261,15 @@ export function ProductEditor({
             </FormSection>
 
             <div className="flex flex-col rounded-3xl bg-primary p-4 text-primary-foreground">
-              <p className="text-xs font-semibold opacity-70">Precio de venta</p>
+              <p className="flex items-center gap-1.5 text-xs font-semibold opacity-90">
+                Precio de venta
+                <span className="text-[10px] font-normal opacity-70">sin IVA</span>
+                <HelpTip
+                  className="border-primary-foreground/40 text-primary-foreground hover:border-primary-foreground hover:text-primary-foreground"
+                  title="Precio de venta"
+                  text="Precios de lista sin IVA: el IVA se agrega solo cuando se emite Factura A. 'Ganás' es la diferencia con el costo. 'Margen sobre el precio' es qué parte del precio es ganancia."
+                />
+              </p>
               <div className="mt-3 flex flex-col gap-2">
                 {[
                   { l: "Por kg", c: ars2(calc.costKg), v: ars2(calc.priceKg) },
@@ -382,9 +391,6 @@ export function ProductEditor({
                 onChange={(v) => set({ minStock: v })}
                 suffix={unitName}
               />
-            </Field>
-            <Field label="IVA">
-              <NumberInput value={p.ivaPct} onChange={(v) => set({ ivaPct: v })} suffix="%" />
             </Field>
           </div>
         </FormSection>

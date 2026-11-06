@@ -528,14 +528,19 @@ export function SaleForm({
               </p>
             )}
             <div className="flex flex-wrap items-end gap-3">
-              <Segmented
-                value={withIva ? "con" : "sin"}
-                onChange={(v) => setWithIva(v === "con")}
-                options={[
-                  { value: "sin", label: "Sin IVA" },
-                  { value: "con", label: `Con IVA ${s.ivaPct}%` },
-                ]}
-              />
+              <Field
+                label="IVA"
+                help={`Los precios de lista son sin IVA. 'Con IVA' le suma el ${s.ivaPct}% al total: es lo que corresponde cuando la venta va con Factura A (cliente responsable inscripto). 'Sin IVA' cobra el precio de lista tal cual.`}
+              >
+                <Segmented
+                  value={withIva ? "con" : "sin"}
+                  onChange={(v) => setWithIva(v === "con")}
+                  options={[
+                    { value: "sin", label: "Sin IVA" },
+                    { value: "con", label: `Con IVA ${s.ivaPct}%` },
+                  ]}
+                />
+              </Field>
               <Field label="Bonificación" className="w-28">
                 <NumberInput
                   value={discountPct}

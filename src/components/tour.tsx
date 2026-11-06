@@ -81,7 +81,7 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-cuit",
     title: "Facturalo Fácil · desde qué CUIT",
-    body: "Tenés dos emisores: el CUIT monotributo, para facturar a consumidor final sin IVA (Factura C), y el CUIT responsable inscripto, para facturar con IVA 21% (Factura A si el cliente es inscripto, B si no). Tocás la tarjeta del que corresponda y el sistema elige solo el tipo de comprobante.",
+    body: "Tenés dos emisores: el CUIT monotributo, para facturar a consumidor final sin IVA (Factura C), y el CUIT responsable inscripto, para facturar con IVA (Factura A si el cliente es inscripto: el IVA se suma al precio de lista; Factura B si no: el precio de lista es el final). Tocás la tarjeta del que corresponda y el sistema elige solo el tipo de comprobante.",
   },
   {
     route: "/facturalo",
@@ -107,7 +107,7 @@ const steps: Step[] = [
     route: "/facturalo",
     target: "fact-emitir",
     title: "Importe y emisión",
-    body: "Arriba ves el total; si facturás desde el inscripto, se discrimina el neto y el IVA. Con 'Emitir factura' se pide el CAE a ARCA, la factura queda guardada y se abre el PDF con el QR oficial. Si el cliente tiene email cargado, la factura se le manda sola: un mail con el diseño de la marca y el PDF adjunto, desde la casilla oficial. Desde 'Emitidas' reimprimís o reenviás cualquier factura, y desde el detalle de una venta podés facturarla directo.",
+    body: "Arriba ves el total. Todos los precios se cargan sin IVA: en Factura A se le suma el IVA; en Factura B va incluido y se discrimina; en C no hay IVA. Con 'Emitir factura' se pide el CAE a ARCA, la factura queda guardada y se abre el PDF con el QR oficial. Si el cliente tiene email cargado, la factura se le manda sola: un mail con el diseño de la marca y el PDF adjunto, desde la casilla oficial. Desde 'Emitidas' reimprimís o reenviás cualquier factura, y desde el detalle de una venta podés facturarla directo.",
   },
   {
     route: "/correo",

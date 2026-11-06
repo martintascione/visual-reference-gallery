@@ -175,7 +175,8 @@ function Facturalo() {
     setSaleId(sale.id);
     if (sale.clientId) setClientId(sale.clientId);
     const disc = sale.discountPct ?? 0;
-    const factor = (1 - disc / 100) * (sale.withIva ? 1 + ivaPct / 100 : 1);
+    // Los precios de lista son sin IVA: a la factura van netos y el IVA se agrega solo en Factura A.
+    const factor = 1 - disc / 100;
     setLines(
       sale.items.map((it) => ({
         id: uid(),
@@ -193,9 +194,7 @@ function Facturalo() {
           desc: "Flete y entrega",
           qty: 1,
           unit: "u",
-          price:
-            Math.round((sale.delivery?.price ?? 0) * (sale.withIva ? 1 + ivaPct / 100 : 1) * 100) /
-            100,
+          price: Math.round((sale.delivery?.price ?? 0) * 100) / 100,
         },
       ]);
     setNote(`Venta #${sale.number}`);
@@ -335,12 +334,14 @@ function Facturalo() {
   const delLine = (id: string) => setLines((ls) => ls.filter((l) => l.id !== id));
 
   const linesTotal = lines.reduce((a, l) => a + l.qty * l.price, 0);
-  const total = lines.length ? linesTotal : manualTotal;
+  const base = lines.length ? linesTotal : manualTotal;
   const kind = issuer?.kind ?? "monotributo";
   const type = invoiceType(kind, client);
-  // En RI el importe cargado se toma como final (IVA incluido) y se discrimina.
-  const neto = kind === "ri" ? total / (1 + ivaPct / 100) : total;
-  const iva = total - neto;
+  // Todos los precios se cargan sin IVA. Factura A: el IVA se suma al precio de lista.
+  // Factura B: el precio de lista es el final y el IVA se discrimina adentro. Factura C: sin IVA.
+  const neto = type === "B" ? base / (1 + ivaPct / 100) : base;
+  const iva = type === "A" ? base * (ivaPct / 100) : type === "B" ? base - neto : 0;
+  const total = neto + iva;
   const point = issuer?.points.find((p) => p.id === pointId);
   const ready = !!issuer && !!point && total > 0;
 
@@ -604,7 +605,16 @@ function Facturalo() {
                     "Descripción",
                     { label: "Cantidad", right: true },
                     "Unidad",
-                    { label: "Precio", right: true },
+                    {
+                      label: "Precio",
+                      right: true,
+                      help:
+                        type === "A"
+                          ? `Precio de lista sin IVA. En Factura A se le suma el ${ivaPct}% en el total.`
+                          : type === "B"
+                            ? "Precio de lista: es el precio final; el IVA va incluido y se discrimina abajo."
+                            : "Precio de lista, sin IVA.",
+                    },
                     { label: "Subtotal", right: true },
                     "",
                   ]}
@@ -661,7 +671,13 @@ function Facturalo() {
             {lines.length === 0 ? (
               <Field
                 label="Importe total"
-                hint={kind === "ri" ? "IVA incluido; se discrimina abajo" : "Sin IVA"}
+                hint={
+                  type === "A"
+                    ? `Sin IVA: se le suma el ${ivaPct}% en la factura`
+                    : type === "B"
+                      ? "Precio final al público; el IVA va discriminado adentro"
+                      : "Sin IVA"
+                }
               >
                 <NumberInput
                   value={manualTotal}

@@ -286,6 +286,7 @@ function Configuracion() {
               "",
             ]}
             min={820}
+            help
           >
             {s.methods.map((m) => (
               <tr key={m.id} className={tr}>
@@ -338,14 +339,14 @@ function Configuracion() {
                     onChange={(v) => updM(m.id, { feePct: v })}
                     step="0.1"
                     suffix="%"
-                    className="w-24"
+                    className="ml-auto w-24"
                   />
                 </td>
                 <td>
                   <NumberInput
                     value={m.settleDays}
                     onChange={(v) => updM(m.id, { settleDays: v })}
-                    className="w-20"
+                    className="ml-auto w-20"
                   />
                 </td>
                 <td>
@@ -384,6 +385,7 @@ function Configuracion() {
               "",
             ]}
             min={460}
+            help
           >
             {s.zones.map((z) => (
               <tr key={z.id} className={tr}>
@@ -404,7 +406,7 @@ function Configuracion() {
                       setZones(s.zones.map((x) => (x.id === z.id ? { ...x, price: v } : x)))
                     }
                     prefix="$"
-                    className="w-32"
+                    className="ml-auto w-32"
                   />
                 </td>
                 <td>
@@ -414,7 +416,7 @@ function Configuracion() {
                       setZones(s.zones.map((x) => (x.id === z.id ? { ...x, cost: v } : x)))
                     }
                     prefix="$"
-                    className="w-32"
+                    className="ml-auto w-32"
                   />
                 </td>
                 <td
@@ -466,6 +468,7 @@ function Configuracion() {
               "",
             ]}
             min={460}
+            help
           >
             {s.fixedExpenses.map((f) => (
               <tr key={f.id} className={tr}>
@@ -490,7 +493,7 @@ function Configuracion() {
                       )
                     }
                     prefix="$"
-                    className="w-36"
+                    className="ml-auto w-36"
                   />
                 </td>
                 <td>
@@ -518,7 +521,7 @@ function Configuracion() {
                     onChange={(v) =>
                       setFixed(s.fixedExpenses.map((x) => (x.id === f.id ? { ...x, day: v } : x)))
                     }
-                    className="w-20"
+                    className="ml-auto w-20"
                   />
                 </td>
                 <td className="text-right">
