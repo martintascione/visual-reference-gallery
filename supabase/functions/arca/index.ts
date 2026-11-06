@@ -28,7 +28,8 @@ const URLS = PROD
       padron: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
     };
 
-pkijs.setEngine("deno", new pkijs.CryptoEngine({ name: "deno", crypto: crypto as Crypto }));
+// Motor criptográfico explícito para pkijs (setEngine global no funciona en el runtime de Supabase).
+const engine = new pkijs.CryptoEngine({ name: "deno", crypto: crypto as Crypto, subtle: crypto.subtle });
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false });
 
 type Issuer = { key: string; cuit: string; cert: string; pkey: string };
@@ -96,7 +97,7 @@ async function signCms(issuer: Issuer, xml: string): Promise<string> {
     ],
     certificates: [cert],
   });
-  await signed.sign(privateKey, 0, "SHA-256");
+  await signed.sign(privateKey, 0, "SHA-256", undefined, engine);
   const cms = new pkijs.ContentInfo({ contentType: "1.2.840.113549.1.7.2", content: signed.toSchema(true) });
   return b64(cms.toSchema().toBER(false));
 }
