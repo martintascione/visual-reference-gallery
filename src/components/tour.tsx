@@ -163,6 +163,19 @@ const steps: Step[] = [
 
 type Rect = { top: number; left: number; width: number; height: number };
 
+/** Celular: por ancho de pantalla física, no del viewport (que se agranda si algo desborda). */
+const isMobile = () =>
+  typeof window !== "undefined" &&
+  Math.min(window.innerWidth, window.screen?.width ?? Infinity) < 640;
+
+/** Viewport realmente visible (en el celular, innerWidth/innerHeight mienten si algo desborda). */
+const viewport = () => {
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  return vv
+    ? { x: vv.offsetLeft, y: vv.offsetTop, w: vv.width, h: vv.height }
+    : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
+};
+
 export function Tour() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -170,6 +183,9 @@ export function Tour() {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const [cardH, setCardH] = useState(320);
+  const [sheetTop, setSheetTop] = useState(false);
+  const cardHRef = useRef(cardH);
+  cardHRef.current = cardH;
   const step = steps[i] ?? steps[0]!;
 
   // Apertura por evento o primera vez.
@@ -213,6 +229,7 @@ export function Tour() {
     if (!open) return;
     let frame = 0;
     let tries = 0;
+    let autoScrolled = false;
     const measure = () => {
       const el = step.target
         ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
@@ -221,6 +238,40 @@ export function Tour() {
       if (visible) {
         const r = el.getBoundingClientRect();
         const pad = 8;
+        const mobile = isMobile();
+        if (mobile) {
+          // En el celular la tarjeta es una hoja abajo: el elemento tiene que quedar en la franja visible de arriba.
+          const inHeader = !!el.closest("header");
+          const headerH = inHeader ? 0 : 76;
+          const vp = viewport();
+          const vh = vp.y + vp.h;
+          const sheetTop = vh - cardHRef.current - 24;
+          if (
+            !inHeader &&
+            !autoScrolled &&
+            (r.top < headerH || r.top + Math.min(r.height, 120) > sheetTop)
+          ) {
+            autoScrolled = true;
+            window.scrollBy({ top: r.top - headerH - 8, behavior: "smooth" });
+            frame = requestAnimationFrame(measure);
+            return;
+          }
+          // Si aun así queda abajo (final de la página), la hoja pasa arriba y se resalta la franja de abajo.
+          const atTop = r.top + 24 > sheetTop;
+          setSheetTop(atTop);
+          const bandTop = vp.y + (atTop ? cardHRef.current + 20 : Math.max(4, headerH - 4));
+          const bandBottom = atTop ? vh - 8 : sheetTop - 6;
+          const top = Math.max(r.top - pad, bandTop);
+          const bottom = Math.min(r.bottom + pad, bandBottom);
+          setRect({
+            top,
+            left: Math.max(vp.x + 4, r.left - pad),
+            width: Math.min(r.width + pad * 2, vp.w - 8),
+            height: Math.max(24, bottom - top),
+          });
+          return;
+        }
+        setSheetTop(false);
         setRect({
           top: r.top - pad,
           left: r.left - pad,
@@ -239,7 +290,7 @@ export function Tour() {
     const el = step.target
       ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
       : null;
-    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (el && !isMobile()) el.scrollIntoView({ block: "center", behavior: "smooth" });
     frame = requestAnimationFrame(measure);
     const onChange = () => {
       tries = 0;
@@ -247,10 +298,14 @@ export function Tour() {
     };
     window.addEventListener("resize", onChange);
     window.addEventListener("scroll", onChange, true);
+    window.visualViewport?.addEventListener("resize", onChange);
+    window.visualViewport?.addEventListener("scroll", onChange);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", onChange);
       window.removeEventListener("scroll", onChange, true);
+      window.visualViewport?.removeEventListener("resize", onChange);
+      window.visualViewport?.removeEventListener("scroll", onChange);
     };
   }, [open, i, step.target, pathname]);
 
@@ -271,7 +326,7 @@ export function Tour() {
   if (!open) return null;
 
   const last = i === steps.length - 1;
-  const pos = cardPosition(rect, cardH);
+  const pos = cardPosition(rect, cardH, sheetTop);
 
   return (
     <div className="fixed inset-0 z-[90]" role="dialog" aria-label="Recorrido guiado">
@@ -308,16 +363,21 @@ export function Tour() {
   );
 }
 
-function cardPosition(rect: Rect | null, cardH: number): CSSProperties {
+function cardPosition(rect: Rect | null, cardH: number, sheetTop = false): CSSProperties {
   if (typeof window === "undefined") return {};
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const vp = viewport();
+  const vw = vp.w;
+  const vh = vp.h;
   const w = Math.min(400, vw - 24);
-  if (!rect || vw < 640) {
-    // Centrado (sin elemento) o en el celular: abajo como una hoja.
-    return rect
-      ? { left: 12, right: 12, bottom: 12, width: "auto" }
-      : { left: (vw - w) / 2, top: Math.max(24, vh / 2 - 160), width: w };
+  if (!rect || isMobile()) {
+    // Centrado (sin elemento) o en el celular: abajo como una hoja (posición explícita dentro del viewport visible).
+    if (isMobile()) {
+      const maxH = Math.round(vh * (rect ? 0.46 : 0.7));
+      const h = Math.min(cardH + 8, maxH);
+      const top = rect && sheetTop ? vp.y + 8 : vp.y + vh - h - 8;
+      return { left: vp.x + 8, top, width: vw - 16, maxHeight: maxH };
+    }
+    return { left: (vw - w) / 2, top: Math.max(24, vh / 2 - 160), width: w, maxHeight: vh - 48 };
   }
   const gap = 14;
   const h = cardH + 8; // alto real de la tarjeta
@@ -372,7 +432,7 @@ function TourCard({
   return (
     <div
       ref={ref}
-      className="absolute flex flex-col gap-3 rounded-3xl bg-card p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] transition-all duration-300"
+      className="absolute flex flex-col gap-2.5 rounded-3xl bg-card p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] transition-all duration-300 sm:gap-3 sm:p-5"
       style={style}
     >
       <div className="flex items-start justify-between gap-3">
@@ -387,12 +447,18 @@ function TourCard({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <h3 className="text-base font-bold leading-tight tracking-tight">{step.title}</h3>
-      <p className="text-sm leading-relaxed text-muted-foreground">{step.body}</p>
-      {step.tip && (
-        <p className="rounded-2xl bg-surface px-3 py-2 text-xs leading-relaxed">{step.tip}</p>
-      )}
-      <div className="mt-1 flex items-center gap-1.5">
+      <h3 className="text-[15px] font-bold leading-tight tracking-tight sm:text-base">
+        {step.title}
+      </h3>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <p className="text-[13px] leading-relaxed text-muted-foreground sm:text-sm">{step.body}</p>
+        {step.tip && (
+          <p className="mt-2 rounded-2xl bg-surface px-3 py-2 text-xs leading-relaxed">
+            {step.tip}
+          </p>
+        )}
+      </div>
+      <div className="mt-1 hidden items-center gap-1.5 sm:flex">
         {Array.from({ length: total }, (_, k) => (
           <span
             key={k}

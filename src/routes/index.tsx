@@ -424,7 +424,7 @@ function Index() {
         </div>
 
         {/* Derecha */}
-        <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:flex xl:flex-col">
           <Widget title="Entregas de hoy" icon={Truck} link="/ventas">
             {deliveries.length === 0 && (
               <p className="text-xs text-muted-foreground">No hay entregas pendientes para hoy.</p>
@@ -548,7 +548,7 @@ function Widget({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card-soft group flex flex-col gap-3 p-5">
+    <div className="card-soft group flex min-w-0 flex-col gap-3 p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4" strokeWidth={1.6} />

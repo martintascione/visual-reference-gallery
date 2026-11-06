@@ -157,6 +157,16 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+
+  /* En celulares, una grilla sin columnas explícitas se dimensiona al contenido mínimo
+     (tablas anchas, importes grandes) y agranda el viewport: la fijamos a una columna. */
+  @media (max-width: 639px) {
+    .grid:not([class~="grid-cols-1"]):not([class~="grid-cols-2"]):not([class~="grid-cols-3"]):not(
+        [class*=" grid-cols-["]
+      ):not([class^="grid-cols-["]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 }
 
 @utility card-soft {

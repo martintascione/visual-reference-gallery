@@ -137,7 +137,7 @@ function Cierre() {
           </p>
         </Card>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label="Ventas" value={ars(salesTotal)} sub={`${open.length} operaciones`} />
@@ -309,7 +309,7 @@ function Cierre() {
 
 function ClosureView({ c }: { c: Closure }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
       <Card title="Dónde está la plata">
         <Table head={["Medio", { label: "Neto", right: true }, "Está en", "Acredita"]} min={460}>
           {c.byMethod.map((g) => (
