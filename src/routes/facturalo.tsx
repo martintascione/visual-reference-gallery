@@ -197,6 +197,11 @@ function Facturalo() {
           price: Math.round((sale.delivery?.price ?? 0) * 100) / 100,
         },
       ]);
+    if (sale.delivery?.unloadPrice)
+      setLines((ls) => [
+        ...ls,
+        { id: uid(), desc: "Descarga", qty: 1, unit: "u", price: sale.delivery?.unloadPrice ?? 0 },
+      ]);
     setNote(`Venta #${sale.number}`);
     setManualTotal(0);
   };
@@ -324,6 +329,11 @@ function Facturalo() {
       setLines((ls) => [
         ...ls,
         { id: uid(), desc: "Flete y entrega", qty: 1, unit: "u", price: q.delivery?.price ?? 0 },
+      ]);
+    if (q.delivery?.unloadPrice)
+      setLines((ls) => [
+        ...ls,
+        { id: uid(), desc: "Descarga", qty: 1, unit: "u", price: q.delivery?.unloadPrice ?? 0 },
       ]);
     setManualTotal(0);
   };

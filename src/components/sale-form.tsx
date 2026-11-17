@@ -179,7 +179,8 @@ export function SaleForm({
 
   const itemsTotal = items.reduce((a, i) => a + i.subtotal, 0);
   const discount = Math.round((itemsTotal * (discountPct || 0)) / 100);
-  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0);
+  const unload = deliveryOn ? (delivery.unloadPrice ?? 0) : 0;
+  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload;
   const iva = withIva ? Math.round(subtotal * (s.ivaPct / 100)) : 0;
   const total = subtotal + iva;
   const cost = items.reduce((a, i) => a + i.cost, 0) + (deliveryOn ? delivery.cost : 0);
@@ -188,6 +189,20 @@ export function SaleForm({
 
   // El primer pago sigue al total hasta que la dueña lo toque
   const [touched, setTouched] = useState(false);
+  // Descarga sugerida: bolsón grande o bolsas chicas (valores de Configuración), hasta que se edite a mano.
+  // Al editar o convertir un presupuesto se respeta lo que ya tenía.
+  const [unloadTouched, setUnloadTouched] = useState(!!(editSale ?? editQuote ?? fromQuote));
+  const unloadSuggested = lines.some((l) => l.unit === "bigbag")
+    ? (s.unloadChargeBigBag ?? 70000)
+    : lines.some((l) => l.unit === "bolson")
+      ? (s.unloadChargeBags ?? 20000)
+      : 0;
+  useEffect(() => {
+    if (!deliveryOn || unloadTouched) return;
+    setDelivery((d) =>
+      d.unloadPrice === unloadSuggested ? d : { ...d, unloadPrice: unloadSuggested },
+    );
+  }, [deliveryOn, unloadTouched, unloadSuggested]);
 
   // Precarga para corregir una venta ya guardada.
   useEffect(() => {
@@ -607,6 +622,24 @@ export function SaleForm({
                   prefix="$"
                 />
               </Field>
+              <Field
+                label="Descarga al cliente"
+                className="col-span-2"
+                hint={
+                  unloadTouched
+                    ? "Monto a mano para este pedido"
+                    : "Sugerido según bolsas o bolsón; se puede cambiar"
+                }
+              >
+                <NumberInput
+                  value={delivery.unloadPrice ?? 0}
+                  onChange={(v) => {
+                    setUnloadTouched(true);
+                    setDelivery({ ...delivery, unloadPrice: v });
+                  }}
+                  prefix="$"
+                />
+              </Field>
               <Field label="Fecha de entrega" className="col-span-2">
                 <Input
                   type="date"
@@ -698,6 +731,12 @@ export function SaleForm({
               <p className="flex justify-between text-muted-foreground">
                 <span>Flete</span>
                 <span className="tabular-nums">{ars(delivery.price)}</span>
+              </p>
+            )}
+            {unload > 0 && (
+              <p className="flex justify-between text-muted-foreground">
+                <span>Descarga</span>
+                <span className="tabular-nums">{ars(unload)}</span>
               </p>
             )}
             {withIva && (

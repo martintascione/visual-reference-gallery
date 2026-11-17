@@ -12,11 +12,18 @@ export function stoneCalc(c: StoneCost, bagKg: number) {
   const perTon = stoneCostPerTon(c);
   const perKg = perTon / 1000;
   const perBag = perKg * bagKg + c.packagingPerBag;
+  const bigKg = c.bigBagKg ?? 1000;
+  const perBig = perKg * bigKg + (c.bigBagPackaging ?? 0);
   const factor = 1 + c.marginPct / 100;
   const priceKg = perKg * factor;
   const priceBag = perBag * factor;
   const priceTon = perTon * factor;
+  const priceBig = perBig * factor;
   return {
+    bigKg,
+    costBig: round(perBig, 0),
+    priceBig: round(priceBig, 0),
+    gainBig: round(priceBig - perBig, 0),
     costKg: round(perKg),
     costBag: round(perBag, 0),
     costTon: round(perTon, 0),
@@ -44,9 +51,12 @@ export function markup(cost: number, price: number) {
   return cost > 0 ? round(((price - cost) / cost) * 100, 1) : 0;
 }
 
+/** Kilos del bolsón grande de un producto (1.000 kg si no se cargó otro valor). */
+export const bigBagKg = (p: Product) => p.stoneCost?.bigBagKg ?? 1000;
+
 /** Unidades en las que se puede vender cada producto. */
 export function saleUnitsFor(p: Product): SaleUnit[] {
-  if (p.category === "piedra") return ["kg", "bolson", "t"];
+  if (p.category === "piedra") return ["kg", "bolson", "bigbag", "t"];
   if (p.category === "laja") return ["m2"];
   return ["u"];
 }
@@ -55,6 +65,7 @@ export const unitLabel: Record<SaleUnit, string> = {
   kg: "kg",
   t: "tonelada",
   bolson: "bolsón",
+  bigbag: "bolsón grande",
   m2: "m²",
   u: "unidad",
 };
@@ -63,6 +74,7 @@ const unitPlural: Record<SaleUnit, string> = {
   kg: "kg",
   t: "toneladas",
   bolson: "bolsones",
+  bigbag: "bolsones grandes",
   m2: "m²",
   u: "unidades",
 };
@@ -77,6 +89,7 @@ export function qtyUnit(qty: number, unit: SaleUnit) {
 export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
   if (unit === "t") return qty * 1000;
   if (unit === "bolson") return qty * (p.bagKg ?? 25);
+  if (unit === "bigbag") return qty * bigBagKg(p);
   return qty;
 }
 
@@ -84,6 +97,10 @@ export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
 export function listPrice(p: Product, unit: SaleUnit) {
   if (unit === "t") return round(p.price * 1000, 0);
   if (unit === "bolson") return round(p.bagPrice ?? p.price * (p.bagKg ?? 25), 0);
+  if (unit === "bigbag")
+    return p.stoneCost
+      ? stoneCalc(p.stoneCost, p.bagKg ?? 25).priceBig
+      : round(p.price * bigBagKg(p), 0);
   return p.price;
 }
 
@@ -91,6 +108,7 @@ export function listPrice(p: Product, unit: SaleUnit) {
 export function unitCost(p: Product, unit: SaleUnit) {
   if (unit === "t") return p.cost * 1000;
   if (unit === "bolson") return p.cost * (p.bagKg ?? 25) + (p.stoneCost?.packagingPerBag ?? 0);
+  if (unit === "bigbag") return p.cost * bigBagKg(p) + (p.stoneCost?.bigBagPackaging ?? 0);
   return p.cost;
 }
 

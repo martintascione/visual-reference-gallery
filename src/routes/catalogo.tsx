@@ -4,7 +4,14 @@ import { Calculator, Pencil, Percent, Plus, Search } from "lucide-react";
 import type { Category, Product } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, num, pctAr } from "@/lib/format";
-import { marginOnPrice, round, simplePrice, stoneCalc, stoneKgForArea } from "@/lib/pricing";
+import {
+  listPrice,
+  marginOnPrice,
+  round,
+  simplePrice,
+  stoneCalc,
+  stoneKgForArea,
+} from "@/lib/pricing";
 import {
   Badge,
   Card,
@@ -113,12 +120,13 @@ function Catalogo() {
             { label: "Costo", right: true },
             { label: "Precio", right: true },
             { label: "Bolsón", right: true },
+            { label: "Bolsón grande", right: true },
             { label: "Margen", right: true },
             { label: "Stock", right: true },
             "",
             "",
           ]}
-          min={760}
+          min={860}
         >
           {list.map((p) => {
             const m = marginOnPrice(p.cost, p.price);
@@ -149,6 +157,9 @@ function Catalogo() {
                     : `${ars(p.price)}/${unitName[p.unit]}`}
                 </td>
                 <td className="text-right tabular-nums">{p.bagPrice ? ars(p.bagPrice) : "—"}</td>
+                <td className="text-right tabular-nums">
+                  {p.category === "piedra" ? ars(listPrice(p, "bigbag")) : "—"}
+                </td>
                 <td className="text-right tabular-nums">
                   <Badge tone={m < db.settings.minMarginPct ? "danger" : "muted"}>{pctAr(m)}</Badge>
                 </td>

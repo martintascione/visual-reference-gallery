@@ -170,11 +170,19 @@ export function Assistant() {
       adj,
     );
     let nota: string | undefined;
-    if (reply.mejora) {
-      const ok = await saveFeatureRequest(reply.mejora, next, session?.user.email);
-      nota = ok
-        ? `Mejora anotada para el programador: "${reply.mejora.titulo}"`
+    // Puede venir más de un pedido en la misma respuesta: se guardan todos.
+    const pedidos = [...(reply.mejoras ?? []), ...(reply.mejora ? [reply.mejora] : [])].filter(
+      (m) => m?.titulo,
+    );
+    if (pedidos.length) {
+      const res = await Promise.all(
+        pedidos.map((m) => saveFeatureRequest(m, next, session?.user.email)),
+      );
+      const ok = pedidos.filter((_, k) => res[k]);
+      nota = ok.length
+        ? `${ok.length === 1 ? "Mejora anotada" : `${ok.length} mejoras anotadas`} para el programador: ${ok.map((m) => `"${m.titulo}"`).join(", ")}`
         : "No pude guardar la mejora (revisá la conexión).";
+      if (ok.length < pedidos.length) nota += ". Alguna no se pudo guardar: repetímela.";
     }
     const botMsg: ChatMessage = reply.error
       ? {

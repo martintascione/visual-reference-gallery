@@ -88,6 +88,23 @@ function Configuracion() {
   const setFixed = (fixedExpenses: FixedExpense[]) => updateSettings({ fixedExpenses });
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [testMail, setTestMail] = useState<string | null>(null);
+  const sendTestMail = async () => {
+    setTestMail("Enviando…");
+    const { data, error } = await supabase.functions.invoke<{
+      ok: boolean;
+      enviado?: boolean;
+      cantidad?: number;
+      a?: string;
+      error?: string;
+    }>("recordatorios", { body: { to: s.followUpEmail?.to } });
+    if (error || !data?.ok)
+      setTestMail(`No se pudo enviar: ${data?.error ?? error?.message ?? "sin respuesta"}`);
+    else
+      setTestMail(
+        `Enviado a ${data.a}: ${data.cantidad ? `${data.cantidad} presupuesto${data.cantidad === 1 ? "" : "s"} para llamar` : "hoy no hay presupuestos para llamar"}.`,
+      );
+  };
 
   return (
     <>
@@ -181,7 +198,21 @@ function Configuracion() {
                 prefix="$"
               />
             </Field>
-            <Field label="Descarga por tonelada">
+            <Field label="Kg por bolsón grande">
+              <NumberInput
+                value={s.bigBagKg ?? 1000}
+                onChange={(v) => updateSettings({ bigBagKg: v })}
+                suffix="kg"
+              />
+            </Field>
+            <Field label="Embalaje bolsón grande">
+              <NumberInput
+                value={s.bigBagPackaging ?? 0}
+                onChange={(v) => updateSettings({ bigBagPackaging: v })}
+                prefix="$"
+              />
+            </Field>
+            <Field label="Descarga por tonelada" hint="Costo tuyo, entra en el precio">
               <NumberInput
                 value={s.unloadPerTon}
                 onChange={(v) => updateSettings({ unloadPerTon: v })}
@@ -191,7 +222,7 @@ function Configuracion() {
             </Field>
             <Field
               label="Flete de compra por tonelada"
-              hint="Lo que te cobra el camión que trae la piedra"
+              hint="Sugerido para productos nuevos; cada compra lo actualiza"
             >
               <NumberInput
                 value={s.freightPerTon ?? 0}
@@ -234,6 +265,55 @@ function Configuracion() {
                 onChange={(v) => updateSettings({ followUpDays: v })}
                 suffix="días"
               />
+            </Field>
+            <Field label="Descarga bolsas chicas" hint="Por pedido; editable en cada venta">
+              <NumberInput
+                value={s.unloadChargeBags ?? 20000}
+                onChange={(v) => updateSettings({ unloadChargeBags: v })}
+                prefix="$"
+              />
+            </Field>
+            <Field label="Descarga bolsón grande" hint="Por pedido; editable en cada venta">
+              <NumberInput
+                value={s.unloadChargeBigBag ?? 70000}
+                onChange={(v) => updateSettings({ unloadChargeBigBag: v })}
+                prefix="$"
+              />
+            </Field>
+            <Field
+              label="Mail de seguimiento"
+              hint="Lunes a viernes, 8:30, con los presupuestos para llamar"
+              className="col-span-full"
+            >
+              <div className="flex items-center gap-2">
+                <Toggle
+                  checked={s.followUpEmail?.on ?? true}
+                  onChange={(on) =>
+                    updateSettings({
+                      followUpEmail: {
+                        on,
+                        to: s.followUpEmail?.to ?? "administracion@aridospetreos.com",
+                      },
+                    })
+                  }
+                />
+                <Input
+                  type="email"
+                  value={s.followUpEmail?.to ?? "administracion@aridospetreos.com"}
+                  onChange={(e) =>
+                    updateSettings({
+                      followUpEmail: { on: s.followUpEmail?.on ?? true, to: e.target.value },
+                    })
+                  }
+                  placeholder="Email que recibe el recordatorio"
+                />
+                <button type="button" className={btn.soft} onClick={() => void sendTestMail()}>
+                  Enviar prueba
+                </button>
+              </div>
+              {testMail && (
+                <p className="mt-1 px-1 text-[11px] text-muted-foreground">{testMail}</p>
+              )}
             </Field>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">

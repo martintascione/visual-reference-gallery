@@ -295,7 +295,7 @@ export function NumberInput({
           inputCls,
           "text-right tabular-nums",
           prefix && "pl-7",
-          suffix && "pr-9",
+          suffix && (suffix.length > 3 ? "pr-14" : "pr-9"),
           className,
         )}
       />

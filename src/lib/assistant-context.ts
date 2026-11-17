@@ -72,7 +72,7 @@ export function fullContext(db: DB) {
   for (const v of sales) {
     const fees = v.payments.reduce((a, p) => a + feeFor(db, p), 0);
     push(
-      `- #${v.number} ${v.date.slice(0, 16).replace("T", " ")} ${v.clientName}: ${v.items.map((i) => `${qtyUnit(i.qty, i.unit)} ${i.name}`).join(", ")}${v.delivery ? ` + flete ${v.delivery.zone} ${ars(v.delivery.price)}${v.delivery.done ? " (entregado)" : " (PENDIENTE de entrega " + v.delivery.date + ")"}` : ""} · total ${ars(v.total)}${v.withIva ? " c/IVA" : ""} · cobro: ${v.payments.map((p) => `${p.method}${p.gateway ? " " + p.gateway : ""} ${p.bank} ${ars(p.amount)}${p.dues ? " en " + p.dues + " cuotas" : ""}${p.installments && p.installments > 1 ? " " + p.installments + " cuotas tarjeta" : ""}`).join(" + ")} · costo ${ars(v.cost)} · ganancia ${ars(v.subtotal - v.cost - fees)}${v.closureId ? "" : " · sin cerrar"}${v.note ? " · nota: " + v.note : ""}`,
+      `- #${v.number} ${v.date.slice(0, 16).replace("T", " ")} ${v.clientName}: ${v.items.map((i) => `${qtyUnit(i.qty, i.unit)} ${i.name}`).join(", ")}${v.delivery ? ` + flete ${v.delivery.zone} ${ars(v.delivery.price)}${v.delivery.unloadPrice ? ` + descarga ${ars(v.delivery.unloadPrice)}` : ""}${v.delivery.done ? " (entregado)" : " (PENDIENTE de entrega " + v.delivery.date + ")"}` : ""} · total ${ars(v.total)}${v.withIva ? " c/IVA" : ""} · cobro: ${v.payments.map((p) => `${p.method}${p.gateway ? " " + p.gateway : ""} ${p.bank} ${ars(p.amount)}${p.dues ? " en " + p.dues + " cuotas" : ""}${p.installments && p.installments > 1 ? " " + p.installments + " cuotas tarjeta" : ""}`).join(" + ")} · costo ${ars(v.cost)} · ganancia ${ars(v.subtotal - v.cost - fees)}${v.closureId ? "" : " · sin cerrar"}${v.note ? " · nota: " + v.note : ""}`,
     );
   }
 

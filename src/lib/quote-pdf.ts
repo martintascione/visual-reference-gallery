@@ -22,7 +22,9 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   const itemsTotal = doc.items.reduce((a, i) => a + i.subtotal, 0);
   const discountPct = doc.discountPct ?? 0;
   const discount = Math.round((itemsTotal * discountPct) / 100);
-  const flete = doc.delivery?.price ?? 0;
+  const fleteSolo = doc.delivery?.price ?? 0;
+  const descarga = doc.delivery?.unloadPrice ?? 0;
+  const flete = fleteSolo + descarga;
   const base = itemsTotal - discount + flete;
   const iva = doc.withIva ? Math.round(base * (s.ivaPct / 100)) : 0;
   const total = base + iva;
@@ -41,7 +43,7 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
     )
     .join("");
   const fleteRow = doc.delivery
-    ? `<tr><td class="c">1</td><td><span class="name">Flete a domicilio</span> · ${esc(doc.delivery.zone)}${doc.delivery.address ? " · " + esc(doc.delivery.address) : ""}</td><td class="r">${ars2(flete)}</td><td class="r">${ars2(flete)}</td></tr>`
+    ? `<tr><td class="c">1</td><td><span class="name">Flete a domicilio</span> · ${esc(doc.delivery.zone)}${doc.delivery.address ? " · " + esc(doc.delivery.address) : ""}</td><td class="r">${ars2(fleteSolo)}</td><td class="r">${ars2(fleteSolo)}</td></tr>${descarga ? `<tr><td class="c">1</td><td><span class="name">Descarga</span></td><td class="r">${ars2(descarga)}</td><td class="r">${ars2(descarga)}</td></tr>` : ""}`
     : "";
 
   const ico = {

@@ -20,6 +20,10 @@ export const FIELD_HELP: Record<string, string> = {
     "Porcentaje que le sumás al costo total por tonelada para armar el precio de venta. Ej: costo $100 + 40% = precio $140 (sin IVA).",
   "Kg por bolsón":
     "Cuántos kilos entran en un bolsón. Con eso el sistema calcula el precio del bolsón a partir del precio por kg.",
+  "Kg por bolsón grande":
+    "Cuántos kilos tiene el bolsón grande (big bag). Normalmente 1.000 kg. Con eso se calcula su precio a partir del precio por kg.",
+  "Embalaje bolsón grande":
+    "Costo del big bag (la bolsa) por cada bolsón grande. Solo se suma al precio del bolsón grande.",
   "Embalaje por bolsón":
     "Costo de la bolsa, cinta o pallet por cada bolsón. Solo se suma al precio del bolsón, no al precio por kg o tonelada.",
   "Litros por bidón": "Capacidad del envase que vendés. Sirve para mostrar el precio por litro.",
@@ -136,11 +140,19 @@ export const FIELD_HELP: Record<string, string> = {
   Instagram: "Usuario de Instagram, sin @. Aparece en presupuestos y facturas.",
   "Saludo del presupuesto": "Texto con el que arranca el PDF del presupuesto.",
   "Descarga por tonelada":
-    "Costo de descarga que se carga por defecto en cada producto nuevo (se puede cambiar producto por producto).",
+    "Costo tuyo de descarga cuando entra la piedra al corralón. Se suma al costo de cada producto nuevo (se puede cambiar producto por producto). No es lo que se le cobra al cliente.",
   "Flete de compra por tonelada":
-    "Flete por tonelada que se carga por defecto en cada producto nuevo.",
+    "Flete por tonelada que se propone en cada producto nuevo. El real de cada camión se carga en Stock → Compra y actualiza el costo de ese producto.",
   "Margen de ganancia habitual":
-    "Margen que se propone al crear un producto. Se puede cambiar en cada uno.",
+    "Margen que se propone al crear un producto (por ejemplo 50 % para piedras). Cada producto tiene el suyo y se cambia en su calculadora.",
+  "Descarga al cliente":
+    "Lo que se le cobra al cliente por descargar el pedido en su casa, por todo el pedido (no por tonelada). Se sugiere solo: el valor del bolsón grande si el pedido lleva bolsones grandes, el de bolsas chicas si lleva bolsas. Lo podés cambiar.",
+  "Descarga bolsas chicas":
+    "Monto que se sugiere cobrar por la descarga cuando el pedido va en bolsas chicas. Es por pedido completo y se puede cambiar en cada venta o presupuesto.",
+  "Descarga bolsón grande":
+    "Monto que se sugiere cobrar por la descarga cuando el pedido lleva bolsones grandes. Es por pedido completo y se puede cambiar en cada venta o presupuesto.",
+  "Mail de seguimiento":
+    "De lunes a viernes a las 8:30 llega un mail con los presupuestos que hay que llamar ese día o que ya vencieron. Se repite cada día hasta que los marques como hablados, aceptados o perdidos.",
   "IVA por defecto":
     "Alícuota que se aplica al facturar. Los precios de lista son siempre sin IVA: en Factura A se suma este porcentaje; en Factura B va incluido en el precio; en Factura C no hay IVA.",
   "Margen mínimo (avisa en rojo)":

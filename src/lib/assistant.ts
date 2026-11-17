@@ -36,12 +36,20 @@ export type AssistantAction =
 
 export type AssistantButton = { etiqueta: string; accion: AssistantAction };
 
+export type Mejora = {
+  titulo: string;
+  descripcion: string;
+  flujo?: string;
+  datos?: string;
+  prioridad?: string;
+};
+
 export type AssistantReply = {
   texto: string;
   botones?: AssistantButton[] | undefined;
-  mejora?:
-    | { titulo: string; descripcion: string; flujo?: string; datos?: string; prioridad?: string }
-    | undefined;
+  mejora?: Mejora | undefined;
+  /** Varias mejoras en la misma respuesta. */
+  mejoras?: Mejora[] | undefined;
   /** Productos leídos de un archivo, para revisar y guardar con un toque. */
   productos?: ProductoPropuesto[] | undefined;
   error?: string | undefined;

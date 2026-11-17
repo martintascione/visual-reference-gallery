@@ -50,6 +50,11 @@ export const defaultSettings: Settings = {
   defaultMarginPct: 40,
   quoteValidDays: 7,
   followUpDays: 2,
+  bigBagKg: 1000,
+  bigBagPackaging: 0,
+  unloadChargeBags: 20000,
+  unloadChargeBigBag: 70000,
+  followUpEmail: { on: true, to: "administracion@aridospetreos.com" },
   invoicing: defaultInvoicing(),
   methods: [
     {

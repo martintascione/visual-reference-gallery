@@ -13,6 +13,7 @@ import {
   Modal,
   NumberInput,
   PageHeader,
+  Segmented,
   Select,
   Stat,
   Table,
@@ -185,7 +186,9 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
   const [qty, setQty] = useState(0);
   const [unit, setUnit] = useState<"t" | "base">("t");
   const [price, setPrice] = useState(0);
-  const [freight, setFreight] = useState(0);
+  const [freightIn, setFreightIn] = useState(0);
+  // El flete de cada camión se carga como total o por tonelada.
+  const [freightMode, setFreightMode] = useState<"total" | "t">("total");
   const [unload, setUnload] = useState(0);
   const [supplier, setSupplier] = useState("");
   const [pay, setPay] = useState(true);
@@ -196,8 +199,9 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
   if (!product) return null;
   const isStone = product.category === "piedra";
   const baseQty = isStone && unit === "t" ? qty * 1000 : qty;
-  const total = price + freight + unload;
   const tons = baseQty / 1000;
+  const freight = isStone && freightMode === "t" ? round(freightIn * tons) : freightIn;
+  const total = price + freight + unload;
 
   const save = () => {
     addStockMove({
@@ -241,7 +245,7 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
     onClose();
     setQty(0);
     setPrice(0);
-    setFreight(0);
+    setFreightIn(0);
     setUnload(0);
     setSupplier("");
   };
@@ -273,9 +277,37 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
           <Field label="Precio de la mercadería ($)">
             <NumberInput value={price} onChange={setPrice} prefix="$" />
           </Field>
-          <Field label="Flete pagado ($)">
-            <NumberInput value={freight} onChange={setFreight} prefix="$" />
+          <Field
+            label="Flete pagado ($)"
+            help="El flete del camión de este pedido. Elegí si lo cargás como total del viaje o por tonelada: con eso se actualiza el flete por tonelada del producto."
+            hint={
+              isStone && freightMode === "t" && tons > 0
+                ? `Total del viaje: ${ars(freight)}`
+                : isStone && tons > 0 && freight > 0
+                  ? `Equivale a ${ars(round(freight / tons))} por tonelada`
+                  : undefined
+            }
+          >
+            <NumberInput
+              value={freightIn}
+              onChange={setFreightIn}
+              prefix="$"
+              suffix={isStone && freightMode === "t" ? "/ t" : undefined}
+            />
           </Field>
+          {isStone && (
+            <div className="col-span-2 -mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+              Flete cargado
+              <Segmented
+                value={freightMode}
+                onChange={setFreightMode}
+                options={[
+                  { value: "total", label: "Total del camión" },
+                  { value: "t", label: "Por tonelada" },
+                ]}
+              />
+            </div>
+          )}
           {isStone && (
             <Field label="Descarga ($)">
               <NumberInput value={unload} onChange={setUnload} prefix="$" />

@@ -77,6 +77,7 @@ function Presupuestos() {
         `Hola ${q.clientName}, te paso el presupuesto #${q.number} de ${db.settings.businessName}:`,
         ...q.items.map((i) => `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal)}`),
         q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price)}` : "",
+        q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice)}` : "",
         q.withIva ? `IVA: ${ars(q.iva)}` : "",
         `*Total: ${ars(q.total)}*`,
         `Válido hasta el ${fmtDate(q.validUntil)}.`,
@@ -164,6 +165,12 @@ function Presupuestos() {
                   <li className="flex justify-between">
                     <span>Flete · {q.delivery.zone}</span>
                     <span className="tabular-nums">{ars(q.delivery.price)}</span>
+                  </li>
+                )}
+                {!!q.delivery?.unloadPrice && (
+                  <li className="flex justify-between">
+                    <span>Descarga</span>
+                    <span className="tabular-nums">{ars(q.delivery.unloadPrice)}</span>
                   </li>
                 )}
               </ul>

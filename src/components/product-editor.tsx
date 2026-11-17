@@ -37,6 +37,8 @@ type Defaults = {
   unloadPerTon: number;
   freightPerTon?: number | undefined;
   ivaPct: number;
+  bigBagKg?: number | undefined;
+  bigBagPackaging?: number | undefined;
   defaultMarginPct?: number | undefined;
 };
 
@@ -64,6 +66,8 @@ export function blankProduct(cat: Category, s: Defaults): Product {
       extrasPerTon: 0,
       packagingPerBag: s.packagingPerBag,
       marginPct: s.defaultMarginPct ?? 40,
+      bigBagKg: s.bigBagKg ?? 1000,
+      bigBagPackaging: s.bigBagPackaging ?? 0,
     };
   }
   if (cat === "liquido") base.liters = 10;
@@ -258,6 +262,25 @@ export function ProductEditor({
                   />
                 </Field>
               </div>
+              <div className="mt-3 grid grid-cols-3 gap-x-3">
+                <span className="self-center px-1 text-[11px] font-medium text-muted-foreground">
+                  Bolsón grande
+                </span>
+                <Field label="Kg por bolsón grande">
+                  <NumberInput
+                    value={p.stoneCost.bigBagKg ?? s.bigBagKg ?? 1000}
+                    onChange={(v) => setSC({ bigBagKg: v || (s.bigBagKg ?? 1000) })}
+                    suffix="kg"
+                  />
+                </Field>
+                <Field label="Embalaje bolsón grande" hint="Solo suma al bolsón grande">
+                  <NumberInput
+                    value={p.stoneCost.bigBagPackaging ?? 0}
+                    onChange={(v) => setSC({ bigBagPackaging: v })}
+                    prefix="$"
+                  />
+                </Field>
+              </div>
             </FormSection>
 
             <div className="flex flex-col rounded-3xl bg-primary p-4 text-primary-foreground">
@@ -278,6 +301,11 @@ export function ProductEditor({
                     c: ars(calc.costBag),
                     v: ars(calc.priceBag),
                     big: true,
+                  },
+                  {
+                    l: `Bolsón grande de ${calc.bigKg.toLocaleString("es-AR")} kg`,
+                    c: ars(calc.costBig),
+                    v: ars(calc.priceBig),
                   },
                   { l: "Por tonelada", c: ars(calc.costTon), v: ars(calc.priceTon) },
                 ].map((r) => (

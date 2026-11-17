@@ -3,7 +3,8 @@
 export type Bank = "Caja" | "BBVA" | "Provincia";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
-export type SaleUnit = "kg" | "t" | "bolson" | "m2" | "u";
+/** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */
+export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "m2" | "u";
 
 export type QtyDiscount = { minQty: number; unit: SaleUnit; pct: number };
 
@@ -16,6 +17,9 @@ export type StoneCost = {
   extrasPerTon: number;
   packagingPerBag: number;
   marginPct: number; // sobre el costo
+  /** Bolsón grande (big bag): kg y embalaje por bolsón. */
+  bigBagKg?: number | undefined;
+  bigBagPackaging?: number | undefined;
 };
 
 export type Product = {
@@ -73,6 +77,8 @@ export type Delivery = {
   zone: string;
   price: number; // lo que paga el cliente
   cost: number; // lo que cuesta el viaje
+  /** Descarga que se le cobra al cliente por todo el pedido. */
+  unloadPrice?: number | undefined;
   date: string;
   done: boolean;
 };
@@ -271,6 +277,14 @@ export type Settings = {
   fixedExpenses: FixedExpense[];
   quoteValidDays: number;
   followUpDays: number;
+  /** Bolsón grande: kg y embalaje por defecto para productos nuevos. */
+  bigBagKg?: number | undefined;
+  bigBagPackaging?: number | undefined;
+  /** Descarga que se cobra al cliente por pedido (valor sugerido, editable en cada venta). */
+  unloadChargeBags?: number | undefined;
+  unloadChargeBigBag?: number | undefined;
+  /** Mail diario (lunes a viernes a la mañana) con los presupuestos para seguir. */
+  followUpEmail?: { on: boolean; to: string } | undefined;
   /** Facturalo Fácil: CUITs emisores y puntos de venta. */
   invoicing?: InvoicingConfig | undefined;
 };
