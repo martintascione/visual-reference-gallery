@@ -33,6 +33,7 @@ export function fullContext(db: DB) {
   // Productos
   const prods = db.products.filter((p) => p.active);
   push(`\nPRODUCTOS (${prods.length}):`);
+  push(`Nombres exactos del catálogo: ${prods.map((p) => p.name).join(" | ") || "ninguno"}.`);
   for (const p of prods.slice(0, 80)) {
     const sc = p.stoneCost;
     push(

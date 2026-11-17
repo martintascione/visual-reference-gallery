@@ -3,6 +3,10 @@ import { reportError } from "./errors";
 import { supabase } from "./supabase";
 import { accountBalance, clientBalance, periodProfit } from "./store";
 import { addDays, ars, todayISO } from "./format";
+import type { Attachment } from "./attachments";
+import type { ProductoPropuesto } from "./product-import";
+
+const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 
 /** Acciones que el asistente puede disparar en la web (se ejecutan en el navegador). */
 export type AssistantAction =
@@ -38,6 +42,8 @@ export type AssistantReply = {
   mejora?:
     | { titulo: string; descripcion: string; flujo?: string; datos?: string; prioridad?: string }
     | undefined;
+  /** Productos leídos de un archivo, para revisar y guardar con un toque. */
+  productos?: ProductoPropuesto[] | undefined;
   error?: string | undefined;
 };
 
@@ -46,6 +52,20 @@ export type ChatMessage = {
   content: string;
   botones?: AssistantButton[] | undefined;
   nota?: string | undefined;
+  /** Archivos que mandó el usuario (solo para mostrar). */
+  adjuntos?: { nombre: string; preview?: string | undefined }[] | undefined;
+  productos?: ProductoPropuesto[] | undefined;
+  /** Resultado de guardar la importación ("5 creados, 2 actualizados"). */
+  importado?: string | undefined;
+};
+
+/** Texto que ve la IA de cada mensaje anterior (incluye lo que adjuntó y la tabla que propuso). */
+const historyText = (m: ChatMessage) => {
+  let t = m.content;
+  if (m.adjuntos?.length) t += `\n[Adjuntó: ${m.adjuntos.map((a) => a.nombre).join(", ")}]`;
+  if (m.productos?.length)
+    t += `\n[Tabla que propusiste${m.importado ? ` (ya guardada: ${m.importado})` : " (todavía sin guardar)"}: ${JSON.stringify(m.productos)}]`;
+  return t;
 };
 
 export const routeFor: Record<AssistantAction["tipo"], string> = {
@@ -94,9 +114,21 @@ export function businessContext(db: DB) {
 export async function askAssistant(
   messages: ChatMessage[],
   contexto: string,
+  adjuntos: Attachment[] = [],
 ): Promise<AssistantReply> {
+  if (DEMO && adjuntos.length) return demoImport();
   const { data, error } = await supabase.functions.invoke<AssistantReply>("asistente", {
-    body: { messages: messages.map((m) => ({ role: m.role, content: m.content })), contexto },
+    body: {
+      messages: messages.map((m) => ({ role: m.role, content: historyText(m) })),
+      contexto,
+      adjuntos: adjuntos.map((a) => ({
+        nombre: a.nombre,
+        tipo: a.tipo,
+        mediaType: a.mediaType,
+        data: a.data,
+        texto: a.texto,
+      })),
+    },
   });
   if (error) {
     let detail = error.message;
@@ -191,18 +223,58 @@ export async function loadMessages(conversationId: string): Promise<ChatMessage[
 }
 
 export async function saveMessage(conversationId: string, m: ChatMessage, user?: string) {
-  const { error } = await supabase
-    .from("chat_messages")
-    .insert({
-      conversation_id: conversationId,
-      role: m.role,
-      content: m.content,
-      botones: m.botones ?? null,
-      nota: m.nota ?? null,
-      user_email: user ?? null,
-    });
+  const { error } = await supabase.from("chat_messages").insert({
+    conversation_id: conversationId,
+    role: m.role,
+    content: m.content,
+    botones: m.botones ?? null,
+    nota: m.nota ?? null,
+    user_email: user ?? null,
+  });
   return !error;
 }
 
 export const newConversationId = () =>
   "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/** Respuesta de ejemplo para la versión demo (sin IA). */
+function demoImport(): AssistantReply {
+  return {
+    texto:
+      "Leí 4 productos de la lista. 2 ya los tenías (se actualizan) y 2 son nuevos. Tomé los importes de las piedras como precio por tonelada. Revisá la tabla y tocá Guardar.",
+    productos: [
+      {
+        nombre: "Piedra blanca decorativa",
+        categoria: "piedra",
+        unidad: "t",
+        costo: "80.000",
+        flete: "15.000",
+        margen: "40%",
+        precio: "133.000",
+      },
+      {
+        nombre: "Granza roja",
+        categoria: "piedra",
+        unidad: "t",
+        costo: "62.500,50",
+        flete: "12.000",
+        margen: "45",
+      },
+      {
+        nombre: "Laja San Luis",
+        categoria: "laja",
+        unidad: "m2",
+        costo: "9.800",
+        flete: "700",
+        margen: "0,35",
+      },
+      {
+        nombre: "Fijador para piedras 10 L",
+        categoria: "liquido",
+        unidad: "u",
+        costo: "21.000",
+        precio: "31.500",
+      },
+    ],
+  };
+}

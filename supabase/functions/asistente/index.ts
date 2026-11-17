@@ -69,7 +69,7 @@ CARGAR UN PRODUCTO (CATÁLOGO)
 1. Catálogo y precios → "Nuevo producto". Nombre y tipo: Piedra/árido, Laja (m²), Líquido (bidón), Unitario.
 2. Piedra: cargá el precio del proveedor por tonelada. Flete, descarga y embalaje vienen por defecto de Configuración (editables). Mano de obra y extras son opcionales. Margen % sobre el costo. El cuadro negro muestra costo y precio por kg, por bolsón y por tonelada, ganancia por bolsón y por tonelada, y el margen sobre el precio. Si el margen queda bajo el mínimo, avisa en rojo.
 3. Laja/líquido/unitario: costo + margen % → precio (o escribís el precio y el margen se recalcula). Líquidos: litros por bidón, muestra precio por litro.
-4. Stock actual, mínimo para avisar, IVA %, y descuentos por cantidad (ej. desde 10 bolsones −5%).
+4. Stock actual, mínimo para avisar y descuentos por cantidad (los precios se cargan siempre sin IVA) (ej. desde 10 bolsones −5%).
 5. "Actualizar precios": sube o baja un % toda una categoría de una vez (precio, o costo recalculando precio). "Calcular cantidad": por m² y espesor dice kg, bolsones y litros de fijador que necesita el cliente.
 
 STOCK
@@ -99,6 +99,21 @@ AVISOS Y AGENDA
 CONFIGURACIÓN
 - Negocio y valores por defecto (kg por bolsón, embalaje, descarga, flete de compra, margen habitual, IVA, margen mínimo, validez de presupuestos). Medios de cobro: nombre, tipo, pasarela, banco donde acredita, comisión %, días (acá se cargan las comisiones reales de Payway). Zonas de flete. Gastos fijos. "Borrar todos los datos" es definitivo. Abajo, "Mejoras pedidas desde el asistente".
 
+ARCHIVOS ADJUNTOS (fotos, PDF, Excel, CSV)
+El usuario puede mandarte fotos (de una hoja escrita a mano, una lista impresa, una pantalla), PDF, Excel o CSV. Leelos con atención.
+- Si es una LISTA DE PRODUCTOS O PRECIOS: completá el campo "productos" con TODAS las filas que se puedan leer (no resumas ni cortes la lista). Por cada fila:
+  · nombre: tal cual figura (corregí solo errores de tipeo obvios).
+  · existente: si es un producto que ya está en el catálogo (aunque esté escrito distinto, ej. "piedra blanca" = "Piedra blanca decorativa"), poné el nombre EXACTO del catálogo. Si es nuevo, dejalo vacío.
+  · categoria: piedra (piedras, arenas, granzas, canto rodado, grava, triturados, chips), laja, liquido (fijadores, selladores, bidones) o unitario (el resto).
+  · unidad: a qué unidad corresponden los importes de esa fila: t (tonelada), bolson, kg, m2 o u (unidad). Deducilo de los encabezados y del producto (las piedras suelen ir por tonelada o por bolsón, las lajas por m², el fijador por bidón = u).
+  · costo, flete, descarga: lo que figura, en la misma unidad. margen: el % de ganancia (número, ej. 40). precio: el precio final de venta si la lista lo trae (manda sobre el margen).
+- NÚMEROS: en Argentina el punto separa los miles y la coma los decimales. "1.234,50" = 1234.5; "$ 12.000" = 12000; "0,8" = 0.8; "40%" = 40. En los Excel los números ya vienen con coma decimal y sin separador de miles ("1234,5"). Si en la columna de margen ves valores entre 0 y 1 (ej. 0,4), es una fracción: 0,4 = 40 %. Devolvé los números como números JSON (1234.5), sin $ ni %.
+- No inventes datos: si una celda no se lee o no está, dejala vacía y avisalo en el texto. Si un número se lee dudoso (letra a mano), avisá cuál.
+- Todos los precios del sistema son SIN IVA. Si la lista dice que los precios incluyen IVA, avisalo en el texto y preguntá antes de cargar.
+- En "texto": cuántos productos leíste, cuántos son nuevos y cuántos actualizan, qué unidad tomaste para los importes y cualquier duda. Terminá diciendo que revise la tabla y toque "Guardar". Vos NO guardás nada: se guarda cuando el usuario toca el botón. No pongas botones en esta respuesta.
+- Si después te piden corregir algo de la tabla (ej. "el flete es por bolsón", "sacá la arena"), devolvé la tabla completa corregida otra vez en "productos".
+- Si el archivo es otra cosa (ticket o factura de un gasto, remito de compra, datos de un cliente): leé los datos y ofrecé el botón que corresponda ya cargado (nuevo_gasto con concepto y monto, cargar_stock con el producto, nuevo_cliente con nombre y teléfono). Si es una consulta, respondé con lo que dice el archivo.
+
 REGLAS PARA RESPONDER CON DATOS
 - Tenés la foto completa del negocio en el contexto. Si preguntan "cuánto vendí", "quién me debe", "qué piedra me queda poca", "cuánto gané este mes", respondé con los números del contexto, en pesos, redondeando. Si el dato no está, decilo.
 - Si te piden hacer algo (vender, cargar, cobrar), vos no lo ejecutás: explicás en 2 o 3 pasos y das el botón que abre la herramienta ya preparada. Confirmá nombres de productos y clientes contra el contexto.`;
@@ -120,6 +135,27 @@ const responderTool = {
             accion: { type: "object", additionalProperties: true, properties: { tipo: { type: "string" } }, required: ["tipo"] },
           },
           required: ["etiqueta", "accion"],
+        },
+      },
+      productos: {
+        type: "array",
+        maxItems: 300,
+        description: "Solo cuando el usuario manda una lista de productos o precios (o pide corregir una tabla que propusiste). Todas las filas legibles.",
+        items: {
+          type: "object",
+          properties: {
+            nombre: { type: "string" },
+            existente: { type: "string", description: "Nombre exacto del producto del catálogo si ya existe; vacío si es nuevo." },
+            categoria: { type: "string", enum: ["piedra", "laja", "liquido", "unitario"] },
+            unidad: { type: "string", enum: ["t", "bolson", "kg", "m2", "u"], description: "Unidad de los importes de esta fila." },
+            costo: { type: "number", description: "Costo del proveedor sin IVA, en la unidad indicada." },
+            flete: { type: "number" },
+            descarga: { type: "number" },
+            margen: { type: "number", description: "% de ganancia sobre el costo (40 = 40 %)." },
+            precio: { type: "number", description: "Precio final de venta sin IVA, si la lista lo trae." },
+            nota: { type: "string", description: "Duda puntual de esta fila, si la hay." },
+          },
+          required: ["nombre"],
         },
       },
       mejora: {
@@ -151,8 +187,30 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supabase.auth.getUser(auth.replace("Bearer ", ""));
     if (userErr || !userData.user) return json({ error: "No autorizado" }, 401);
 
-    const { messages, contexto } = (await req.json()) as { messages: { role: "user" | "assistant"; content: string }[]; contexto?: string };
+    type Adjunto = { nombre: string; tipo: "image" | "pdf" | "text"; mediaType?: string; data?: string; texto?: string };
+    const { messages, contexto, adjuntos } = (await req.json()) as {
+      messages: { role: "user" | "assistant"; content: string }[];
+      contexto?: string;
+      adjuntos?: Adjunto[];
+    };
     if (!Array.isArray(messages) || messages.length === 0) return json({ error: "Sin mensajes" }, 400);
+
+    // Los archivos van solo en el último mensaje del usuario: archivos primero, después el texto.
+    const imgTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    const blocks: unknown[] = [];
+    for (const a of (adjuntos ?? []).slice(0, 5)) {
+      if (a.tipo === "image" && a.data && imgTypes.includes(a.mediaType ?? "")) {
+        blocks.push({ type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } });
+        blocks.push({ type: "text", text: `(Foto adjunta: ${a.nombre})` });
+      } else if (a.tipo === "pdf" && a.data) {
+        blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data }, title: a.nombre });
+      } else if (a.tipo === "text" && a.texto) {
+        blocks.push({ type: "text", text: `Archivo adjunto "${a.nombre}":\n${a.texto.slice(0, 60000)}` });
+      }
+    }
+    const history = messages.slice(-20).map((m) => ({ role: m.role, content: m.content as unknown }));
+    const last = history[history.length - 1];
+    if (blocks.length && last && last.role === "user") last.content = [...blocks, { type: "text", text: String(last.content) }];
 
     const system = SYSTEM + (contexto ? `\n\nFOTO COMPLETA DEL NEGOCIO (datos reales de la base, usalos para responder):\n${contexto}` : "");
 
@@ -161,9 +219,9 @@ Deno.serve(async (req) => {
       headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1500,
+        max_tokens: blocks.length ? 12000 : 2500,
         system,
-        messages: messages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
+        messages: history,
         tools: [responderTool],
       }),
     });
@@ -172,6 +230,8 @@ Deno.serve(async (req) => {
       return json({ error: `Anthropic ${r.status}: ${t.slice(0, 300)}` }, 502);
     }
     const data = await r.json();
+    if (data.stop_reason === "max_tokens")
+      return json({ texto: "La lista es muy larga para leerla de una vez. Mandámela en partes (por ejemplo, una foto por hoja) y te armo cada tabla." });
     const content = data.content as { type: string; name?: string; input?: unknown; text?: string }[];
     const block = content.find((b) => b.type === "tool_use" && b.name === "responder");
     if (block?.input) return json(block.input);

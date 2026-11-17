@@ -44,6 +44,8 @@ type Draft<T> = Omit<T, "id">;
 
 type Actions = {
   upsertProduct: (p: Product) => void;
+  /** Alta o actualización de varios productos en un solo guardado (importación desde el asistente). */
+  upsertProducts: (ps: Product[]) => void;
   removeProduct: (id: string) => void;
   addStockMove: (m: Draft<StockMove>) => void;
   addSale: (s: Omit<Sale, "id" | "number">, cheque?: Draft<Cheque>) => Sale;
@@ -251,6 +253,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const i = d.products.findIndex((x) => x.id === p.id);
           if (i >= 0) d.products[i] = p;
           else d.products.push(p);
+          return d;
+        }),
+      upsertProducts: (ps) =>
+        mutate((d) => {
+          for (const p of ps) {
+            const i = d.products.findIndex((x) => x.id === p.id);
+            if (i >= 0) d.products[i] = p;
+            else d.products.push(p);
+          }
           return d;
         }),
       removeProduct: (id) =>
