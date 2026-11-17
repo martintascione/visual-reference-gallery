@@ -17,6 +17,7 @@ import type {
   Payment,
   Product,
   Quote,
+  Sale,
   SaleItem,
   SaleUnit,
 } from "@/lib/types";
@@ -39,15 +40,20 @@ export function SaleForm({
   mode,
   fromQuote,
   editQuote,
+  editSale,
 }: {
   mode: "venta" | "presupuesto";
   fromQuote?: Quote | undefined;
   /** Presupuesto existente que se edita (se guarda sobre el mismo número). */
   editQuote?: Quote | undefined;
+  /** Venta existente que se corrige (se guarda sobre el mismo número). */
+  editSale?: Sale | undefined;
 }) {
   const {
     db,
     addSale,
+    updateSale,
+    setEditSale,
     addQuote,
     updateQuote,
     setEditQuote,
@@ -182,6 +188,56 @@ export function SaleForm({
 
   // El primer pago sigue al total hasta que la dueña lo toque
   const [touched, setTouched] = useState(false);
+
+  // Precarga para corregir una venta ya guardada.
+  useEffect(() => {
+    if (!editSale) return;
+    setLines(
+      editSale.items.map((i) => ({
+        productId: i.productId,
+        qty: i.qty,
+        unit: i.unit,
+        price: i.unitPrice,
+      })),
+    );
+    setClientId(editSale.clientId ?? "");
+    setClientName(editSale.clientName);
+    setPhone(db.clients.find((c) => c.id === editSale.clientId)?.phone ?? "");
+    setWithIva(editSale.withIva);
+    setNote(editSale.note ?? "");
+    setDiscountPct(editSale.discountPct ?? 0);
+    setInvoicePending(!!editSale.invoicePending);
+    if (editSale.delivery) {
+      setDeliveryOn(true);
+      setDelivery({ ...editSale.delivery });
+    }
+    const ps = editSale.payments.map((p) => {
+      const m =
+        methods.find(
+          (x) =>
+            x.method === p.method && x.bank === p.bank && (x.gateway ?? "") === (p.gateway ?? ""),
+        ) ?? methods.find((x) => x.method === p.method);
+      return {
+        methodId: m?.id ?? methods[0]?.id ?? "",
+        amount: p.amount,
+        installments: p.installments ?? 1,
+        dues: p.dues ?? 1,
+      };
+    });
+    if (ps.length) setPays(ps);
+    setTouched(ps.length > 1);
+    const ch = editSale.payments.find((p) => p.chequeId);
+    const c = ch ? db.cheques.find((x) => x.id === ch.chequeId) : undefined;
+    if (c)
+      setCheque({
+        number: c.number,
+        bank: c.bank,
+        drawer: c.drawer,
+        dueDate: c.dueDate,
+        echeq: c.echeq,
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSale]);
   useEffect(() => {
     if (!touched && pays.length === 1 && pays[0]) setPays([{ ...pays[0], amount: total }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,8 +276,13 @@ export function SaleForm({
   };
 
   const cfgOf = (id: string) => methods.find((m) => m.id === id);
+  // Al corregir una venta, lo que ya descontó esa misma venta vuelve a contar como disponible.
+  const ownQty = (productId: string) =>
+    editSale?.items.filter((x) => x.productId === productId).reduce((a, x) => a + x.baseQty, 0) ??
+    0;
   const stockIssues = items.filter(
-    (i) => (db.products.find((p) => p.id === i.productId)?.stock ?? 0) < i.baseQty,
+    (i) =>
+      (db.products.find((p) => p.id === i.productId)?.stock ?? 0) + ownQty(i.productId) < i.baseQty,
   );
   const ctaPay = pays.find((p) => cfgOf(p.methodId)?.method === "cta_cte");
   const chequePay = pays.find((p) => cfgOf(p.methodId)?.method === "cheque");
@@ -283,6 +344,32 @@ export function SaleForm({
           echeq: cheque.echeq,
         }
       : undefined;
+    if (editSale) {
+      updateSale(
+        editSale.id,
+        {
+          date: editSale.date,
+          clientId: cid,
+          clientName: clientName.trim() || "Consumidor final",
+          items,
+          delivery: deliveryOn ? delivery : undefined,
+          payments,
+          withIva,
+          subtotal,
+          iva,
+          total,
+          cost,
+          note: note || undefined,
+          invoicePending: invoicePending || undefined,
+          discountPct: discountPct || undefined,
+        },
+        chequeDraft,
+      );
+      setEditSale(undefined);
+      setSaved(`Venta #${editSale.number} actualizada · total ${ars(total)}`);
+      setTimeout(() => nav({ to: "/ventas" }), 900);
+      return;
+    }
     const sale = addSale(
       {
         date: new Date().toISOString(),
@@ -835,8 +922,22 @@ export function SaleForm({
                 disabled={!canSaveSale || !!saved}
                 onClick={saveSale}
               >
-                {saved ?? `Cobrar y guardar · ${ars(total)}`}
+                {saved ??
+                  (editSale
+                    ? `Guardar cambios · ${ars(total)}`
+                    : `Cobrar y guardar · ${ars(total)}`)}
               </button>
+              {editSale && !saved && (
+                <button
+                  className={`${btn.ghost} w-full`}
+                  onClick={() => {
+                    setEditSale(undefined);
+                    nav({ to: "/ventas" });
+                  }}
+                >
+                  Cancelar sin guardar
+                </button>
+              )}
             </div>
           </Card>
         ) : (

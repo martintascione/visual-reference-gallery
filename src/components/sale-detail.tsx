@@ -1,9 +1,11 @@
 import type { Sale } from "@/lib/types";
-import { feeFor, useStore } from "@/lib/store";
+import { DEMO, feeFor, saleEditBlock, useStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 import { ars, fmtDate, fmtTime, num } from "@/lib/format";
 import { qtyUnit, unitLabel } from "@/lib/pricing";
 import { Badge, Modal, btn } from "./ui-bits";
-import { FileCheck, FileDown } from "lucide-react";
+import { FileCheck, FileDown, Pencil, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { openDocumentPdf } from "@/lib/quote-pdf";
 
@@ -37,9 +39,33 @@ export function PayChips({ sale }: { sale: Sale }) {
 }
 
 export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
-  const { db, setInvoicePending, setPendingAction } = useStore();
+  const { db, setInvoicePending, setPendingAction, setEditSale, removeSale } = useStore();
   const navigate = useNavigate();
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [invoices, setInvoices] = useState<string[]>([]);
+  const saleId = sale?.id;
+  useEffect(() => {
+    setConfirmDel(false);
+    setInvoices([]);
+    if (!saleId || DEMO) return;
+    // Facturas emitidas en ARCA para esta venta (no se anulan solas).
+    void supabase
+      .from("invoices")
+      .select("pto_vta, cbte_tipo, cbte_nro")
+      .eq("sale_id", saleId)
+      .then(({ data }) =>
+        setInvoices(
+          ((data ?? []) as { pto_vta: number; cbte_tipo: number; cbte_nro: number }[]).map(
+            (x) =>
+              `${x.cbte_tipo === 1 ? "A" : x.cbte_tipo === 6 ? "B" : "C"} ${String(x.pto_vta).padStart(5, "0")}-${String(x.cbte_nro).padStart(8, "0")}`,
+          ),
+        ),
+      );
+  }, [saleId]);
   if (!sale) return null;
+  const block = saleEditBlock(db, sale);
+  const paidDues = db.dues.filter((x) => x.saleId === sale.id && x.paid > 0);
+  const movedCheque = db.cheques.find((c) => c.saleId === sale.id && c.status !== "cartera");
   const fees = sale.payments.reduce((a, p) => a + feeFor(db, p), 0);
   return (
     <Modal open={!!sale} onClose={onClose} title={`Venta #${sale.number} · ${sale.clientName}`}>
@@ -144,6 +170,85 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
           {sale.invoicePending ? "Falta facturar · marcar hecha" : "Marcar: falta facturar"}
         </button>
       </div>
+
+      {/* Corregir o eliminar */}
+      {!confirmDel ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <button
+            className={`${btn.ghost} disabled:opacity-40`}
+            disabled={!!block}
+            title={
+              block ? `No se puede editar: ${block}` : "Corregir productos, cliente, flete o cobro"
+            }
+            onClick={() => {
+              setEditSale(sale.id);
+              onClose();
+              void navigate({ to: "/nueva-venta" });
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Editar venta
+          </button>
+          <button
+            className={`${btn.ghost} hover:text-danger-soft-foreground`}
+            onClick={() => setConfirmDel(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Eliminar venta
+          </button>
+          {block && (
+            <span className="text-[11px] text-muted-foreground">
+              No se puede editar: {block} Si hace falta, eliminala y cargala de nuevo.
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-danger-soft p-3 text-xs text-danger-soft-foreground">
+          <p className="text-sm font-semibold">¿Eliminar la venta #{sale.number}?</p>
+          <p>
+            Vuelve el stock de los productos y se borran sus cobros en caja y bancos
+            {db.dues.some((x) => x.saleId === sale.id) ? ", las cuotas de cuenta corriente" : ""}
+            {db.cheques.some((c) => c.saleId === sale.id && c.status === "cartera")
+              ? " y el cheque en cartera"
+              : ""}
+            . No se puede deshacer.
+          </p>
+          {paidDues.length > 0 && (
+            <p>
+              Ya se cobraron {paidDues.length} cuota{paidDues.length > 1 ? "s" : ""}: esos cobros
+              quedan registrados en caja.
+            </p>
+          )}
+          {movedCheque && (
+            <p>
+              El cheque N° {movedCheque.number} ya está {movedCheque.status}: no se borra.
+            </p>
+          )}
+          {sale.closureId && (
+            <p>
+              Esta venta ya entró en un cierre del día: el resumen de ese cierre no se recalcula.
+            </p>
+          )}
+          {invoices.length > 0 && (
+            <p className="font-semibold">
+              Tiene factura emitida en ARCA ({invoices.join(", ")}). Eliminar la venta no anula la
+              factura: para eso hay que hacer una nota de crédito.
+            </p>
+          )}
+          <div className="mt-1 flex justify-end gap-2">
+            <button className={btn.soft} onClick={() => setConfirmDel(false)}>
+              Cancelar
+            </button>
+            <button
+              className={`${btn.primary} !bg-danger-soft-foreground`}
+              onClick={() => {
+                removeSale(sale.id);
+                onClose();
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Eliminar
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

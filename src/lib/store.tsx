@@ -49,6 +49,11 @@ type Actions = {
   removeProduct: (id: string) => void;
   addStockMove: (m: Draft<StockMove>) => void;
   addSale: (s: Omit<Sale, "id" | "number">, cheque?: Draft<Cheque>) => Sale;
+  /** Corrige una venta: deshace lo que generó y la vuelve a registrar con el mismo número. */
+  updateSale: (id: string, s: Omit<Sale, "id" | "number">, cheque?: Draft<Cheque>) => void;
+  /** Elimina una venta: devuelve el stock y borra sus movimientos, cuotas y cheque en cartera. */
+  removeSale: (id: string) => void;
+  setEditSale: (id?: string) => void;
   setDeliveryDone: (saleId: string, done: boolean) => void;
   setInvoicePending: (saleId: string, pending: boolean) => void;
   addQuote: (q: Omit<Quote, "id" | "number">) => Quote;
@@ -80,6 +85,7 @@ type Ctx = {
   db: DB;
   pendingQuoteId: string | undefined;
   editQuoteId: string | undefined;
+  editSaleId: string | undefined;
   pendingAction: AssistantAction | undefined;
   session: Session | null;
   ready: boolean;
@@ -146,6 +152,105 @@ async function loadAll(): Promise<DB> {
   return db;
 }
 
+/** Registra todo lo que genera una venta: baja de stock, movimientos de caja/banco, cheque y cuotas. */
+function applySale(d: DB, sale: Sale, chequeDraft?: Draft<Cheque>, prevMoves: Movement[] = []) {
+  for (const it of sale.items) {
+    const p = d.products.find((x) => x.id === it.productId);
+    if (p) {
+      p.stock -= it.baseQty;
+      d.stockMoves.unshift({
+        id: uid(),
+        date: sale.date,
+        productId: p.id,
+        qty: -it.baseQty,
+        reason: "venta",
+        note: `Venta #${sale.number}`,
+      });
+    }
+  }
+  for (const pay of sale.payments) {
+    if (pay.method === "cta_cte") {
+      if (!sale.clientId) continue;
+      const n = Math.max(1, pay.dues ?? 1);
+      const base = Math.floor(pay.amount / n);
+      for (let i = 1; i <= n; i++)
+        d.dues.push({
+          id: uid(),
+          clientId: sale.clientId,
+          saleId: sale.id,
+          n: i,
+          of: n,
+          dueDate: addDays(dayOf(sale.date), 30 * i),
+          amount: i === n ? pay.amount - base * (n - 1) : base,
+          paid: 0,
+        });
+      continue;
+    }
+    if (pay.method === "cheque") {
+      if (chequeDraft) {
+        const ch: Cheque = { ...chequeDraft, id: uid(), saleId: sale.id, amount: pay.amount };
+        d.cheques.unshift(ch);
+        pay.chequeId = ch.id;
+      }
+      continue;
+    }
+    const cfg =
+      d.settings.methods.find(
+        (m) =>
+          m.method === pay.method &&
+          m.bank === pay.bank &&
+          (m.gateway ?? "") === (pay.gateway ?? ""),
+      ) ?? d.settings.methods.find((m) => m.method === pay.method);
+    // Al editar: si ese cobro ya estaba acreditado o en un cierre, se mantiene así.
+    const prev = prevMoves.find(
+      (m) =>
+        m.method === pay.method &&
+        m.account === pay.bank &&
+        (m.gateway ?? "") === (pay.gateway ?? ""),
+    );
+    d.movements.unshift({
+      id: uid(),
+      date: sale.date,
+      kind: "venta",
+      account: pay.bank,
+      amount: pay.amount,
+      concept: `Venta #${sale.number} · ${sale.clientName}`,
+      method: pay.method,
+      gateway: pay.gateway,
+      feePct: cfg?.feePct ?? 0,
+      settleDays: cfg?.settleDays ?? 0,
+      settled: prev?.settled ?? !pay.gateway,
+      refId: sale.id,
+      closureId: prev?.closureId ?? sale.closureId,
+    });
+  }
+}
+
+/** Deshace lo que generó una venta. Los cobros de cuotas ya registrados y los cheques ya movidos no se tocan. */
+function reverseSale(d: DB, sale: Sale) {
+  for (const it of sale.items) {
+    const p = d.products.find((x) => x.id === it.productId);
+    if (p) p.stock += it.baseQty;
+    const k = d.stockMoves.findIndex(
+      (m) =>
+        m.productId === it.productId && m.reason === "venta" && m.note === `Venta #${sale.number}`,
+    );
+    if (k >= 0) d.stockMoves.splice(k, 1);
+  }
+  d.movements = d.movements.filter((m) => !(m.refId === sale.id && m.kind === "venta"));
+  d.dues = d.dues.filter((x) => x.saleId !== sale.id);
+  d.cheques = d.cheques.filter((c) => !(c.saleId === sale.id && c.status === "cartera"));
+}
+
+/** Por qué una venta no se puede editar (cuotas cobradas o cheque ya depositado/endosado). */
+export function saleEditBlock(db: DB, sale: Sale): string | undefined {
+  if (db.dues.some((x) => x.saleId === sale.id && x.paid > 0))
+    return "Tiene cuotas de cuenta corriente ya cobradas.";
+  const ch = db.cheques.find((c) => c.saleId === sale.id && c.status !== "cartera");
+  if (ch) return `El cheque N° ${ch.number} ya está ${ch.status}.`;
+  return undefined;
+}
+
 /** Guarda en la base solo lo que cambió entre dos estados. */
 /** Qué colecciones cambiaron entre dos estados (para el registro de errores). */
 function changedCollections(prev: DB, next: DB) {
@@ -186,6 +291,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDbState] = useState<DB>(() => emptyDB());
   const [pendingQuoteId, setPendingQuote] = useState<string | undefined>();
   const [editQuoteId, setEditQuote] = useState<string | undefined>();
+  const [editSaleId, setEditSale] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<AssistantAction | undefined>();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
@@ -288,69 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate((d) => {
           d.counters.sale += 1;
           sale.number = d.counters.sale;
-          // stock
-          for (const it of sale.items) {
-            const p = d.products.find((x) => x.id === it.productId);
-            if (p) {
-              p.stock -= it.baseQty;
-              d.stockMoves.unshift({
-                id: uid(),
-                date: sale.date,
-                productId: p.id,
-                qty: -it.baseQty,
-                reason: "venta",
-                note: `Venta #${sale.number}`,
-              });
-            }
-          }
-          // pagos → movimientos / cheques / cuotas
-          for (const pay of sale.payments) {
-            if (pay.method === "cta_cte") {
-              if (!sale.clientId) continue;
-              const n = Math.max(1, pay.dues ?? 1);
-              const base = Math.floor(pay.amount / n);
-              for (let i = 1; i <= n; i++)
-                d.dues.push({
-                  id: uid(),
-                  clientId: sale.clientId,
-                  saleId: sale.id,
-                  n: i,
-                  of: n,
-                  dueDate: addDays(dayOf(sale.date), 30 * i),
-                  amount: i === n ? pay.amount - base * (n - 1) : base,
-                  paid: 0,
-                });
-              continue;
-            }
-            if (pay.method === "cheque") {
-              if (chequeDraft) {
-                const ch: Cheque = {
-                  ...chequeDraft,
-                  id: uid(),
-                  saleId: sale.id,
-                  amount: pay.amount,
-                };
-                d.cheques.unshift(ch);
-                pay.chequeId = ch.id;
-              }
-              continue;
-            }
-            const cfg = methodCfg(d, pay);
-            d.movements.unshift({
-              id: uid(),
-              date: sale.date,
-              kind: "venta",
-              account: pay.bank,
-              amount: pay.amount,
-              concept: `Venta #${sale.number} · ${sale.clientName}`,
-              method: pay.method,
-              gateway: pay.gateway,
-              feePct: cfg?.feePct ?? 0,
-              settleDays: cfg?.settleDays ?? 0,
-              settled: !pay.gateway,
-              refId: sale.id,
-            });
-          }
+          applySale(d, sale, chequeDraft);
           if (sale.fromQuoteId) {
             const q = d.quotes.find((x) => x.id === sale.fromQuoteId);
             if (q) q.status = "aceptado";
@@ -360,6 +404,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         return sale;
       },
+      updateSale: (id, draft, chequeDraft) =>
+        mutate((d) => {
+          const i = d.sales.findIndex((x) => x.id === id);
+          const old = d.sales[i];
+          if (!old) return d;
+          const prevMoves = d.movements.filter((m) => m.refId === old.id);
+          reverseSale(d, old);
+          const sale: Sale = {
+            ...draft,
+            id: old.id,
+            number: old.number,
+            date: old.date,
+            closureId: old.closureId,
+            fromQuoteId: old.fromQuoteId,
+          };
+          applySale(d, sale, chequeDraft, prevMoves);
+          d.sales[i] = sale;
+          return d;
+        }),
+      removeSale: (id) =>
+        mutate((d) => {
+          const sale = d.sales.find((x) => x.id === id);
+          if (!sale) return d;
+          reverseSale(d, sale);
+          if (sale.fromQuoteId) {
+            const q = d.quotes.find((x) => x.id === sale.fromQuoteId);
+            if (q && q.status === "aceptado") q.status = "enviado";
+          }
+          d.sales = d.sales.filter((x) => x.id !== id);
+          return d;
+        }),
+      setEditSale: (id) => setEditSale(id),
       setInvoicePending: (saleId, pending) =>
         mutate((d) => {
           const s = d.sales.find((x) => x.id === saleId);
@@ -618,13 +694,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       db,
       pendingQuoteId,
       editQuoteId,
+      editSaleId,
       pendingAction,
       session,
       ready,
       syncError,
       ...actions,
     }),
-    [db, pendingQuoteId, editQuoteId, pendingAction, session, ready, syncError, actions],
+    [
+      db,
+      pendingQuoteId,
+      editQuoteId,
+      editSaleId,
+      pendingAction,
+      session,
+      ready,
+      syncError,
+      actions,
+    ],
   );
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

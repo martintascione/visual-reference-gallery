@@ -59,6 +59,7 @@ VENDER EN EL MOSTRADOR
 6. Cómo cobra: elegí el medio (Efectivo, Transferencia BBVA, Transferencia Provincia, Débito Payway, Crédito Payway, Cheque, Cuenta corriente). El monto se completa solo con el total. Para pagos mixtos: "Otro pago" y repartí los montos; el botón se habilita cuando la suma cierra exacto. Crédito pide cuotas de tarjeta. Cheque pide número, banco emisor, librador, fecha de cobro y si es e-cheq. Cuenta corriente exige un cliente cargado y pide cantidad de cuotas mensuales (avisa si supera el límite de crédito).
 7. Bonificación %: descuento sobre el subtotal, aparece en el presupuesto y en el comprobante. "Falta hacer la factura": marca la venta para facturar después (aparece en Ventas).
 8. "Cobrar y guardar": descuenta stock, registra los movimientos en cada cuenta, deja el cheque en cartera y arma las cuotas. Lleva a Ventas.
+9. Corregir o borrar una venta: en Ventas, tocá la venta y abajo "Editar venta" (abre el formulario con todo cargado; al guardar se corrigen stock, caja y cuotas y queda el mismo número) o "Eliminar venta" (pide confirmación; devuelve el stock y borra sus cobros, cuotas y el cheque en cartera). No se puede editar si ya tiene cuotas cobradas o el cheque fue depositado/endosado: en ese caso se elimina y se carga de nuevo. Si la venta ya tiene factura en ARCA, borrarla no anula la factura: hace falta una nota de crédito.
 
 PRESUPUESTAR
 1. Nueva venta → arriba a la derecha elegí "Presupuesto". Se cargan productos igual que una venta.

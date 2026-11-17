@@ -15,12 +15,30 @@ export const Route = createFileRoute("/nueva-venta")({
 });
 
 function NuevaVenta() {
-  const { db, pendingQuoteId, editQuoteId, setEditQuote } = useStore();
+  const { db, pendingQuoteId, editQuoteId, setEditQuote, editSaleId, setEditSale } = useStore();
   // Al salir de la pantalla se descarta la edición pendiente.
-  useEffect(() => () => setEditQuote(undefined), [setEditQuote]);
+  useEffect(
+    () => () => {
+      setEditQuote(undefined);
+      setEditSale(undefined);
+    },
+    [setEditQuote, setEditSale],
+  );
+  const editSale = db.sales.find((x) => x.id === editSaleId);
   const fromQuote = db.quotes.find((q) => q.id === pendingQuoteId);
   const editQuote = db.quotes.find((q) => q.id === editQuoteId);
   const [mode, setMode] = useState<"venta" | "presupuesto">("venta");
+
+  if (editSale)
+    return (
+      <>
+        <PageHeader
+          title={`Editar venta #${editSale.number}`}
+          subtitle={`${editSale.clientName} · al guardar se corrigen el stock, la caja y las cuotas`}
+        />
+        <SaleForm key={"edit-sale" + editSale.id} mode="venta" editSale={editSale} />
+      </>
+    );
 
   if (editQuote)
     return (
