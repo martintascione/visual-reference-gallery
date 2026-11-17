@@ -22,7 +22,7 @@ import type {
 } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
 import { lineTotals, listPrice, saleUnitsFor, unitLabel } from "@/lib/pricing";
-import { addDays, ars, fmtDate, num, todayISO } from "@/lib/format";
+import { addDays, ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { Badge, Card, Field, Input, NumberInput, Segmented, Select, Toggle, btn } from "./ui-bits";
 
 type Line = { productId: string; qty: number; unit: SaleUnit; price?: number | undefined };
@@ -38,12 +38,24 @@ type ChequeDraft = {
 export function SaleForm({
   mode,
   fromQuote,
+  editQuote,
 }: {
   mode: "venta" | "presupuesto";
   fromQuote?: Quote | undefined;
+  /** Presupuesto existente que se edita (se guarda sobre el mismo número). */
+  editQuote?: Quote | undefined;
 }) {
-  const { db, addSale, addQuote, upsertClient, setPendingQuote, pendingAction, setPendingAction } =
-    useStore();
+  const {
+    db,
+    addSale,
+    addQuote,
+    updateQuote,
+    setEditQuote,
+    upsertClient,
+    setPendingQuote,
+    pendingAction,
+    setPendingAction,
+  } = useStore();
   const nav = useNavigate();
   const s = db.settings;
   const active = db.products.filter((p) => p.active);
@@ -112,28 +124,33 @@ export function SaleForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction]);
 
-  // Precarga desde un presupuesto aceptado
+  // Precarga desde un presupuesto (aceptado → venta, o edición del presupuesto)
   useEffect(() => {
-    if (!fromQuote) return;
+    const src = fromQuote ?? editQuote;
+    if (!src) return;
     setLines(
-      fromQuote.items.map((i) => ({
+      src.items.map((i) => ({
         productId: i.productId,
         qty: i.qty,
         unit: i.unit,
         price: i.unitPrice,
       })),
     );
-    setClientId(fromQuote.clientId ?? "");
-    setClientName(fromQuote.clientName);
-    setPhone(fromQuote.phone ?? "");
-    setWithIva(fromQuote.withIva);
-    setNote(fromQuote.note ?? "");
-    setDiscountPct(fromQuote.discountPct ?? 0);
-    if (fromQuote.delivery) {
+    setClientId(src.clientId ?? "");
+    setClientName(src.clientName);
+    setPhone(src.phone ?? "");
+    setWithIva(src.withIva);
+    setNote(src.note ?? "");
+    setDiscountPct(src.discountPct ?? 0);
+    if (src.delivery) {
       setDeliveryOn(true);
-      setDelivery({ ...fromQuote.delivery, date: todayISO(), done: false });
+      setDelivery(
+        fromQuote ? { ...src.delivery, date: todayISO(), done: false } : { ...src.delivery },
+      );
     }
-  }, [fromQuote]);
+    if (editQuote) setValidDays(Math.max(1, daysBetween(todayISO(), editQuote.validUntil)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromQuote, editQuote]);
 
   const results = useMemo(
     () =>
@@ -294,6 +311,32 @@ export function SaleForm({
   const saveQuote = () => {
     const cid = ensureClient();
     const today = todayISO();
+    if (editQuote) {
+      updateQuote(editQuote.id, {
+        validUntil: addDays(today, validDays),
+        clientId: cid,
+        clientName: clientName.trim(),
+        phone: phone || undefined,
+        items,
+        delivery: deliveryOn ? delivery : undefined,
+        withIva,
+        subtotal,
+        iva,
+        total,
+        // Si estaba vencido o perdido, al editarlo vuelve a quedar abierto.
+        status:
+          editQuote.status === "vencido" || editQuote.status === "perdido"
+            ? "enviado"
+            : editQuote.status,
+        lostReason: editQuote.status === "perdido" ? undefined : editQuote.lostReason,
+        note: note || undefined,
+        discountPct: discountPct || undefined,
+      });
+      setEditQuote(undefined);
+      setSaved("Presupuesto actualizado");
+      setTimeout(() => nav({ to: "/presupuestos" }), 900);
+      return;
+    }
     addQuote({
       date: new Date().toISOString(),
       validUntil: addDays(today, validDays),
@@ -376,7 +419,7 @@ export function SaleForm({
                     <p className="text-sm font-semibold">{p.name}</p>
                     <p className="text-[11px] text-muted-foreground">
                       Stock {num(p.stock)} {p.unit === "m2" ? "m²" : p.unit}
-                      {it.discountPct > 0 && ` · ${it.discountPct}% desc. por cantidad`}
+                      {it.discountPct > 0 && ` · ${num(it.discountPct, 1)} % desc. por cantidad`}
                     </p>
                   </div>
                   <Field label="Cantidad">
@@ -560,7 +603,7 @@ export function SaleForm({
             </p>
             {discount > 0 && (
               <p className="flex justify-between text-muted-foreground">
-                <span>Bonificación {discountPct}%</span>
+                <span>Bonificación {num(discountPct, 1)} %</span>
                 <span className="tabular-nums">− {ars(discount)}</span>
               </p>
             )}
@@ -666,7 +709,7 @@ export function SaleForm({
                           ? "Queda en cartera de cheques"
                           : cfg.method === "cta_cte"
                             ? "Se carga a la cuenta corriente del cliente"
-                            : `Acredita en ${cfg.bank}${cfg.settleDays ? ` en ${cfg.settleDays} días` : " en el día"}${cfg.feePct ? ` · comisión ${cfg.feePct}% (${ars(Math.round((p.amount * cfg.feePct) / 100))})` : ""}`}
+                            : `Acredita en ${cfg.bank}${cfg.settleDays ? ` en ${cfg.settleDays} días` : " en el día"}${cfg.feePct ? ` · comisión ${num(cfg.feePct, 2)} % (${ars(Math.round((p.amount * cfg.feePct) / 100))})` : ""}`}
                       </p>
                     )}
                     {cfg?.method === "credito" && (
@@ -816,8 +859,19 @@ export function SaleForm({
                 disabled={!canSaveQuote || !!saved}
                 onClick={saveQuote}
               >
-                {saved ?? "Guardar presupuesto"}
+                {saved ?? (editQuote ? "Guardar cambios" : "Guardar presupuesto")}
               </button>
+              {editQuote && !saved && (
+                <button
+                  className={`${btn.ghost} w-full`}
+                  onClick={() => {
+                    setEditQuote(undefined);
+                    nav({ to: "/presupuestos" });
+                  }}
+                >
+                  Cancelar sin guardar
+                </button>
+              )}
             </div>
           </Card>
         )}

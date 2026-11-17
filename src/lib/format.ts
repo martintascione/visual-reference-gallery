@@ -53,3 +53,23 @@ export const daysBetween = (a: string, b: string) =>
   Math.round(
     (new Date(b + "T12:00:00").getTime() - new Date(a + "T12:00:00").getTime()) / 86400000,
   );
+
+/**
+ * Lee un número escrito a la argentina: punto para los miles y coma para los decimales.
+ * "1.234,50" → 1234.5 · "$ 12.000" → 12000 · "0,8" → 0.8 · "40%" → 40
+ */
+export function parseArNumber(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v !== "string") return undefined;
+  let s = v.replace(/[$\s%]|ARS/gi, "").trim();
+  if (!s || s === "-") return undefined;
+  const neg = /^-|^\(.*\)$/.test(s);
+  s = s.replace(/[()-]/g, "");
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = Number(s);
+  return Number.isFinite(n) ? (neg ? -n : n) : undefined;
+}
+
+/** Porcentaje con coma decimal: 28.6 → "28,6 %". */
+export const pctAr = (n: number, d = 1) => `${num(n, d)} %`;

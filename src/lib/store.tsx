@@ -53,6 +53,9 @@ type Actions = {
   setInvoicePending: (saleId: string, pending: boolean) => void;
   addQuote: (q: Omit<Quote, "id" | "number">) => Quote;
   updateQuote: (id: string, patch: Partial<Quote>) => void;
+  removeQuote: (id: string) => void;
+  /** Presupuesto que se está editando en Nueva venta. */
+  setEditQuote: (id?: string) => void;
   upsertClient: (c: Client) => void;
   payDue: (
     dueId: string,
@@ -76,6 +79,7 @@ type Actions = {
 type Ctx = {
   db: DB;
   pendingQuoteId: string | undefined;
+  editQuoteId: string | undefined;
   pendingAction: AssistantAction | undefined;
   session: Session | null;
   ready: boolean;
@@ -181,6 +185,7 @@ async function persistDiff(prev: DB, next: DB) {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDbState] = useState<DB>(() => emptyDB());
   const [pendingQuoteId, setPendingQuote] = useState<string | undefined>();
+  const [editQuoteId, setEditQuote] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<AssistantAction | undefined>();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
@@ -381,6 +386,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate((d) => {
           const q = d.quotes.find((x) => x.id === id);
           if (q) Object.assign(q, patch);
+          return d;
+        }),
+      removeQuote: (id) =>
+        mutate((d) => {
+          d.quotes = d.quotes.filter((x) => x.id !== id);
           return d;
         }),
       upsertClient: (c) =>
@@ -597,14 +607,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate(() => emptyDB());
       },
       setPendingQuote: (id) => setPendingQuote(id),
+      setEditQuote: (id) => setEditQuote(id),
       setPendingAction: (a) => setPendingAction(a),
     }),
     [mutate],
   );
 
   const value = useMemo(
-    () => ({ db, pendingQuoteId, pendingAction, session, ready, syncError, ...actions }),
-    [db, pendingQuoteId, pendingAction, session, ready, syncError, actions],
+    () => ({
+      db,
+      pendingQuoteId,
+      editQuoteId,
+      pendingAction,
+      session,
+      ready,
+      syncError,
+      ...actions,
+    }),
+    [db, pendingQuoteId, editQuoteId, pendingAction, session, ready, syncError, actions],
   );
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

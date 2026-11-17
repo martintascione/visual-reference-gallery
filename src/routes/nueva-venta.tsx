@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader, Segmented } from "@/components/ui-bits";
 import { SaleForm } from "@/components/sale-form";
 import { useStore } from "@/lib/store";
@@ -15,9 +15,23 @@ export const Route = createFileRoute("/nueva-venta")({
 });
 
 function NuevaVenta() {
-  const { db, pendingQuoteId } = useStore();
+  const { db, pendingQuoteId, editQuoteId, setEditQuote } = useStore();
+  // Al salir de la pantalla se descarta la edición pendiente.
+  useEffect(() => () => setEditQuote(undefined), [setEditQuote]);
   const fromQuote = db.quotes.find((q) => q.id === pendingQuoteId);
+  const editQuote = db.quotes.find((q) => q.id === editQuoteId);
   const [mode, setMode] = useState<"venta" | "presupuesto">("venta");
+
+  if (editQuote)
+    return (
+      <>
+        <PageHeader
+          title={`Editar presupuesto #${editQuote.number}`}
+          subtitle={`${editQuote.clientName || "Sin cliente"} · al guardar se actualiza el mismo presupuesto`}
+        />
+        <SaleForm key={"edit" + editQuote.id} mode="presupuesto" editQuote={editQuote} />
+      </>
+    );
 
   return (
     <>

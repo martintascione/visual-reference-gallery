@@ -223,7 +223,7 @@ function Reportes() {
                 className="flex h-full min-w-7 flex-1 flex-col items-center justify-end gap-1"
               >
                 <span className="text-[9px] text-muted-foreground">
-                  {d.v ? `$${(d.v / 1e6).toFixed(1)}M` : ""}
+                  {d.v ? `$${num(d.v / 1e6, 1)}M` : ""}
                 </span>
                 <div
                   className="relative w-full max-w-9 rounded-full bg-surface"

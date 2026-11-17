@@ -63,7 +63,7 @@ VENDER EN EL MOSTRADOR
 PRESUPUESTAR
 1. Nueva venta → arriba a la derecha elegí "Presupuesto". Se cargan productos igual que una venta.
 2. Días de validez (por defecto los de Configuración). Guardar.
-3. En Presupuestos: cada tarjeta tiene "PDF" (abre el presupuesto con el formato de la casa, logo y contacto, listo para guardar como PDF o imprimir), "WhatsApp" (manda el detalle al cliente), "Aceptado → venta" (abre Nueva venta ya cargada; al guardar queda aceptado), "Hablé, seguir en X días" (reprograma el recordatorio) y "Perdido" (pide el motivo). Los vencidos se pueden reactivar con la fecha de hoy. Cuando toca llamar, aparece en Avisos.
+3. En Presupuestos: cada tarjeta tiene "PDF" (abre el presupuesto con el formato de la casa, logo y contacto, listo para guardar como PDF o imprimir), "WhatsApp" (manda el detalle al cliente), "Aceptado → venta" (abre Nueva venta ya cargada; al guardar queda aceptado), "Hablé, seguir en X días" (reprograma el recordatorio) y "Perdido" (pide el motivo). "Editar" abre el presupuesto en Nueva venta para cambiar productos, cantidades, precios, cliente o flete y lo guarda con el mismo número (si estaba vencido o perdido, vuelve a quedar abierto; los aceptados no se editan). "Eliminar" lo borra para siempre, pidiendo confirmación (si ya se convirtió en venta, la venta no se toca). Los vencidos se pueden reactivar con la fecha de hoy. Cuando toca llamar, aparece en Avisos.
 
 CARGAR UN PRODUCTO (CATÁLOGO)
 1. Catálogo y precios → "Nuevo producto". Nombre y tipo: Piedra/árido, Laja (m²), Líquido (bidón), Unitario.

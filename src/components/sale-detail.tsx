@@ -53,7 +53,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
             <span>
               {qtyUnit(i.qty, i.unit)} {i.name}
               {i.discountPct > 0 && (
-                <span className="text-muted-foreground"> · −{i.discountPct}%</span>
+                <span className="text-muted-foreground"> · −{num(i.discountPct, 1)} %</span>
               )}
             </span>
             <span className="tabular-nums">{ars(i.subtotal)}</span>
@@ -69,7 +69,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
         )}
         {!!sale.discountPct && (
           <p className="flex justify-between text-muted-foreground">
-            <span>Bonificación {sale.discountPct}%</span>
+            <span>Bonificación {num(sale.discountPct ?? 0, 1)} %</span>
             <span className="tabular-nums">incluida</span>
           </p>
         )}

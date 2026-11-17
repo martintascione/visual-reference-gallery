@@ -54,7 +54,9 @@ const fmtWhen = (iso: string) => {
     : d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 };
 const fmtSize = (n: number) =>
-  n > 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
+  n > 1_000_000
+    ? `${(n / 1_000_000).toLocaleString("es-AR", { maximumFractionDigits: 1 })} MB`
+    : `${Math.max(1, Math.round(n / 1000))} KB`;
 
 type Compose = {
   to: string;

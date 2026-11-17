@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode, SelectHTMLAttributes, InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import { helpFor, sectionHelpFor } from "@/lib/help";
+import { parseArNumber } from "@/lib/format";
 
 /*
  * Piezas de interfaz compartidas. Reglas de consistencia:
@@ -258,6 +259,10 @@ export function NumberInput({
   prefix?: string | undefined;
   suffix?: string | undefined;
 }) {
+  // Se muestra con punto de miles y coma decimal; mientras se escribe se respeta lo tipeado.
+  const [draft, setDraft] = useState<string | null>(null);
+  const fmt = (n: number) =>
+    Number.isFinite(n) && n !== 0 ? n.toLocaleString("es-AR", { maximumFractionDigits: 4 }) : "";
   return (
     <span className={cn("relative block min-w-0", className)}>
       {prefix && (
@@ -266,13 +271,26 @@ export function NumberInput({
         </span>
       )}
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
+        autoComplete="off"
         {...rest}
-        value={Number.isFinite(value) && value !== 0 ? value : ""}
+        value={draft ?? fmt(value)}
         placeholder="0"
-        onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
-        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const t = e.target.value.replace(/[^\d.,-]/g, "");
+          setDraft(t);
+          onChange(parseArNumber(t) ?? 0);
+        }}
+        onFocus={(e) => {
+          setDraft(fmt(value));
+          const el = e.target;
+          requestAnimationFrame(() => el.select());
+        }}
+        onBlur={(e) => {
+          setDraft(null);
+          rest.onBlur?.(e);
+        }}
         className={cn(
           inputCls,
           "text-right tabular-nums",

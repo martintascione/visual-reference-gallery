@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Calculator, Pencil, Percent, Plus, Search } from "lucide-react";
 import type { Category, Product } from "@/lib/types";
 import { useStore } from "@/lib/store";
-import { ars, ars2, num } from "@/lib/format";
+import { ars, num, pctAr } from "@/lib/format";
 import { marginOnPrice, round, simplePrice, stoneCalc, stoneKgForArea } from "@/lib/pricing";
 import {
   Badge,
@@ -139,14 +139,18 @@ function Catalogo() {
                   </p>
                 </td>
                 <td className="text-right tabular-nums text-muted-foreground">
-                  {p.unit === "kg" ? ars2(p.cost) : ars(p.cost)}/{unitName[p.unit]}
+                  {p.unit === "kg"
+                    ? `${ars(p.cost * 1000)}/t`
+                    : `${ars(p.cost)}/${unitName[p.unit]}`}
                 </td>
                 <td className="text-right font-semibold tabular-nums">
-                  {p.unit === "kg" ? ars2(p.price) : ars(p.price)}/{unitName[p.unit]}
+                  {p.unit === "kg"
+                    ? `${ars(p.price * 1000)}/t`
+                    : `${ars(p.price)}/${unitName[p.unit]}`}
                 </td>
                 <td className="text-right tabular-nums">{p.bagPrice ? ars(p.bagPrice) : "—"}</td>
                 <td className="text-right tabular-nums">
-                  <Badge tone={m < db.settings.minMarginPct ? "danger" : "muted"}>{m}%</Badge>
+                  <Badge tone={m < db.settings.minMarginPct ? "danger" : "muted"}>{pctAr(m)}</Badge>
                 </td>
                 <td className="text-right tabular-nums">
                   {num(p.stock)} {unitName[p.unit]}
@@ -273,7 +277,7 @@ function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
           </button>
           <button className={btn.primary} disabled={targets.length === 0 || !pct} onClick={apply}>
             Aplicar {pct > 0 ? "+" : ""}
-            {pct}%
+            {num(pct, 1)}%
           </button>
         </div>
       </div>

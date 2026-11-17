@@ -29,6 +29,7 @@ import {
   fmtDate,
   fmtDateLong,
   fmtTime,
+  num,
   todayISO,
 } from "@/lib/format";
 import { qtyUnit } from "@/lib/pricing";
@@ -368,7 +369,7 @@ function Index() {
                     className="flex h-full flex-1 flex-col items-center justify-end gap-2"
                   >
                     <span className="text-[10px] tabular-nums text-muted-foreground">
-                      {w.v ? `$${(w.v / 1e6).toFixed(1)}M` : ""}
+                      {w.v ? `$${num(w.v / 1e6, 1)}M` : ""}
                     </span>
                     <div
                       className={`w-full max-w-10 rounded-full ${i === week.length - 1 ? "bg-primary" : "bg-surface"}`}

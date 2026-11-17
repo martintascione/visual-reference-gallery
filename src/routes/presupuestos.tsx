@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Check, FileDown, MessageCircle, Plus, X } from "lucide-react";
+import { Check, FileDown, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { openDocumentPdf } from "@/lib/quote-pdf";
 import type { Quote, QuoteStatus } from "@/lib/types";
 import { useStore } from "@/lib/store";
@@ -28,11 +28,17 @@ const statusLabel: Record<QuoteStatus, string> = {
 };
 
 function Presupuestos() {
-  const { db, updateQuote, setPendingQuote } = useStore();
+  const { db, updateQuote, removeQuote, setPendingQuote, setEditQuote } = useStore();
   const nav = useNavigate();
   const today = todayISO();
   const [tab, setTab] = useState<"abiertos" | "aceptados" | "cerrados">("abiertos");
   const [lost, setLost] = useState<Quote | null>(null);
+  const [toDelete, setToDelete] = useState<Quote | null>(null);
+  const editQ = (q: Quote) => {
+    setPendingQuote(undefined);
+    setEditQuote(q.id);
+    nav({ to: "/nueva-venta" });
+  };
   const [reason, setReason] = useState("");
 
   const list = useMemo(() => {
@@ -209,18 +215,40 @@ function Presupuestos() {
                       Hablé, seguir en {db.settings.followUpDays} d
                     </button>
                   )}
+                  <button className={btn.ghost} onClick={() => editQ(q)}>
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
                   <button className={btn.ghost} onClick={() => setLost(q)}>
                     <X className="h-3.5 w-3.5" /> Perdido
+                  </button>
+                  <button
+                    className={`${btn.ghost} hover:text-danger-soft-foreground`}
+                    onClick={() => setToDelete(q)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Eliminar
                   </button>
                 </div>
               )}
               {tab !== "abiertos" && (
-                <button
-                  className={`${btn.ghost} self-start`}
-                  onClick={() => openDocumentPdf(db, q, "presupuesto")}
-                >
-                  <FileDown className="h-3.5 w-3.5" /> PDF
-                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    className={btn.ghost}
+                    onClick={() => openDocumentPdf(db, q, "presupuesto")}
+                  >
+                    <FileDown className="h-3.5 w-3.5" /> PDF
+                  </button>
+                  {q.status !== "aceptado" && (
+                    <button className={btn.ghost} onClick={() => editQ(q)}>
+                      <Pencil className="h-3.5 w-3.5" /> Editar
+                    </button>
+                  )}
+                  <button
+                    className={`${btn.ghost} hover:text-danger-soft-foreground`}
+                    onClick={() => setToDelete(q)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                  </button>
+                </div>
               )}
               {tab === "cerrados" && q.status !== "aceptado" && (
                 <button
@@ -254,6 +282,35 @@ function Presupuestos() {
           }
         />
       )}
+
+      <Modal
+        open={!!toDelete}
+        onClose={() => setToDelete(null)}
+        title={`Eliminar presupuesto #${toDelete?.number ?? ""}`}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Se borra el presupuesto de {toDelete?.clientName || "consumidor final"} por{" "}
+            {ars(toDelete?.total ?? 0)}. No se puede deshacer.
+            {toDelete?.status === "aceptado" &&
+              " La venta que se hizo a partir de este presupuesto no se toca: sigue en Ventas."}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button className={btn.soft} onClick={() => setToDelete(null)}>
+              Cancelar
+            </button>
+            <button
+              className={`${btn.danger} h-10 px-5 text-sm`}
+              onClick={() => {
+                if (toDelete) removeQuote(toDelete.id);
+                setToDelete(null);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Eliminar
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={!!lost}

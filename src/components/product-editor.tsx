@@ -9,7 +9,7 @@ import {
   stoneCalc,
   unitLabel,
 } from "@/lib/pricing";
-import { ars, ars2, uid } from "@/lib/format";
+import { ars, ars2, pctAr, uid } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import {
   Badge,
@@ -306,7 +306,7 @@ export function ProductEditor({
                 </p>
                 <p className="flex justify-between">
                   <span className="opacity-70">Margen sobre el precio</span>
-                  <span className="font-semibold tabular-nums">{calc.marginOnPrice}%</span>
+                  <span className="font-semibold tabular-nums">{pctAr(calc.marginOnPrice)}</span>
                 </p>
               </div>
             </div>
@@ -361,7 +361,7 @@ export function ProductEditor({
               </span>
               <span>
                 Margen sobre el precio{" "}
-                <b className="text-foreground">{marginOnPrice(p.cost, p.price)}%</b>
+                <b className="text-foreground">{pctAr(marginOnPrice(p.cost, p.price))}</b>
               </span>
               {p.category === "liquido" && !!p.liters && (
                 <span>
@@ -374,8 +374,8 @@ export function ProductEditor({
 
         {lowMargin && (
           <p className="rounded-2xl bg-danger-soft px-4 py-2.5 text-xs text-danger-soft-foreground">
-            El margen sobre el precio queda por debajo del mínimo configurado ({s.minMarginPct}%).
-            Se puede guardar igual.
+            El margen sobre el precio queda por debajo del mínimo configurado (
+            {pctAr(s.minMarginPct)}). Se puede guardar igual.
           </p>
         )}
 

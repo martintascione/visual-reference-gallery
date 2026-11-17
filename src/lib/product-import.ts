@@ -2,7 +2,7 @@
 // La IA propone; acá se calcula todo con las mismas reglas del catálogo y se guarda solo al confirmar.
 import type { Category, DB, Product, StoneCost } from "./types";
 import { markup, round, stoneCalc } from "./pricing";
-import { uid } from "./format";
+import { parseArNumber, uid } from "./format";
 
 export type ImportUnit = "t" | "bolson" | "kg" | "m2" | "u";
 
@@ -33,22 +33,7 @@ export type ImportRow = {
   product?: Product | undefined;
 };
 
-/**
- * Convierte un número escrito a la argentina: el punto separa miles y la coma los decimales.
- * "1.234,50" → 1234.5 · "$ 12.000" → 12000 · "0,8" → 0.8 · "40%" → 40 · 1234.5 (número) → 1234.5
- */
-export function parseArNumber(v: unknown): number | undefined {
-  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
-  if (typeof v !== "string") return undefined;
-  let s = v.replace(/[$\s%]|ARS/gi, "").trim();
-  if (!s || s === "-") return undefined;
-  const neg = /^-|^\(.*\)$/.test(s);
-  s = s.replace(/[()-]/g, "");
-  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
-  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
-  const n = Number(s);
-  return Number.isFinite(n) ? (neg ? -n : n) : undefined;
-}
+export { parseArNumber };
 
 const pct = (n: number) => `${round(n, 1).toLocaleString("es-AR")} %`;
 

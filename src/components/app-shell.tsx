@@ -38,7 +38,7 @@ const nav = [
   { to: "/correo", label: "Casilla", icon: Mail },
   { to: "/catalogo", label: "Catálogo y precios", icon: Tags },
   { to: "/stock", label: "Stock", icon: Package },
-  { to: "/clientes", label: "Clientes y cuentas corrientes", icon: Users },
+  { to: "/clientes", label: "Clientes y cuentas corrientes", short: "Clientes", icon: Users },
   { to: "/caja", label: "Caja y bancos", icon: Landmark },
   { to: "/gastos", label: "Gastos y débitos", icon: Receipt },
   { to: "/cierre", label: "Cierre del día", icon: Lock },
@@ -132,32 +132,42 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="mx-auto flex max-w-[1480px] gap-5 px-4 pb-28 pt-5 md:px-6 md:pb-8">
         {/* Menú lateral */}
-        <aside className="sticky top-[92px] z-30 hidden h-[calc(100vh-112px)] w-11 shrink-0 flex-col items-center md:flex">
-          <nav className="flex flex-col gap-3">
-            {nav.map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                className={`group relative ${circle}`}
-                activeProps={{ className: activeCircle }}
-                activeOptions={{ exact: to === "/" }}
-                aria-label={label}
-              >
-                <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
-                <Tip label={label} />
-              </Link>
-            ))}
-          </nav>
-          <div className="mt-auto flex flex-col items-center gap-3">
+        {/* Menú lateral: en tablet solo íconos (con el nombre al pasar el mouse); en computadora, ícono + nombre. */}
+        <aside className="sticky top-[92px] z-30 hidden max-h-[calc(100vh-112px)] w-11 shrink-0 flex-col md:flex lg:w-[212px]">
+          <nav className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:gap-1 lg:rounded-3xl lg:bg-card lg:p-2 lg:shadow-soft">
+            {nav.map((item) => {
+              const { to, label, icon: Icon } = item;
+              const short = "short" in item ? item.short : label;
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`group relative ${circle} lg:flex lg:h-10 lg:w-full lg:items-center lg:justify-start lg:gap-3 lg:px-3 lg:shadow-none lg:bg-transparent`}
+                  activeProps={{ className: `${activeCircle} lg:!bg-primary` }}
+                  activeOptions={{ exact: to === "/" }}
+                  aria-label={label}
+                  title={label}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.6} />
+                  <span className="hidden truncate text-sm font-medium lg:block">{short}</span>
+                  <span className="lg:hidden">
+                    <Tip label={label} />
+                  </span>
+                </Link>
+              );
+            })}
             <button
               onClick={() => supabase.auth.signOut()}
-              className={`group relative ${circle}`}
+              className={`group relative ${circle} mt-3 lg:mt-2 lg:flex lg:h-10 lg:w-full lg:items-center lg:justify-start lg:gap-3 lg:px-3 lg:shadow-none lg:bg-transparent lg:text-muted-foreground`}
               aria-label="Cerrar sesión"
             >
-              <LogOut className="h-[18px] w-[18px]" strokeWidth={1.6} />
-              <Tip label="Cerrar sesión" />
+              <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.6} />
+              <span className="hidden text-sm font-medium lg:block">Cerrar sesión</span>
+              <span className="lg:hidden">
+                <Tip label="Cerrar sesión" />
+              </span>
             </button>
-          </div>
+          </nav>
         </aside>
 
         <main className="min-w-0 flex-1" data-tour="page">
