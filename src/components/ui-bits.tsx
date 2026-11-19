@@ -1,7 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight, CalendarDays, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode, SelectHTMLAttributes, InputHTMLAttributes } from "react";
+import type { ChangeEvent, ReactNode, SelectHTMLAttributes, InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import { helpFor, sectionHelpFor } from "@/lib/help";
 import { parseArNumber } from "@/lib/format";
@@ -242,7 +242,109 @@ export const inputCls =
   "h-10 w-full min-w-0 rounded-2xl border border-transparent bg-surface px-3.5 text-sm text-foreground outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring disabled:opacity-60 [.on-surface_&]:border-border [.on-surface_&]:bg-card";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+  if (props.type === "date") return <DateInput {...props} />;
   return <input {...props} className={cn(inputCls, props.className)} />;
+}
+
+const isoToAr = (iso: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+};
+
+/** "19/11/2026" (o "19/11/26") → "2026-11-19". Devuelve null si no es una fecha válida. */
+const arToIso = (txt: string, allowShortYear: boolean) => {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(txt.trim());
+  if (!m) return null;
+  if (m[3]!.length === 2 && !allowShortYear) return null;
+  const d = Number(m[1]);
+  const mo = Number(m[2]);
+  const y = m[3]!.length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  if (y < 1900 || mo < 1 || mo > 12 || d < 1 || d > new Date(y, mo, 0).getDate()) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+};
+
+/**
+ * Fecha siempre en día/mes/año, sin depender del idioma de la computadora
+ * (el campo de fecha del navegador en algunas máquinas muestra mes/día/año).
+ * Se puede escribir o elegir en el calendario. Entrega el valor como AAAA-MM-DD.
+ */
+function DateInput({
+  value,
+  onChange,
+  className,
+  type: _type,
+  ...rest
+}: InputHTMLAttributes<HTMLInputElement>) {
+  const iso = typeof value === "string" ? value.slice(0, 10) : "";
+  const [draft, setDraft] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const emit = (v: string) => onChange?.({ target: { value: v } } as ChangeEvent<HTMLInputElement>);
+  return (
+    <div className="relative w-full min-w-0">
+      <input
+        {...rest}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="dd/mm/aaaa"
+        maxLength={10}
+        value={draft ?? isoToAr(iso)}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const prev = draft ?? isoToAr(iso);
+          let t = e.target.value.replace(/[^\d/]/g, "").slice(0, 10);
+          // Al escribir, la barra se agrega sola después del día y del mes.
+          if (t.length > prev.length && (/^\d{2}$/.test(t) || /^\d{1,2}\/\d{2}$/.test(t))) t += "/";
+          setDraft(t);
+          if (t === "") emit("");
+          else {
+            const v = arToIso(t, false);
+            if (v) emit(v);
+          }
+        }}
+        onBlur={() => {
+          if (draft !== null) {
+            const v = arToIso(draft, true);
+            if (v && v !== iso) emit(v);
+          }
+          setDraft(null);
+        }}
+        className={cn(inputCls, "pr-9 tabular-nums", className)}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Abrir calendario"
+        disabled={rest.disabled}
+        onClick={() => {
+          const el = picker.current;
+          if (!el) return;
+          try {
+            el.showPicker();
+          } catch {
+            el.focus();
+          }
+        }}
+        className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <CalendarDays className="h-4 w-4" strokeWidth={1.6} />
+      </button>
+      <input
+        ref={picker}
+        type="date"
+        tabIndex={-1}
+        aria-hidden
+        value={iso}
+        min={rest.min}
+        max={rest.max}
+        onChange={(e) => {
+          setDraft(null);
+          emit(e.target.value);
+        }}
+        className="pointer-events-none absolute bottom-0 right-0 h-px w-px opacity-0"
+      />
+    </div>
+  );
 }
 
 /** Campo numérico con prefijo/sufijo (ej. "$" … "/t", "%"). Vacío muestra 0 en gris. */
