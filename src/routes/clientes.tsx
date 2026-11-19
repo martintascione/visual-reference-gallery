@@ -49,6 +49,7 @@ function Clientes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction]);
   const today = todayISO();
+  const [debt, setDebt] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -69,10 +70,14 @@ function Clientes() {
   return (
     <>
       <PageHeader title="Clientes y cuentas corrientes" subtitle={`${db.clients.length} clientes`}>
+        <button className={btn.soft} onClick={() => setDebt(true)}>
+          <Wallet className="h-4 w-4" strokeWidth={1.6} /> Cargar cuenta corriente
+        </button>
         <button className={btn.primary} onClick={() => setEdit("new")}>
           <Plus className="h-4 w-4" /> Nuevo cliente
         </button>
       </PageHeader>
+      <DebtModal open={debt} onClose={() => setDebt(false)} />
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         <Stat
           label="Total a cobrar"
@@ -267,7 +272,7 @@ function Account({ client }: { client: Client }) {
             <div>
               <p className="font-medium">
                 Cuota {d.n}/{d.of}
-                {sale ? ` · venta #${sale.number}` : ""}
+                {sale ? ` · venta #${sale.number}` : d.concept ? ` · ${d.concept}` : ""}
               </p>
               <p className={overdue ? "text-danger-soft-foreground" : "text-muted-foreground"}>
                 {overdue ? `Venció el ${fmtDate(d.dueDate)}` : `Vence el ${fmtDate(d.dueDate)}`}
@@ -471,6 +476,131 @@ function ClientEditor({
           onClick={() => onSave({ ...c, name: c.name.trim() })}
         >
           Guardar
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Carga rápida de una cuenta corriente: los datos mínimos del cliente y cuánto debe. */
+function DebtModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { db, upsertClient, addDebt } = useStore();
+  const blank = {
+    name: "",
+    phone: "",
+    email: "",
+    cuit: "",
+    amount: 0,
+    dues: 1,
+    first: todayISO(),
+    concept: "",
+  };
+  const [f, setF] = useState(blank);
+  const norm = (t: string) => t.trim().toLowerCase();
+  const digits = (t: string) => t.replace(/\D/g, "");
+  // Si el nombre o el CUIT coinciden con un cliente, se usa ese (y se completan sus datos).
+  const match =
+    db.clients.find((c) => f.name.trim() && norm(c.name) === norm(f.name)) ??
+    db.clients.find((c) => digits(f.cuit).length === 11 && digits(c.cuit ?? "") === digits(f.cuit));
+  const pick = (name: string) => {
+    const c = db.clients.find((x) => norm(x.name) === norm(name));
+    setF((x) => ({
+      ...x,
+      name,
+      ...(c
+        ? { phone: c.phone ?? x.phone, email: c.email ?? x.email, cuit: c.cuit ?? x.cuit }
+        : {}),
+    }));
+  };
+  const ok = f.name.trim().length > 1 && f.amount > 0;
+  const save = () => {
+    const id = match?.id ?? "c" + Date.now().toString(36);
+    upsertClient({
+      ...(match ?? { id, name: f.name.trim(), creditLimit: 0 }),
+      phone: f.phone.trim() || match?.phone,
+      email: f.email.trim() || match?.email,
+      cuit: f.cuit.trim() || match?.cuit,
+    });
+    addDebt(id, f.amount, f.dues, f.first, f.concept.trim());
+    setF(blank);
+    onClose();
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Cargar cuenta corriente"
+      subtitle={
+        match
+          ? `Se suma a la cuenta de ${match.name}`
+          : f.name.trim().length > 1
+            ? "Cliente nuevo: se guarda solo al cargar"
+            : "Escribí el cliente y cuánto debe"
+      }
+    >
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+        <Field label="Nombre del cliente" className="col-span-2">
+          <Input
+            list="clientes-cc"
+            value={f.name}
+            onChange={(e) => pick(e.target.value)}
+            placeholder="Nombre o razón social"
+            autoFocus
+          />
+          <datalist id="clientes-cc">
+            {db.clients.map((c) => (
+              <option key={c.id} value={c.name} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="WhatsApp">
+          <Input
+            value={f.phone}
+            onChange={(e) => setF({ ...f, phone: e.target.value })}
+            inputMode="tel"
+          />
+        </Field>
+        <Field label="Email">
+          <Input
+            value={f.email}
+            onChange={(e) => setF({ ...f, email: e.target.value })}
+            type="email"
+          />
+        </Field>
+        <Field label="CUIT">
+          <Input
+            value={f.cuit}
+            onChange={(e) => setF({ ...f, cuit: e.target.value })}
+            inputMode="numeric"
+          />
+        </Field>
+        <Field label="Monto que debe">
+          <NumberInput value={f.amount} onChange={(v) => setF({ ...f, amount: v })} prefix="$" />
+        </Field>
+        <Field label="Cuotas mensuales">
+          <NumberInput value={f.dues} onChange={(v) => setF({ ...f, dues: Math.max(1, v) })} />
+        </Field>
+        <Field label="Primer vencimiento">
+          <Input
+            type="date"
+            value={f.first}
+            onChange={(e) => setF({ ...f, first: e.target.value })}
+          />
+        </Field>
+        <Field label="Detalle (opcional)" className="col-span-2">
+          <Input
+            value={f.concept}
+            onChange={(e) => setF({ ...f, concept: e.target.value })}
+            placeholder="Ej: saldo anterior, pedido de octubre"
+          />
+        </Field>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={onClose}>
+          Cancelar
+        </button>
+        <button className={btn.primary} disabled={!ok} onClick={save}>
+          Cargar {f.amount > 0 ? ars(f.amount) : ""}
         </button>
       </div>
     </Modal>

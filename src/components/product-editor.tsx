@@ -15,6 +15,7 @@ import {
   Badge,
   Field,
   FormSection,
+  Toggle,
   HelpTip,
   Input,
   Modal,
@@ -39,6 +40,7 @@ type Defaults = {
   ivaPct: number;
   bigBagKg?: number | undefined;
   bigBagPackaging?: number | undefined;
+  baseExpensePerTon?: number | undefined;
   defaultMarginPct?: number | undefined;
 };
 
@@ -68,6 +70,7 @@ export function blankProduct(cat: Category, s: Defaults): Product {
       marginPct: s.defaultMarginPct ?? 40,
       bigBagKg: s.bigBagKg ?? 1000,
       bigBagPackaging: s.bigBagPackaging ?? 0,
+      basePerTon: s.baseExpensePerTon ?? 0,
     };
   }
   if (cat === "liquido") base.liters = 10;
@@ -89,6 +92,7 @@ export function ProductEditor({
   const s = db.settings;
   const [p, setP] = useState<Product>(() => product ?? blankProduct("piedra", s));
   const [margin, setMargin] = useState(s.defaultMarginPct ?? 40);
+  const [more, setMore] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -199,7 +203,7 @@ export function ProductEditor({
               <div className="grid grid-cols-2 gap-x-3 gap-y-4">
                 <Field label="Precio del proveedor" className="col-span-2">
                   <NumberInput
-                    value={p.stoneCost.purchasePerTon}
+                    value={p.stoneCost.purchasePerTon ?? 0}
                     onChange={(v) => setSC({ purchasePerTon: v })}
                     prefix="$"
                     suffix="/ t"
@@ -208,7 +212,7 @@ export function ProductEditor({
                 </Field>
                 <Field label="Flete">
                   <NumberInput
-                    value={p.stoneCost.freightPerTon}
+                    value={p.stoneCost.freightPerTon ?? 0}
                     onChange={(v) => setSC({ freightPerTon: v })}
                     prefix="$"
                     suffix="/ t"
@@ -216,30 +220,20 @@ export function ProductEditor({
                 </Field>
                 <Field label="Descarga">
                   <NumberInput
-                    value={p.stoneCost.unloadPerTon}
+                    value={p.stoneCost.unloadPerTon ?? 0}
                     onChange={(v) => setSC({ unloadPerTon: v })}
                     prefix="$"
                     suffix="/ t"
                   />
                 </Field>
-                <Field label="Mano de obra (opcional)">
+                <Field label="Base de gastos">
                   <NumberInput
-                    value={p.stoneCost.laborPerTon}
-                    onChange={(v) => setSC({ laborPerTon: v })}
+                    value={p.stoneCost.basePerTon ?? 0}
+                    onChange={(v) => setSC({ basePerTon: v })}
                     prefix="$"
                     suffix="/ t"
                   />
                 </Field>
-                <Field label="Gastos extras (opcional)">
-                  <NumberInput
-                    value={p.stoneCost.extrasPerTon}
-                    onChange={(v) => setSC({ extrasPerTon: v })}
-                    prefix="$"
-                    suffix="/ t"
-                  />
-                </Field>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-x-3 border-t border-border pt-4">
                 <Field label="Margen de ganancia" hint="Sobre el costo">
                   <NumberInput
                     value={p.stoneCost.marginPct}
@@ -247,40 +241,100 @@ export function ProductEditor({
                     suffix="%"
                   />
                 </Field>
-                <Field label="Kg por bolsón">
-                  <NumberInput
-                    value={p.bagKg ?? s.bagKg}
-                    onChange={(v) => set({ bagKg: v || s.bagKg })}
-                    suffix="kg"
-                  />
-                </Field>
-                <Field label="Embalaje por bolsón" hint="Solo suma al bolsón">
-                  <NumberInput
-                    value={p.stoneCost.packagingPerBag}
-                    onChange={(v) => setSC({ packagingPerBag: v })}
-                    prefix="$"
-                  />
-                </Field>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-x-3">
-                <span className="self-center px-1 text-[11px] font-medium text-muted-foreground">
-                  Bolsón grande
-                </span>
-                <Field label="Kg por bolsón grande">
-                  <NumberInput
-                    value={p.stoneCost.bigBagKg ?? s.bigBagKg ?? 1000}
-                    onChange={(v) => setSC({ bigBagKg: v || (s.bigBagKg ?? 1000) })}
-                    suffix="kg"
-                  />
-                </Field>
-                <Field label="Embalaje bolsón grande" hint="Solo suma al bolsón grande">
-                  <NumberInput
-                    value={p.stoneCost.bigBagPackaging ?? 0}
-                    onChange={(v) => setSC({ bigBagPackaging: v })}
-                    prefix="$"
-                  />
-                </Field>
-              </div>
+              <button
+                type="button"
+                className="mt-4 flex w-full items-center justify-between border-t border-border pt-3 text-xs font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => setMore((v) => !v)}
+              >
+                <span>Más costos y medidas (palet, Sampi, desperdicio, bolsas)</span>
+                <span>{more ? "Ocultar" : "Mostrar"}</span>
+              </button>
+              {more && (
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3">
+                  <Field label="Palet">
+                    <NumberInput
+                      value={p.stoneCost.palletPerTon ?? 0}
+                      onChange={(v) => setSC({ palletPerTon: v })}
+                      prefix="$"
+                      suffix="/ t"
+                    />
+                  </Field>
+                  <Field label="Sampi">
+                    <NumberInput
+                      value={p.stoneCost.sampiPerTon ?? 0}
+                      onChange={(v) => setSC({ sampiPerTon: v })}
+                      prefix="$"
+                      suffix="/ t"
+                    />
+                  </Field>
+                  <Field label="Mano de obra">
+                    <NumberInput
+                      value={p.stoneCost.laborPerTon ?? 0}
+                      onChange={(v) => setSC({ laborPerTon: v })}
+                      prefix="$"
+                      suffix="/ t"
+                    />
+                  </Field>
+                  <Field label="Otros gastos">
+                    <NumberInput
+                      value={p.stoneCost.extrasPerTon ?? 0}
+                      onChange={(v) => setSC({ extrasPerTon: v })}
+                      prefix="$"
+                      suffix="/ t"
+                    />
+                  </Field>
+                  <Field label="Desperdicio">
+                    <NumberInput
+                      value={p.stoneCost.wastePct ?? 0}
+                      onChange={(v) => setSC({ wastePct: Math.min(90, Math.max(0, v)) })}
+                      suffix="%"
+                    />
+                  </Field>
+                  <Field label="Kg por bolsa">
+                    <NumberInput
+                      value={p.bagKg ?? s.bagKg}
+                      onChange={(v) => set({ bagKg: v || s.bagKg })}
+                      suffix="kg"
+                    />
+                  </Field>
+                  <Field label="Embalaje por bolsa">
+                    <NumberInput
+                      value={p.stoneCost.packagingPerBag}
+                      onChange={(v) => setSC({ packagingPerBag: v })}
+                      prefix="$"
+                    />
+                  </Field>
+                  <Field label="Kg por bolsón">
+                    <NumberInput
+                      value={p.stoneCost.bigBagKg ?? s.bigBagKg ?? 1000}
+                      onChange={(v) => setSC({ bigBagKg: v || (s.bigBagKg ?? 1000) })}
+                      suffix="kg"
+                    />
+                  </Field>
+                  <Field label="Embalaje por bolsón">
+                    <NumberInput
+                      value={p.stoneCost.bigBagPackaging ?? 0}
+                      onChange={(v) => setSC({ bigBagPackaging: v })}
+                      prefix="$"
+                    />
+                  </Field>
+                  <Field label="Segundo bolsón" hint="Ej. 1.200 kg. Vacío = no se vende">
+                    <NumberInput
+                      value={p.stoneCost.bigBag2Kg ?? 0}
+                      onChange={(v) => setSC({ bigBag2Kg: v || undefined })}
+                      suffix="kg"
+                    />
+                  </Field>
+                  <div className="col-span-full">
+                    <Toggle
+                      checked={p.stoneCost.bagSamePerKg !== false}
+                      onChange={(v) => setSC({ bagSamePerKg: v })}
+                      label="Bolsa y bolsón al mismo precio por kilo que la tonelada"
+                    />
+                  </div>
+                </div>
+              )}
             </FormSection>
 
             <div className="flex flex-col rounded-3xl bg-primary p-4 text-primary-foreground">
@@ -297,25 +351,36 @@ export function ProductEditor({
                 {[
                   { l: "Por kg", c: ars2(calc.costKg), v: ars2(calc.priceKg) },
                   {
-                    l: `Bolsón de ${p.bagKg ?? s.bagKg} kg`,
+                    l: `Bolsa de ${(p.bagKg ?? s.bagKg).toLocaleString("es-AR")} kg`,
                     c: ars(calc.costBag),
                     v: ars(calc.priceBag),
                     big: true,
                   },
                   {
-                    l: `Bolsón grande de ${calc.bigKg.toLocaleString("es-AR")} kg`,
+                    l: `Bolsón de ${calc.bigKg.toLocaleString("es-AR")} kg`,
                     c: ars(calc.costBig),
                     v: ars(calc.priceBig),
                   },
+                  ...(calc.big2Kg > 0
+                    ? [
+                        {
+                          l: `Bolsón de ${calc.big2Kg.toLocaleString("es-AR")} kg`,
+                          c: ars(calc.costBig2),
+                          v: ars(calc.priceBig2),
+                        },
+                      ]
+                    : []),
                   { l: "Por tonelada", c: ars(calc.costTon), v: ars(calc.priceTon) },
                 ].map((r) => (
                   <div
                     key={r.l}
-                    className={`rounded-2xl bg-primary-foreground/10 px-3 py-2 ${r.big ? "ring-1 ring-primary-foreground/30" : ""}`}
+                    className={`rounded-2xl bg-primary-foreground/10 px-3 py-2 ${"big" in r && r.big ? "ring-1 ring-primary-foreground/30" : ""}`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-xs opacity-80">{r.l}</span>
-                      <span className={`font-bold tabular-nums ${r.big ? "text-xl" : "text-base"}`}>
+                      <span
+                        className={`font-bold tabular-nums ${"big" in r && r.big ? "text-xl" : "text-base"}`}
+                      >
                         {r.v}
                       </span>
                     </div>
@@ -325,7 +390,7 @@ export function ProductEditor({
               </div>
               <div className="mt-auto space-y-1 pt-4 text-xs">
                 <p className="flex justify-between">
-                  <span className="opacity-70">Ganás por bolsón</span>
+                  <span className="opacity-70">Ganás por bolsa</span>
                   <span className="font-semibold tabular-nums">{ars(calc.gainBag)}</span>
                 </p>
                 <p className="flex justify-between">
@@ -343,7 +408,7 @@ export function ProductEditor({
           <FormSection
             title={`Costo y precio · por ${p.category === "laja" ? "m²" : p.category === "liquido" ? "bidón" : "unidad"}`}
           >
-            <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-5">
               {p.category === "liquido" && (
                 <Field label="Litros por bidón">
                   <NumberInput
@@ -355,8 +420,21 @@ export function ProductEditor({
               )}
               <Field label="Costo">
                 <NumberInput
-                  value={p.cost}
-                  onChange={(v) => set({ cost: v, price: simplePrice(v, margin) })}
+                  value={p.cost - (p.freight ?? 0)}
+                  onChange={(v) => {
+                    const cost = v + (p.freight ?? 0);
+                    set({ cost, price: simplePrice(cost, margin) });
+                  }}
+                  prefix="$"
+                />
+              </Field>
+              <Field label="Flete por unidad" hint="Se suma al costo">
+                <NumberInput
+                  value={p.freight ?? 0}
+                  onChange={(v) => {
+                    const cost = p.cost - (p.freight ?? 0) + v;
+                    set({ freight: v || undefined, cost, price: simplePrice(cost, margin) });
+                  }}
                   prefix="$"
                 />
               </Field>

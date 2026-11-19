@@ -28,6 +28,10 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   const base = itemsTotal - discount + flete;
   const iva = doc.withIva ? Math.round(base * (s.ivaPct / 100)) : 0;
   const total = base + iva;
+  // Con IVA: los precios salen con el IVA adentro y un solo total. Solo se discrimina
+  // cuando el cliente es responsable inscripto (le corresponde Factura A).
+  const incl = doc.withIva && client?.ivaCategory !== "Responsable inscripto";
+  const k = incl ? 1 + s.ivaPct / 100 : 1;
   const validUntil = "validUntil" in doc ? doc.validUntil : undefined;
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const logoUrl = new URL(logo, window.location.origin).href;
@@ -37,13 +41,13 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
       (i) => `<tr>
         <td class="c">${esc(qtyUnit(i.qty, i.unit))}</td>
         <td><span class="name">${esc(i.name)}</span>${i.discountPct ? ` <span class="muted">(−${i.discountPct}% por cantidad)</span>` : ""}</td>
-        <td class="r">${ars2(i.unitPrice)}</td>
-        <td class="r">${ars2(i.subtotal)}</td>
+        <td class="r">${ars2(i.unitPrice * k)}</td>
+        <td class="r">${ars2(i.subtotal * k)}</td>
       </tr>`,
     )
     .join("");
   const fleteRow = doc.delivery
-    ? `<tr><td class="c">1</td><td><span class="name">Flete a domicilio</span> · ${esc(doc.delivery.zone)}${doc.delivery.address ? " · " + esc(doc.delivery.address) : ""}</td><td class="r">${ars2(fleteSolo)}</td><td class="r">${ars2(fleteSolo)}</td></tr>${descarga ? `<tr><td class="c">1</td><td><span class="name">Descarga</span></td><td class="r">${ars2(descarga)}</td><td class="r">${ars2(descarga)}</td></tr>` : ""}`
+    ? `<tr><td class="c">1</td><td><span class="name">Flete a domicilio</span> · ${esc(doc.delivery.zone)}${doc.delivery.address ? " · " + esc(doc.delivery.address) : ""}</td><td class="r">${ars2(fleteSolo * k)}</td><td class="r">${ars2(fleteSolo * k)}</td></tr>${descarga ? `<tr><td class="c">1</td><td><span class="name">Descarga</span></td><td class="r">${ars2(descarga * k)}</td><td class="r">${ars2(descarga * k)}</td></tr>` : ""}`
     : "";
 
   const ico = {
@@ -125,7 +129,7 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
     <div class="card">
       <div class="k">Condiciones</div>
       <div class="kv"><span>Moneda</span><span>Pesos argentinos</span></div>
-      <div class="kv"><span>IVA</span><span>${doc.withIva ? `${s.ivaPct}% discriminado` : "Precios finales"}</span></div>
+      <div class="kv"><span>IVA</span><span>${incl ? "Incluido en los precios" : doc.withIva ? `${s.ivaPct}% discriminado` : "Precios finales"}</span></div>
       ${discountPct ? `<div class="kv"><span>Bonificación</span><span>${discountPct}%</span></div>` : ""}
       ${doc.delivery ? `<div class="kv"><span>Entrega</span><span>A domicilio</span></div>` : `<div class="kv"><span>Entrega</span><span>Retira en el local</span></div>`}
     </div>
@@ -142,9 +146,9 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
       ${kind === "presupuesto" ? `<div style="margin-top:${doc.note ? "10px" : "0"}">${esc(s.quoteFooter ?? "Saludos cordiales, esperamos una pronta respuesta.")}</div>` : `<div>Gracias por su compra.</div>`}
     </div>
     <div class="totals">
-      <div class="kv"><span>Subtotal</span><span>${ars2(itemsTotal + flete)}</span></div>
-      ${discount ? `<div class="kv"><span>Bonificación ${discountPct}%</span><span>− ${ars2(discount)}</span></div>` : ""}
-      ${doc.withIva ? `<div class="kv"><span>IVA ${s.ivaPct}%</span><span>${ars2(iva)}</span></div>` : ""}
+      <div class="kv"><span>Subtotal</span><span>${ars2((itemsTotal + flete) * k)}</span></div>
+      ${discount ? `<div class="kv"><span>Bonificación ${discountPct}%</span><span>− ${ars2(discount * k)}</span></div>` : ""}
+      ${doc.withIva && !incl ? `<div class="kv"><span>IVA ${s.ivaPct}%</span><span>${ars2(iva)}</span></div>` : ""}
       <div class="kv total"><span>Total</span><span>${ars2(total)}</span></div>
     </div>
   </div>

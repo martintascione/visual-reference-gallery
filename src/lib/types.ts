@@ -4,7 +4,7 @@ export type Bank = "Caja" | "BBVA" | "Provincia";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
 /** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */
-export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "m2" | "u";
+export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "bigbag2" | "m2" | "u";
 
 export type QtyDiscount = { minQty: number; unit: SaleUnit; pct: number };
 
@@ -20,6 +20,16 @@ export type StoneCost = {
   /** Bolsón grande (big bag): kg y embalaje por bolsón. */
   bigBagKg?: number | undefined;
   bigBagPackaging?: number | undefined;
+  /** Segundo tamaño de bolsón (ej. 1.200 kg). 0 o vacío = no se vende. */
+  bigBag2Kg?: number | undefined;
+  /** Base fija por tonelada para cubrir gastos generales. */
+  basePerTon?: number | undefined;
+  palletPerTon?: number | undefined;
+  sampiPerTon?: number | undefined;
+  /** Desperdicio o merma, en %: encarece el costo de lo que sí se vende. */
+  wastePct?: number | undefined;
+  /** Bolsa y bolsones al mismo precio por kilo que la tonelada (por defecto, sí). */
+  bagSamePerKg?: boolean | undefined;
 };
 
 export type Product = {
@@ -36,6 +46,8 @@ export type Product = {
   bagPrice?: number | undefined;
   /** Solo líquidos: litros por envase (el stock se lleva en envases). */
   liters?: number | undefined;
+  /** Lajas, líquidos y unitarios: flete por unidad, ya incluido en cost. */
+  freight?: number | undefined;
   stock: number;
   minStock: number;
   ivaPct: number;
@@ -154,6 +166,8 @@ export type Due = {
   dueDate: string;
   amount: number;
   paid: number;
+  /** Para deudas cargadas a mano (sin venta). */
+  concept?: string | undefined;
 };
 
 export type ChequeStatus = "cartera" | "depositado" | "acreditado" | "endosado" | "rechazado";
@@ -277,6 +291,8 @@ export type Settings = {
   fixedExpenses: FixedExpense[];
   quoteValidDays: number;
   followUpDays: number;
+  /** Base por tonelada para cubrir gastos, que se propone en cada piedra nueva. */
+  baseExpensePerTon?: number | undefined;
   /** Bolsón grande: kg y embalaje por defecto para productos nuevos. */
   bigBagKg?: number | undefined;
   bigBagPackaging?: number | undefined;

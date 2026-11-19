@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, Pencil, Percent, Plus, Search } from "lucide-react";
+import { Calculator, List, Pencil, Percent, Plus, Search } from "lucide-react";
+import { PriceList } from "@/components/price-list";
 import type { Category, Product } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, num, pctAr } from "@/lib/format";
@@ -46,6 +47,7 @@ function Catalogo() {
   const [editing, setEditing] = useState<Product | null | "new">(null);
   const [bulk, setBulk] = useState(false);
   const [calc, setCalc] = useState(false);
+  const [priceList, setPriceList] = useState(false);
   const [prefill, setPrefill] = useState<Product | null>(null);
 
   useEffect(() => {
@@ -86,6 +88,9 @@ function Catalogo() {
         title="Catálogo y precios"
         subtitle={`${db.products.filter((p) => p.active).length} productos · ${low} con stock bajo`}
       >
+        <button className={btn.soft} onClick={() => setPriceList(true)}>
+          <List className="h-4 w-4" strokeWidth={1.6} /> Lista de precios
+        </button>
         <button className={btn.soft} onClick={() => setCalc(true)}>
           <Calculator className="h-4 w-4" strokeWidth={1.6} /> Calcular cantidad
         </button>
@@ -119,8 +124,8 @@ function Catalogo() {
             "Producto",
             { label: "Costo", right: true },
             { label: "Precio", right: true },
+            { label: "Bolsa", right: true },
             { label: "Bolsón", right: true },
-            { label: "Bolsón grande", right: true },
             { label: "Margen", right: true },
             { label: "Stock", right: true },
             "",
@@ -156,7 +161,9 @@ function Catalogo() {
                     ? `${ars(p.price * 1000)}/t`
                     : `${ars(p.price)}/${unitName[p.unit]}`}
                 </td>
-                <td className="text-right tabular-nums">{p.bagPrice ? ars(p.bagPrice) : "—"}</td>
+                <td className="text-right tabular-nums">
+                  {p.category === "piedra" ? ars(listPrice(p, "bolson")) : "—"}
+                </td>
                 <td className="text-right tabular-nums">
                   {p.category === "piedra" ? ars(listPrice(p, "bigbag")) : "—"}
                 </td>
@@ -208,6 +215,7 @@ function Catalogo() {
       />
       <BulkUpdate open={bulk} onClose={() => setBulk(false)} />
       <QtyCalculator open={calc} onClose={() => setCalc(false)} />
+      <PriceList open={priceList} onClose={() => setPriceList(false)} />
     </>
   );
 }
@@ -341,7 +349,7 @@ function QtyCalculator({ open, onClose }: { open: boolean; onClose: () => void }
             <p className="mt-1 flex justify-between">
               <span className="opacity-70">En bolsones de {p.bagKg ?? 25} kg</span>
               <span className="font-semibold">
-                {bags} bolsones · {ars(bags * (p.bagPrice ?? 0))}
+                {bags} bolsas · {ars(bags * listPrice(p, "bolson"))}
               </span>
             </p>
             <p className="mt-1 flex justify-between">

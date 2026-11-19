@@ -3,6 +3,7 @@ import { reportError } from "./errors";
 import { supabase } from "./supabase";
 import { accountBalance, clientBalance, periodProfit } from "./store";
 import { addDays, ars, todayISO } from "./format";
+import { listPrice } from "./pricing";
 import type { Attachment } from "./attachments";
 import type { ProductoPropuesto } from "./product-import";
 
@@ -101,7 +102,7 @@ export function businessContext(db: DB) {
     .filter((p) => p.active)
     .map(
       (p) =>
-        `${p.name} [${p.category}] ${p.bagPrice ? ars(p.bagPrice) + "/bolsón, " : ""}${ars(p.price)}/${p.unit}`,
+        `${p.name} [${p.category}] ${p.category === "piedra" ? ars(listPrice(p, "bolson")) + "/bolsa, " : ""}${ars(p.price)}/${p.unit}`,
     );
   return [
     `Fecha: ${today}. Negocio: ${db.settings.businessName}.`,

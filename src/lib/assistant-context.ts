@@ -1,7 +1,7 @@
 import type { DB } from "./types";
 import { accountBalance, clientBalance, feeFor, periodProfit } from "./store";
 import { addDays, ars, dayOf, num, todayISO } from "./format";
-import { qtyUnit } from "./pricing";
+import { listPrice, qtyUnit } from "./pricing";
 
 /**
  * Foto completa del negocio para el asistente, en texto compacto.
@@ -37,7 +37,7 @@ export function fullContext(db: DB) {
   for (const p of prods.slice(0, 80)) {
     const sc = p.stoneCost;
     push(
-      `- ${p.name} [${p.category}] costo ${ars(p.cost)}/${p.unit} · precio ${ars(p.price)}/${p.unit}${p.bagPrice ? ` · bolsón ${p.bagKg} kg ${ars(p.bagPrice)}` : ""}${p.liters ? ` · bidón ${p.liters} L` : ""} · stock ${num(p.stock, 1)} ${p.unit} (mínimo ${num(p.minStock)})${p.stock < p.minStock ? " STOCK BAJO" : ""}${sc ? ` · calculadora: proveedor ${ars(sc.purchasePerTon)}/t, flete ${ars(sc.freightPerTon)}/t, descarga ${ars(sc.unloadPerTon)}/t, mano de obra ${ars(sc.laborPerTon)}/t, extras ${ars(sc.extrasPerTon)}/t, embalaje ${ars(sc.packagingPerBag)}/bolsón, margen ${sc.marginPct}%` : ""}${p.discounts.length ? ` · descuentos: ${p.discounts.map((d) => `desde ${d.minQty} ${d.unit} −${d.pct}%`).join(", ")}` : ""}`,
+      `- ${p.name} [${p.category}] costo ${ars(p.cost)}/${p.unit} · precio ${ars(p.price)}/${p.unit}${p.category === "piedra" ? ` · bolsa ${p.bagKg} kg ${ars(listPrice(p, "bolson"))} · bolsón ${ars(listPrice(p, "bigbag"))}` : ""}${p.liters ? ` · bidón ${p.liters} L` : ""} · stock ${num(p.stock, 1)} ${p.unit} (mínimo ${num(p.minStock)})${p.stock < p.minStock ? " STOCK BAJO" : ""}${sc ? ` · calculadora: proveedor ${ars(sc.purchasePerTon)}/t, flete ${ars(sc.freightPerTon)}/t, descarga ${ars(sc.unloadPerTon)}/t, mano de obra ${ars(sc.laborPerTon)}/t, extras ${ars(sc.extrasPerTon)}/t, embalaje ${ars(sc.packagingPerBag)}/bolsón, margen ${sc.marginPct}%` : ""}${p.discounts.length ? ` · descuentos: ${p.discounts.map((d) => `desde ${d.minQty} ${d.unit} −${d.pct}%`).join(", ")}` : ""}`,
     );
   }
 

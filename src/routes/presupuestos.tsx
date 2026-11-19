@@ -71,20 +71,24 @@ function Presupuestos() {
     nav({ to: "/nueva-venta" });
   };
 
-  const waText = (q: Quote) =>
-    encodeURIComponent(
+  const waText = (q: Quote) => {
+    const ri = db.clients.find((c) => c.id === q.clientId)?.ivaCategory === "Responsable inscripto";
+    const incl = q.withIva && !ri;
+    const k = incl ? 1 + db.settings.ivaPct / 100 : 1;
+    return encodeURIComponent(
       [
         `Hola ${q.clientName}, te paso el presupuesto #${q.number} de ${db.settings.businessName}:`,
-        ...q.items.map((i) => `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal)}`),
-        q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price)}` : "",
-        q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice)}` : "",
-        q.withIva ? `IVA: ${ars(q.iva)}` : "",
+        ...q.items.map((i) => `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal * k)}`),
+        q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price * k)}` : "",
+        q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice * k)}` : "",
+        incl ? "Precios con IVA incluido." : q.withIva ? `IVA: ${ars(q.iva)}` : "",
         `*Total: ${ars(q.total)}*`,
         `Válido hasta el ${fmtDate(q.validUntil)}.`,
       ]
         .filter(Boolean)
         .join("\n"),
     );
+  };
 
   return (
     <>

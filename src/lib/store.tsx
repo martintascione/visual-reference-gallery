@@ -62,6 +62,14 @@ type Actions = {
   /** Presupuesto que se está editando en Nueva venta. */
   setEditQuote: (id?: string) => void;
   upsertClient: (c: Client) => void;
+  /** Carga una deuda en cuenta corriente sin venta (saldo anterior, fiado, etc.). */
+  addDebt: (
+    clientId: string,
+    amount: number,
+    dues: number,
+    firstDue: string,
+    concept?: string,
+  ) => void;
   payDue: (
     dueId: string,
     amount: number,
@@ -467,6 +475,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeQuote: (id) =>
         mutate((d) => {
           d.quotes = d.quotes.filter((x) => x.id !== id);
+          return d;
+        }),
+      addDebt: (clientId, amount, dues, firstDue, concept) =>
+        mutate((d) => {
+          const n = Math.max(1, Math.round(dues));
+          const base = Math.floor(amount / n);
+          const group = "cc" + uid();
+          for (let i = 1; i <= n; i++)
+            d.dues.push({
+              id: uid(),
+              clientId,
+              saleId: group,
+              n: i,
+              of: n,
+              dueDate: addDays(firstDue, 30 * (i - 1)),
+              amount: i === n ? amount - base * (n - 1) : base,
+              paid: 0,
+              concept: concept || undefined,
+            });
           return d;
         }),
       upsertClient: (c) =>

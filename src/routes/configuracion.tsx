@@ -198,6 +198,14 @@ function Configuracion() {
                 prefix="$"
               />
             </Field>
+            <Field label="Base de gastos por tonelada" hint="Se propone en cada piedra nueva">
+              <NumberInput
+                value={s.baseExpensePerTon ?? 0}
+                onChange={(v) => updateSettings({ baseExpensePerTon: v })}
+                prefix="$"
+                suffix="/ t"
+              />
+            </Field>
             <Field label="Kg por bolsón grande">
               <NumberInput
                 value={s.bigBagKg ?? 1000}

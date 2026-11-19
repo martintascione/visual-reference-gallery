@@ -22,7 +22,7 @@ import type {
   SaleUnit,
 } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
-import { lineTotals, listPrice, saleUnitsFor, unitLabel } from "@/lib/pricing";
+import { lineTotals, listPrice, saleUnitsFor, unitLabel, unitLabelFor } from "@/lib/pricing";
 import { addDays, ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { Badge, Card, Field, Input, NumberInput, Segmented, Select, Toggle, btn } from "./ui-bits";
 
@@ -192,7 +192,7 @@ export function SaleForm({
   // Descarga sugerida: bolsón grande o bolsas chicas (valores de Configuración), hasta que se edite a mano.
   // Al editar o convertir un presupuesto se respeta lo que ya tenía.
   const [unloadTouched, setUnloadTouched] = useState(!!(editSale ?? editQuote ?? fromQuote));
-  const unloadSuggested = lines.some((l) => l.unit === "bigbag")
+  const unloadSuggested = lines.some((l) => l.unit === "bigbag" || l.unit === "bigbag2")
     ? (s.unloadChargeBigBag ?? 70000)
     : lines.some((l) => l.unit === "bolson")
       ? (s.unloadChargeBags ?? 20000)
@@ -486,7 +486,7 @@ export function SaleForm({
                 {p.name}
                 <span className="text-[10px] text-muted-foreground group-hover:text-primary-foreground/70">
                   {p.category === "piedra"
-                    ? ars(p.bagPrice ?? 0) + "/bolsón"
+                    ? ars(listPrice(p, "bolson")) + "/bolsa"
                     : ars(p.price) + (p.unit === "m2" ? "/m²" : "")}
                 </span>
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-card text-foreground">
@@ -539,7 +539,7 @@ export function SaleForm({
                     >
                       {saleUnitsFor(p).map((u) => (
                         <option key={u} value={u}>
-                          {unitLabel[u]}
+                          {unitLabelFor(p, u)}
                         </option>
                       ))}
                     </Select>

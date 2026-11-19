@@ -32,3 +32,7 @@ select cron.schedule(
 );
 
 select jobname, schedule, active from cron.job where jobname = 'recordatorio-presupuestos';
+
+-- 19/11: flete por unidad en lajas/líquidos/unitarios y detalle en deudas cargadas a mano.
+alter table public.products add column if not exists freight numeric;
+alter table public.dues add column if not exists concept text;

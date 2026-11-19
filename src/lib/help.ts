@@ -18,14 +18,33 @@ export const FIELD_HELP: Record<string, string> = {
     "Cualquier otro costo por tonelada: mermas, limpieza, zarandeo. Opcional.",
   "Margen de ganancia":
     "Porcentaje que le sumás al costo total por tonelada para armar el precio de venta. Ej: costo $100 + 40% = precio $140 (sin IVA).",
-  "Kg por bolsón":
-    "Cuántos kilos entran en un bolsón. Con eso el sistema calcula el precio del bolsón a partir del precio por kg.",
+  "Base de gastos":
+    "Monto fijo por tonelada para cubrir los gastos generales del negocio (por ejemplo $ 50.000). Se suma al costo antes de aplicar el margen.",
+  "Base de gastos por tonelada":
+    "Monto fijo por tonelada para cubrir gastos generales, que se propone al crear cada piedra nueva. Se cambia producto por producto.",
+  Palet: "Costo del palet por tonelada, si la piedra se entrega paletizada.",
+  Sampi: "Costo del autoelevador (Sampi) por tonelada para mover o cargar la piedra.",
+  "Mano de obra": "Costo de personal por tonelada para embolsar o acomodar.",
+  "Otros gastos": "Cualquier otro costo por tonelada.",
+  Desperdicio:
+    "Porcentaje de la piedra que se pierde (merma, polvo, rotura). Encarece el costo de lo que sí se vende: con 5 %, cada tonelada vendible cuesta un 5,3 % más.",
+  "Kg por bolsa": "Cuántos kilos trae la bolsa chica (normalmente 25 kg).",
+  "Embalaje por bolsa":
+    "Costo de la bolsa vacía. Cuenta como costo tuyo; no cambia el precio si la bolsa va al mismo precio por kilo que la tonelada.",
+  "Kg por bolsón": "Cuántos kilos trae el bolsón (normalmente 1.000 kg).",
+  "Embalaje por bolsón": "Costo del bolsón vacío (big bag).",
+  "Segundo bolsón":
+    "Si esta piedra también se vende en otro tamaño de bolsón (por ejemplo 1.200 kg), poné los kilos. Aparece como una unidad más al vender. Vacío = no se vende.",
+  "Flete por unidad":
+    "Lo que cuesta traer cada unidad (bidón, m² o pieza). Se suma al costo antes del margen.",
+  "Monto que debe": "Total de la deuda que se carga en la cuenta corriente del cliente.",
+  "Primer vencimiento": "Fecha en que vence la primera cuota. Las siguientes vencen cada 30 días.",
+  "Nombre del cliente":
+    "Si ya existe, elegilo de la lista y la deuda se suma a su cuenta. Si es nuevo, se guarda solo.",
   "Kg por bolsón grande":
     "Cuántos kilos tiene el bolsón grande (big bag). Normalmente 1.000 kg. Con eso se calcula su precio a partir del precio por kg.",
   "Embalaje bolsón grande":
     "Costo del big bag (la bolsa) por cada bolsón grande. Solo se suma al precio del bolsón grande.",
-  "Embalaje por bolsón":
-    "Costo de la bolsa, cinta o pallet por cada bolsón. Solo se suma al precio del bolsón, no al precio por kg o tonelada.",
   "Litros por bidón": "Capacidad del envase que vendés. Sirve para mostrar el precio por litro.",
   Costo: "Lo que te cuesta a vos una unidad (m², bidón o unidad), sin IVA.",
   Margen: "Porcentaje que le sumás al costo para armar el precio de venta.",

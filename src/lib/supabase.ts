@@ -40,6 +40,7 @@ const numericKeys = new Set([
   "price",
   "bag_kg",
   "bag_price",
+  "freight",
   "liters",
   "stock",
   "min_stock",

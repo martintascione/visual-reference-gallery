@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { listPrice } from "@/lib/pricing";
 import { useNavigate } from "@tanstack/react-router";
 import { Package, Search, ShoppingCart, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -38,7 +39,7 @@ export function GlobalSearch() {
         key: "p" + p.id,
         icon: Package,
         title: p.name,
-        sub: `${p.bagPrice ? ars(p.bagPrice) + " el bolsón · " : ""}${ars(p.price)}/${p.unit === "m2" ? "m²" : p.unit} · stock ${Math.round(p.stock)}`,
+        sub: `${p.category === "piedra" ? ars(listPrice(p, "bolson")) + " la bolsa · " : ""}${ars(p.price)}/${p.unit === "m2" ? "m²" : p.unit} · stock ${Math.round(p.stock)}`,
         to: "/catalogo",
       });
     for (const c of db.clients
