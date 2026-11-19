@@ -10,3 +10,7 @@ alter table public.supplier_payments add column if not exists cheque_id text;
 select count(*) as columnas from information_schema.columns
 where table_schema='public' and (table_name, column_name) in
 (('purchases','pay_due'),('purchases','freight_due'),('cheques','own'),('cheques','received_date'),('cheques','given_to'),('cheques','given_date'),('supplier_payments','cheque_id'));
+
+-- Quién cobra la descarga y aviso de su saldo.
+alter table public.purchases add column if not exists unload_by text;
+alter table public.purchases add column if not exists unload_due text;

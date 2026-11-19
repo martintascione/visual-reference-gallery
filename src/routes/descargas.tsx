@@ -220,7 +220,7 @@ function Descargas() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{a.party}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {a.kind === "cantera" ? "Cantera" : "Transporte"}
+                      {a.kind === "cantera" ? "Cantera" : "Transporte o descarga"}
                       {a.remind && a.saldo > 0 ? ` · pagar el ${fmtDay(a.remind)}` : ""}
                     </span>
                   </span>
@@ -697,6 +697,8 @@ function NewPurchase({
   const [fTons, setFTons] = useState(0);
   const [fValue, setFValue] = useState(0);
   const [unload, setUnload] = useState(0);
+  const [unloadBy, setUnloadBy] = useState("");
+  const [payU, setPayU] = useState<PayBox>(boxBlank);
   const [updateCosts, setUpdateCosts] = useState(true);
   const [payS, setPayS] = useState<PayBox>(boxBlank);
   const [payC, setPayC] = useState<PayBox>(boxBlank);
@@ -760,6 +762,7 @@ function NewPurchase({
     setFTons(edit.freightTons);
     setFValue(perTon ? edit.freightRate : edit.freightTotal);
     setUnload(edit.unloadCost);
+    setUnloadBy(edit.unloadBy ?? "");
     setUpdateCosts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, edit?.id]);
@@ -768,6 +771,10 @@ function NewPurchase({
   const merch = valid.reduce((a, l) => a + l.tons * l.price, 0);
   const freightTons = fTons || tons;
   const freightTotal = fMode === "t" ? Math.round(freightTons * fValue) : fValue;
+  // La descarga puede cobrarla el mismo transporte (se paga junto con el flete) u otra persona.
+  const unloader = unload > 0 ? unloadBy.trim() : "";
+  const sameUnloader = !!unloader && unloader.toLowerCase() === carrier.trim().toLowerCase();
+  const carrierTotal = freightTotal + (sameUnloader ? unload : 0);
   const ok = supplier.trim().length > 1 && valid.length > 0;
 
   const save = () => {
@@ -793,6 +800,8 @@ function NewPurchase({
       setFTons(0);
       setFValue(0);
       setUnload(0);
+      setUnloadBy("");
+      setPayU(boxBlank());
       setPayS(boxBlank());
       setPayC(boxBlank());
       setDate(todayISO());
@@ -812,6 +821,8 @@ function NewPurchase({
             fMode === "t" ? fValue : freightTons > 0 ? Math.round(fValue / freightTons) : 0,
           freightTotal,
           unloadCost: unload,
+          unloadBy: unloader || undefined,
+          unloadDue: unloader && !sameUnloader ? edit.unloadDue : undefined,
           payDue: edit.payDue,
           freightDue: carrier.trim() ? edit.freightDue : undefined,
         },
@@ -834,7 +845,9 @@ function NewPurchase({
         freightTotal,
         unloadCost: unload,
         payDue: remindDate(payS, Math.round(merch)),
-        freightDue: carrier.trim() ? remindDate(payC, freightTotal) : undefined,
+        freightDue: carrier.trim() ? remindDate(payC, carrierTotal) : undefined,
+        unloadBy: unloader || undefined,
+        unloadDue: unloader && !sameUnloader ? remindDate(payU, unload) : undefined,
       },
       updateCosts,
     );
@@ -869,7 +882,8 @@ function NewPurchase({
       );
     };
     payAll(payS, supplier.trim(), "cantera", Math.round(merch));
-    payAll(payC, carrier.trim(), "transporte", freightTotal);
+    payAll(payC, carrier.trim(), "transporte", carrierTotal);
+    if (unloader && !sameUnloader) payAll(payU, unloader, "transporte", unload);
     reset();
   };
 
@@ -1095,6 +1109,32 @@ function NewPurchase({
             >
               <NumberInput value={unload} onChange={setUnload} prefix="$" />
             </Field>
+            {unload > 0 && (
+              <Field
+                label="Quién cobra la descarga"
+                className="col-span-2"
+                hint="Vacío = personal propio, no queda deuda"
+                help="Si la descarga la cobra el mismo transporte u otra persona, escribí el nombre: queda en su cuenta y la podés pagar ahora, en partes o con cheques. Si la hizo tu gente, dejalo vacío."
+              >
+                <div className="flex gap-1.5">
+                  <Input
+                    list="transportes"
+                    value={unloadBy}
+                    onChange={(e) => setUnloadBy(e.target.value)}
+                    placeholder="Ej: el mismo transporte"
+                  />
+                  {carrier.trim() && !sameUnloader && (
+                    <button
+                      type="button"
+                      className={`${btn.ghost} shrink-0`}
+                      onClick={() => setUnloadBy(carrier.trim())}
+                    >
+                      El transporte
+                    </button>
+                  )}
+                </div>
+              </Field>
+            )}
             <div className="col-span-full flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <Segmented
                 value={fMode}
@@ -1114,15 +1154,31 @@ function NewPurchase({
               )}
             </div>
           </div>
-          {!edit && carrier.trim() && freightTotal > 0 && (
+          {!edit && carrier.trim() && carrierTotal > 0 && (
             <PayNowBox
               v={payC}
               set={setPayC}
-              total={freightTotal}
-              who="al transporte"
+              total={carrierTotal}
+              who={sameUnloader ? "al transporte (flete + descarga)" : "al transporte"}
               date={date}
               allowGasoil
             />
+          )}
+          {!edit && unloader && !sameUnloader && (
+            <PayNowBox
+              v={payU}
+              set={setPayU}
+              total={unload}
+              who={`a ${unloader} por la descarga`}
+              date={date}
+              allowGasoil
+            />
+          )}
+          {!edit && !(carrier.trim() && carrierTotal > 0) && !(unloader && !sameUnloader) && (
+            <p className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground">
+              Cargá el transporte y la tarifa (y quién cobra la descarga, si no es tu gente) para
+              asentar acá mismo el pago: total, una parte, o con uno o varios cheques.
+            </p>
           )}
         </div>
 
@@ -1147,22 +1203,40 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
   const mine = (party: string | undefined) =>
     !!party && party.trim().toLowerCase() === account.party.toLowerCase();
   const rows = [
-    ...db.purchases
-      .filter((p) =>
-        account.kind === "cantera" ? mine(p.supplier) : mine(p.carrier) && p.freightTotal > 0,
-      )
-      .map((p) => ({
-        id: p.id,
+    ...db.purchases.flatMap((p) => {
+      const row = (id: string, detail: string, debe: number) => ({
+        id,
         date: p.date,
-        detail:
-          account.kind === "cantera"
-            ? `${p.items.map((i) => `${i.name} ${num(i.tons, 2)}`).join(", ")}${p.remito ? ` · Rto ${p.remito}` : ""}`
-            : `Flete ${p.supplier}${p.freightTons ? ` · ${num(p.freightTons, 2)} t` : ""}`,
-        debe:
-          account.kind === "cantera" ? p.items.reduce((a, i) => a + i.total, 0) : p.freightTotal,
+        detail,
+        debe,
         haber: 0,
         payId: "",
-      })),
+      });
+      if (account.kind === "cantera")
+        return mine(p.supplier)
+          ? [
+              row(
+                p.id,
+                `${p.items.map((i) => `${i.name} ${num(i.tons, 2)}`).join(", ")}${p.remito ? ` · Rto ${p.remito}` : ""}`,
+                p.items.reduce((a, i) => a + i.total, 0),
+              ),
+            ]
+          : [];
+      return [
+        ...(mine(p.carrier) && p.freightTotal > 0
+          ? [
+              row(
+                p.id,
+                `Flete ${p.supplier}${p.freightTons ? ` · ${num(p.freightTons, 2)} t` : ""}`,
+                p.freightTotal,
+              ),
+            ]
+          : []),
+        ...(mine(p.unloadBy) && p.unloadCost > 0
+          ? [row(p.id + "-d", `Descarga ${p.supplier}`, p.unloadCost)]
+          : []),
+      ];
+    }),
     ...db.supplierPayments
       .filter((p) => p.kind === account.kind && mine(p.party))
       .map((p) => ({
@@ -1208,7 +1282,7 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
       open
       onClose={onClose}
       title={account.party}
-      subtitle={`${account.kind === "cantera" ? "Cantera" : "Transporte"} · ${account.saldo > 0 ? `se le debe ${ars(account.saldo)}` : account.saldo < 0 ? `saldo a favor del corralón ${ars(-account.saldo)}` : "al día"}`}
+      subtitle={`${account.kind === "cantera" ? "Cantera" : "Transporte o descarga"} · ${account.saldo > 0 ? `se le debe ${ars(account.saldo)}` : account.saldo < 0 ? `saldo a favor del corralón ${ars(-account.saldo)}` : "al día"}`}
       wide
     >
       <div className="flex flex-col gap-4">

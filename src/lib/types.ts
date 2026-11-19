@@ -387,6 +387,10 @@ export type Purchase = {
   payDue?: string | undefined;
   /** Día en que hay que avisar para pagarle el saldo al transporte (AAAA-MM-DD). */
   freightDue?: string | undefined;
+  /** Quién cobra la descarga (vacío = personal propio, no queda deuda). */
+  unloadBy?: string | undefined;
+  /** Aviso para pagarle el saldo a quien descargó, cuando no es el mismo transporte. */
+  unloadDue?: string | undefined;
 };
 
 export type SupplierPayMethod = "efectivo" | "transferencia" | "cheque" | "gasoil";

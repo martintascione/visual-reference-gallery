@@ -743,7 +743,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Los pagos cargados en ese asiento siguen al proveedor si se le corrigió el nombre.
           for (const pay of d.supplierPayments)
             if (pay.purchaseId === id)
-              pay.party = pay.kind === "cantera" ? pur.supplier : (pur.carrier ?? pay.party);
+              pay.party =
+                pay.kind === "cantera"
+                  ? pur.supplier
+                  : sameName(pay.party, old.carrier)
+                    ? (pur.carrier ?? pay.party)
+                    : sameName(pay.party, old.unloadBy)
+                      ? (pur.unloadBy ?? pay.party)
+                      : pay.party;
           d.purchases[i] = pur;
           d.purchases.sort((a, b) => b.date.localeCompare(a.date));
           return d;
@@ -846,15 +853,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSupplierReminder: (kind, party, date) =>
         mutate((d) => {
           const k = party.trim().toLowerCase();
-          const mine = d.purchases.filter(
-            (p) => (kind === "cantera" ? p.supplier : (p.carrier ?? "")).trim().toLowerCase() === k,
+          const is = (n: string | undefined) => (n ?? "").trim().toLowerCase() === k;
+          const mine = d.purchases.filter((p) =>
+            kind === "cantera" ? is(p.supplier) : is(p.carrier) || is(p.unloadBy),
           );
           // El aviso es uno por proveedor: queda guardado en su descarga más reciente.
           const last = [...mine].sort((a, b) => b.date.localeCompare(a.date))[0];
           for (const p of mine) {
             const v = p === last ? date || undefined : undefined;
             if (kind === "cantera") p.payDue = v;
-            else p.freightDue = v;
+            else if (is(p.carrier)) p.freightDue = v;
+            else p.unloadDue = v;
           }
           return d;
         }),
@@ -1078,6 +1087,9 @@ export function periodProfit(db: DB, from: string, to: string) {
   };
 }
 
+const sameName = (a: string | undefined, b: string | undefined) =>
+  !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
 /** Cuentas con canteras y transportes: lo comprado, lo pagado y el saldo de cada uno. */
 export function supplierAccounts(db: DB) {
   const map = new Map<
@@ -1110,6 +1122,13 @@ export function supplierAccounts(db: DB) {
       c.debe += p.freightTotal;
       if (p.date > c.last) c.last = p.date;
       c.remind = sooner(c.remind, p.freightDue);
+    }
+    // La descarga, si la cobra alguien de afuera, va a la cuenta de esa persona o transporte.
+    if (p.unloadBy && p.unloadCost > 0) {
+      const u = get(p.unloadBy, "transporte");
+      u.debe += p.unloadCost;
+      if (p.date > u.last) u.last = p.date;
+      u.remind = sooner(u.remind, sameName(p.unloadBy, p.carrier) ? p.freightDue : p.unloadDue);
     }
   }
   for (const pay of db.supplierPayments) get(pay.party, pay.kind).haber += pay.amount;
