@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleHelp, Plus, Trash2, Truck, Wallet } from "lucide-react";
+import { CircleHelp, Pencil, Plus, Trash2, Truck, Wallet } from "lucide-react";
 import type { Bank, Purchase, PurchaseItem, SupplierCheque, SupplierPayMethod } from "@/lib/types";
 import { supplierAccounts, useStore } from "@/lib/store";
 import { ars, fmtDate, num, todayISO, addDays, uid } from "@/lib/format";
@@ -48,6 +48,7 @@ function Descargas() {
   const [adding, setAdding] = useState(false);
   const [ledger, setLedger] = useState<string | null>(null);
   const [del, setDel] = useState<Purchase | null>(null);
+  const [edit, setEdit] = useState<Purchase | null>(null);
   const accounts = useMemo(() => supplierAccounts(db), [db]);
   const debt = (k: "cantera" | "transporte") =>
     accounts.filter((a) => a.kind === k && a.saldo > 0).reduce((x, a) => x + a.saldo, 0);
@@ -171,11 +172,20 @@ function Descargas() {
                         "—"
                       )}
                     </td>
-                    <td className="text-right align-top">
+                    <td className="whitespace-nowrap text-right align-top">
+                      <button
+                        className={btn.icon}
+                        onClick={() => setEdit(p)}
+                        aria-label="Editar descarga"
+                        title="Editar este asiento"
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      </button>
                       <button
                         className={btn.icon}
                         onClick={() => setDel(p)}
                         aria-label="Eliminar descarga"
+                        title="Eliminar este asiento"
                       >
                         <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
                       </button>
@@ -232,13 +242,17 @@ function Descargas() {
       </div>
 
       <NewPurchase open={adding} onClose={() => setAdding(false)} />
+      <NewPurchase open={!!edit} onClose={() => setEdit(null)} edit={edit} />
       <Ledger account={open} onClose={() => setLedger(null)} />
       <Modal open={!!del} onClose={() => setDel(null)} title="Eliminar descarga">
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             Se borra la descarga de {del?.supplier} del {del ? fmtDate(del.date) : ""} y se
-            descuenta del stock lo que había sumado. Los costos de los productos y los pagos ya
-            cargados no se tocan. No se puede deshacer.
+            descuenta del stock lo que había sumado.{" "}
+            {del && db.supplierPayments.some((x) => x.purchaseId === del.id)
+              ? `También se anulan los ${db.supplierPayments.filter((x) => x.purchaseId === del.id).length} pagos cargados en ese asiento (vuelven a caja o banco, y los cheques de clientes vuelven a la cartera). `
+              : ""}
+            Los costos de los productos no se tocan. No se puede deshacer.
           </p>
           <div className="flex justify-end gap-2">
             <button className={btn.soft} onClick={() => setDel(null)}>
@@ -658,8 +672,17 @@ function PayNowBox({
   );
 }
 
-function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { db, addPurchase, addSupplierPayment } = useStore();
+function NewPurchase({
+  open,
+  onClose,
+  edit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Descarga ya asentada que se está corrigiendo. */
+  edit?: Purchase | null | undefined;
+}) {
+  const { db, addPurchase, updatePurchase, addSupplierPayment } = useStore();
   const products = useMemo(
     () => db.products.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name)),
     [db.products],
@@ -714,6 +737,32 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
     const p = products.find((x) => x.id === productId);
     return p && stoneGroup(p) === "grava" ? bigBagKg(p) / 1000 : 1;
   };
+  // Al abrir para corregir, se cargan los números del asiento tal como se habían escrito.
+  useEffect(() => {
+    if (!open || !edit) return;
+    setDate(edit.date.slice(0, 10));
+    setSupplier(edit.supplier);
+    setRemito(edit.remito ?? "");
+    setLines(
+      edit.items.map((it) => {
+        const k = kOf(it.productId ?? "");
+        return {
+          id: uid(),
+          productId: it.productId ?? "",
+          tons: Math.round((it.tons / k) * 10000) / 10000,
+          price: Math.round(it.pricePerTon * k * 100) / 100,
+        };
+      }),
+    );
+    setCarrier(edit.carrier ?? "");
+    const perTon = Math.round(edit.freightTons * edit.freightRate) === edit.freightTotal;
+    setFMode(perTon ? "t" : "total");
+    setFTons(edit.freightTons);
+    setFValue(perTon ? edit.freightRate : edit.freightTotal);
+    setUnload(edit.unloadCost);
+    setUpdateCosts(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, edit?.id]);
   const valid = lines.filter((l) => l.productId && l.tons > 0);
   const tons = valid.reduce((a, l) => a + l.tons * kOf(l.productId), 0);
   const merch = valid.reduce((a, l) => a + l.tons * l.price, 0);
@@ -729,7 +778,47 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
       pricePerTon: l.price / kOf(l.productId),
       total: Math.round(l.tons * l.price),
     }));
-    const iso = date === todayISO() ? new Date().toISOString() : date + "T12:00:00.000Z";
+    const iso = edit
+      ? date === edit.date.slice(0, 10)
+        ? edit.date
+        : date + "T12:00:00.000Z"
+      : date === todayISO()
+        ? new Date().toISOString()
+        : date + "T12:00:00.000Z";
+    const reset = () => {
+      setSupplier("");
+      setRemito("");
+      setLines([blankLine()]);
+      setCarrier("");
+      setFTons(0);
+      setFValue(0);
+      setUnload(0);
+      setPayS(boxBlank());
+      setPayC(boxBlank());
+      setDate(todayISO());
+      onClose();
+    };
+    if (edit) {
+      updatePurchase(
+        edit.id,
+        {
+          date: iso,
+          supplier: supplier.trim(),
+          remito: remito.trim() || undefined,
+          items,
+          carrier: carrier.trim() || undefined,
+          freightTons,
+          freightRate:
+            fMode === "t" ? fValue : freightTons > 0 ? Math.round(fValue / freightTons) : 0,
+          freightTotal,
+          unloadCost: unload,
+          payDue: edit.payDue,
+          freightDue: carrier.trim() ? edit.freightDue : undefined,
+        },
+        updateCosts,
+      );
+      return reset();
+    }
     const remindDate = (v: PayBox, total: number) =>
       total - paidOf(v, total) > 0 && v.remind > 0 ? addDays(date, v.remind) : undefined;
     const pur = addPurchase(
@@ -781,24 +870,19 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
     };
     payAll(payS, supplier.trim(), "cantera", Math.round(merch));
     payAll(payC, carrier.trim(), "transporte", freightTotal);
-    setSupplier("");
-    setRemito("");
-    setLines([blankLine()]);
-    setCarrier("");
-    setFTons(0);
-    setFValue(0);
-    setUnload(0);
-    setPayS(boxBlank());
-    setPayC(boxBlank());
-    onClose();
+    reset();
   };
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Nueva descarga"
-      subtitle="Al guardar se suma el stock, se actualizan los costos y queda asentado lo que se debe"
+      title={edit ? "Editar descarga" : "Nueva descarga"}
+      subtitle={
+        edit
+          ? "Al guardar se corrige el stock por la diferencia, los costos y lo que se le debe al proveedor"
+          : "Al guardar se suma el stock, se actualizan los costos y queda asentado lo que se debe"
+      }
       wide
       footer={
         <>
@@ -806,7 +890,7 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
             Cancelar
           </button>
           <button className={btn.primary} disabled={!ok} onClick={save}>
-            Asentar descarga
+            {edit ? "Guardar cambios" : "Asentar descarga"}
           </button>
         </>
       }
@@ -962,14 +1046,21 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
               {num(tons, 2)} t en total · mercadería <b className="text-foreground">{ars(merch)}</b>
             </p>
           </div>
-          <PayNowBox
-            v={payS}
-            set={setPayS}
-            total={Math.round(merch)}
-            who="a la cantera"
-            date={date}
-            allowGasoil={false}
-          />
+          {edit ? (
+            <p className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground">
+              Los pagos ya cargados no se tocan acá: se ven, se agregan o se borran desde la cuenta
+              del proveedor. El saldo se recalcula solo con los números nuevos.
+            </p>
+          ) : (
+            <PayNowBox
+              v={payS}
+              set={setPayS}
+              total={Math.round(merch)}
+              who="a la cantera"
+              date={date}
+              allowGasoil={false}
+            />
+          )}
         </div>
 
         <div className="on-surface rounded-3xl bg-surface p-4">
@@ -1023,7 +1114,7 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
               )}
             </div>
           </div>
-          {carrier.trim() && freightTotal > 0 && (
+          {!edit && carrier.trim() && freightTotal > 0 && (
             <PayNowBox
               v={payC}
               set={setPayC}

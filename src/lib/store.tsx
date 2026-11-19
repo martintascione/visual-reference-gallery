@@ -86,7 +86,9 @@ type Actions = {
   addExpense: (e: Draft<Expense>) => void;
   /** Asienta una descarga: suma stock, guarda el historial y (si se pide) actualiza costos y precios. */
   addPurchase: (p: Draft<Purchase>, updateCosts: boolean) => Purchase;
-  /** Borra una descarga y descuenta el stock que había sumado (los costos no se tocan). */
+  /** Corrige una descarga ya asentada: ajusta el stock por la diferencia y (si se pide) los costos. */
+  updatePurchase: (id: string, p: Draft<Purchase>, updateCosts: boolean) => void;
+  /** Borra una descarga: descuenta el stock que había sumado y anula los pagos cargados en ese asiento. */
   removePurchase: (id: string) => void;
   /** Pago a cantera o transporte. Efectivo, transferencia y cheque salen de caja/banco; gasoil no. */
   addSupplierPayment: (p: Draft<SupplierPayment>, cheque?: SupplierCheque) => void;
@@ -177,6 +179,77 @@ async function loadAll(): Promise<DB> {
     if (ins.error) throw ins.error;
   }
   return db;
+}
+
+/** Suma (sign 1) o saca (sign -1) del stock lo que trajo una descarga. */
+function purchaseStock(
+  d: DB,
+  pur: Purchase,
+  sign: 1 | -1,
+  move?: { reason: StockMove["reason"]; note: string; date: string },
+) {
+  for (const it of pur.items) {
+    const p = d.products.find((x) => x.id === it.productId);
+    if (!p || it.tons <= 0) continue;
+    const qty = (p.unit === "kg" ? it.tons * 1000 : it.tons) * sign;
+    p.stock += qty;
+    if (move)
+      d.stockMoves.unshift({
+        id: uid(),
+        date: move.date,
+        productId: p.id,
+        qty,
+        reason: move.reason,
+        note: move.note,
+      });
+  }
+}
+
+/** Lleva a los productos el precio del proveedor, el flete y la descarga de ese asiento. */
+function purchaseCosts(d: DB, pur: Purchase) {
+  const tons = pur.items.reduce((a, i) => a + i.tons, 0);
+  const freightPerTon = tons > 0 ? pur.freightTotal / tons : 0;
+  const unloadPerTon = tons > 0 ? pur.unloadCost / tons : 0;
+  for (const it of pur.items) {
+    const p = d.products.find((x) => x.id === it.productId);
+    if (!p || it.tons <= 0 || it.pricePerTon <= 0) continue;
+    if (p.category === "piedra" && p.stoneCost) {
+      p.stoneCost = {
+        ...p.stoneCost,
+        purchasePerTon: it.pricePerTon,
+        ...(pur.freightTotal > 0 ? { freightPerTon: Math.round(freightPerTon) } : {}),
+        ...(pur.unloadCost > 0 ? { unloadPerTon: Math.round(unloadPerTon) } : {}),
+      };
+      const c = stoneCalc(p.stoneCost, p.bagKg ?? d.settings.bagKg);
+      p.cost = c.costKg;
+      p.price = c.priceKg;
+      p.bagPrice = c.priceBag;
+    } else {
+      // Lajas, líquidos y unitarios: el precio es por unidad; se mantiene el mismo margen.
+      const margin = p.cost > 0 ? p.price / p.cost : 1 + (d.settings.defaultMarginPct ?? 40) / 100;
+      const fr = pur.freightTotal > 0 ? freightPerTon : (p.freight ?? 0);
+      p.freight = fr || undefined;
+      p.cost = Math.round(it.pricePerTon + fr + unloadPerTon);
+      p.price = Math.round(p.cost * margin);
+    }
+  }
+}
+
+/** Anula un pago a proveedor: saca el gasto y el movimiento, y devuelve o anula el cheque. */
+function undoSupplierPayment(d: DB, pay: SupplierPayment) {
+  if (pay.expenseId) {
+    d.expenses = d.expenses.filter((e) => e.id !== pay.expenseId);
+    d.movements = d.movements.filter((m) => m.refId !== pay.expenseId);
+  }
+  // El cheque propio se anula; el de un cliente vuelve a la cartera.
+  const ch = pay.chequeId ? d.cheques.find((c) => c.id === pay.chequeId) : undefined;
+  if (ch?.own) d.cheques = d.cheques.filter((c) => c.id !== ch.id);
+  else if (ch) {
+    ch.status = "cartera";
+    ch.givenTo = undefined;
+    ch.givenDate = undefined;
+  }
+  d.supplierPayments = d.supplierPayments.filter((x) => x.id !== pay.id);
 }
 
 /** Registra todo lo que genera una venta: baja de stock, movimientos de caja/banco, cheque y cuotas. */
@@ -632,67 +705,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addPurchase: (draft, updateCosts) => {
         const pur: Purchase = { ...draft, id: uid() };
         mutate((d) => {
-          const tons = pur.items.reduce((a, i) => a + i.tons, 0);
-          const freightPerTon = tons > 0 ? pur.freightTotal / tons : 0;
-          const unloadPerTon = tons > 0 ? pur.unloadCost / tons : 0;
-          for (const it of pur.items) {
-            const p = d.products.find((x) => x.id === it.productId);
-            if (!p || it.tons <= 0) continue;
-            const qty = p.unit === "kg" ? it.tons * 1000 : it.tons;
-            p.stock += qty;
-            d.stockMoves.unshift({
-              id: uid(),
-              date: pur.date,
-              productId: p.id,
-              qty,
-              reason: "compra",
-              note: `${pur.supplier}${pur.remito ? " · Rto " + pur.remito : ""}`,
-            });
-            if (!updateCosts || it.pricePerTon <= 0) continue;
-            if (p.category === "piedra" && p.stoneCost) {
-              p.stoneCost = {
-                ...p.stoneCost,
-                purchasePerTon: it.pricePerTon,
-                ...(pur.freightTotal > 0 ? { freightPerTon: Math.round(freightPerTon) } : {}),
-                ...(pur.unloadCost > 0 ? { unloadPerTon: Math.round(unloadPerTon) } : {}),
-              };
-              const c = stoneCalc(p.stoneCost, p.bagKg ?? d.settings.bagKg);
-              p.cost = c.costKg;
-              p.price = c.priceKg;
-              p.bagPrice = c.priceBag;
-            } else {
-              // Lajas, líquidos y unitarios: el precio es por unidad; se mantiene el mismo margen.
-              const margin =
-                p.cost > 0 ? p.price / p.cost : 1 + (d.settings.defaultMarginPct ?? 40) / 100;
-              const fr = pur.freightTotal > 0 ? freightPerTon : (p.freight ?? 0);
-              p.freight = fr || undefined;
-              p.cost = Math.round(it.pricePerTon + fr + unloadPerTon);
-              p.price = Math.round(p.cost * margin);
-            }
-          }
+          purchaseStock(d, pur, 1, {
+            reason: "compra",
+            note: `${pur.supplier}${pur.remito ? " · Rto " + pur.remito : ""}`,
+            date: pur.date,
+          });
+          if (updateCosts) purchaseCosts(d, pur);
           d.purchases.unshift(pur);
           return d;
         });
         return pur;
       },
+      updatePurchase: (id, draft, updateCosts) =>
+        mutate((d) => {
+          const i = d.purchases.findIndex((x) => x.id === id);
+          const old = d.purchases[i];
+          if (!old) return d;
+          const pur: Purchase = { ...old, ...draft, id };
+          // Stock: se saca lo que había sumado el asiento viejo y se suma lo nuevo;
+          // en el historial de stock queda solo la diferencia.
+          const before = new Map(d.products.map((p) => [p.id, p.stock]));
+          purchaseStock(d, old, -1);
+          purchaseStock(d, pur, 1);
+          for (const p of d.products) {
+            const diff = p.stock - (before.get(p.id) ?? 0);
+            if (Math.abs(diff) > 1e-9)
+              d.stockMoves.unshift({
+                id: uid(),
+                date: new Date().toISOString(),
+                productId: p.id,
+                qty: diff,
+                reason: "ajuste",
+                note: `Descarga editada · ${pur.supplier}`,
+              });
+          }
+          if (updateCosts) purchaseCosts(d, pur);
+          // Los pagos cargados en ese asiento siguen al proveedor si se le corrigió el nombre.
+          for (const pay of d.supplierPayments)
+            if (pay.purchaseId === id)
+              pay.party = pay.kind === "cantera" ? pur.supplier : (pur.carrier ?? pay.party);
+          d.purchases[i] = pur;
+          d.purchases.sort((a, b) => b.date.localeCompare(a.date));
+          return d;
+        }),
       removePurchase: (id) =>
         mutate((d) => {
           const pur = d.purchases.find((x) => x.id === id);
           if (!pur) return d;
-          for (const it of pur.items) {
-            const p = d.products.find((x) => x.id === it.productId);
-            if (!p) continue;
-            const qty = p.unit === "kg" ? it.tons * 1000 : it.tons;
-            p.stock -= qty;
-            d.stockMoves.unshift({
-              id: uid(),
-              date: new Date().toISOString(),
-              productId: p.id,
-              qty: -qty,
-              reason: "ajuste",
-              note: `Descarga eliminada · ${pur.supplier}`,
-            });
-          }
+          purchaseStock(d, pur, -1, {
+            reason: "ajuste",
+            note: `Descarga eliminada · ${pur.supplier}`,
+            date: new Date().toISOString(),
+          });
+          // Los pagos cargados en el mismo asiento se anulan con él.
+          for (const pay of d.supplierPayments.filter((x) => x.purchaseId === id))
+            undoSupplierPayment(d, pay);
           d.purchases = d.purchases.filter((x) => x.id !== id);
           return d;
         }),
@@ -794,20 +861,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeSupplierPayment: (id) =>
         mutate((d) => {
           const pay = d.supplierPayments.find((x) => x.id === id);
-          if (!pay) return d;
-          if (pay.expenseId) {
-            d.expenses = d.expenses.filter((e) => e.id !== pay.expenseId);
-            d.movements = d.movements.filter((m) => m.refId !== pay.expenseId);
-          }
-          // El cheque propio se anula; el de un cliente vuelve a la cartera.
-          const ch = pay.chequeId ? d.cheques.find((c) => c.id === pay.chequeId) : undefined;
-          if (ch?.own) d.cheques = d.cheques.filter((c) => c.id !== ch.id);
-          else if (ch) {
-            ch.status = "cartera";
-            ch.givenTo = undefined;
-            ch.givenDate = undefined;
-          }
-          d.supplierPayments = d.supplierPayments.filter((x) => x.id !== id);
+          if (pay) undoSupplierPayment(d, pay);
           return d;
         }),
       addIncome: (date, concept, amount, account) =>
