@@ -210,7 +210,7 @@ const descargasSteps: Step[] = [
     route: "/descargas",
     target: "desc-nueva",
     title: "4. Pagado o queda debiendo",
-    body: "Si ya le pagaste a la cantera o al transporte, lo marcás ahí mismo y elegís cómo. Si no marcás nada, queda como deuda en su cuenta y los pagos se cargan después, de a uno o en partes.",
+    body: "Si le pagás a la cantera o al transporte en el momento, lo marcás ahí mismo: todo o solo una parte, y elegís cómo. Lo que queda debiendo va a su cuenta y elegís en cuántos días querés el aviso para pagar el saldo (7, 15, 30 o 60). Ese día aparece en Notificaciones y en el Calendario.",
   },
   {
     route: "/descargas",

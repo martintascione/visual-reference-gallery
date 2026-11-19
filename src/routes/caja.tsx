@@ -3,6 +3,9 @@ import { useMemo, useState } from "react";
 import { Banknote, Building2, CalendarClock, Clock, FileCheck2, Plus, Upload } from "lucide-react";
 import type { Bank, Cheque, ChequeStatus } from "@/lib/types";
 import { accountBalance, pendingSettlements, useStore } from "@/lib/store";
+import { chequeLabel } from "@/lib/cheque-labels";
+import { ChequeForm } from "@/components/cheque-form";
+import { Link } from "@tanstack/react-router";
 import { addDays, ars, dayOf, daysBetween, fmtDate, fmtTime, todayISO } from "@/lib/format";
 import {
   Badge,
@@ -33,13 +36,6 @@ export const Route = createFileRoute("/caja")({
   component: Caja,
 });
 
-const chequeLabel: Record<ChequeStatus, string> = {
-  cartera: "En cartera",
-  depositado: "Depositado",
-  acreditado: "Acreditado",
-  endosado: "Endosado",
-  rechazado: "Rechazado",
-};
 const kindLabel: Record<string, string> = {
   venta: "Venta",
   cobro: "Cobro",
@@ -160,7 +156,15 @@ function Caja() {
           </div>
         </Card>
 
-        <Card icon={CalendarClock} title="Cartera de cheques">
+        <Card
+          icon={CalendarClock}
+          title="Cartera de cheques"
+          action={
+            <Link to="/cheques" className={btn.ghost}>
+              Ver historial de cheques
+            </Link>
+          }
+        >
           {cheques.length === 0 && (
             <p className="text-sm text-muted-foreground">No hay cheques en cartera.</p>
           )}
@@ -253,7 +257,7 @@ function Caja() {
         </Card>
       </div>
 
-      <NewCheque open={newCheque} onClose={() => setNewCheque(false)} />
+      <ChequeForm open={newCheque} onClose={() => setNewCheque(false)} />
       <NewIncome open={income} onClose={() => setIncome(false)} />
     </>
   );
@@ -266,9 +270,10 @@ function ChequeRow({
 }: {
   c: Cheque;
   days: number;
-  onStatus: (id: string, s: ChequeStatus, bank?: Bank) => void;
+  onStatus: (id: string, s: ChequeStatus, bank?: Bank, givenTo?: string) => void;
 }) {
   const [bank, setBank] = useState<Bank>("Provincia");
+  const [to, setTo] = useState("");
   const tone = days < 0 ? "danger" : days <= 3 ? "dark" : "muted";
   return (
     <div className="rounded-2xl bg-surface p-3 text-xs">
@@ -306,8 +311,18 @@ function ChequeRow({
             >
               <Upload className="h-3 w-3" /> Depositar
             </button>
-            <button className={btn.ghost} onClick={() => onStatus(c.id, "endosado")}>
-              Endosar a proveedor
+            <Input
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="A quién se lo das"
+              className="h-8 w-40 text-xs"
+            />
+            <button
+              className={btn.ghost}
+              disabled={to.trim().length < 2}
+              onClick={() => onStatus(c.id, "endosado", undefined, to)}
+            >
+              Entregar a proveedor
             </button>
           </>
         )}
@@ -324,84 +339,6 @@ function ChequeRow({
         </button>
       </div>
     </div>
-  );
-}
-
-function NewCheque({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { db, addCheque } = useStore();
-  const [c, setC] = useState({
-    number: "",
-    bank: "",
-    drawer: "",
-    dueDate: addDays(todayISO(), 30),
-    amount: 0,
-    clientId: "",
-    echeq: false,
-  });
-  const save = () => {
-    const client = db.clients.find((x) => x.id === c.clientId);
-    addCheque({
-      number: c.number,
-      bank: c.bank,
-      drawer: c.drawer || client?.name || "",
-      dueDate: c.dueDate,
-      amount: c.amount,
-      status: "cartera",
-      clientId: client?.id,
-      clientName: client?.name ?? c.drawer,
-      echeq: c.echeq,
-    });
-    onClose();
-  };
-  return (
-    <Modal open={open} onClose={onClose} title="Cargar cheque recibido">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Cliente" className="col-span-2">
-          <Select value={c.clientId} onChange={(e) => setC({ ...c, clientId: e.target.value })}>
-            <option value="">Sin cliente cargado</option>
-            {db.clients.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="N° de cheque">
-          <Input value={c.number} onChange={(e) => setC({ ...c, number: e.target.value })} />
-        </Field>
-        <Field label="Banco emisor">
-          <Input value={c.bank} onChange={(e) => setC({ ...c, bank: e.target.value })} />
-        </Field>
-        <Field label="Librador">
-          <Input value={c.drawer} onChange={(e) => setC({ ...c, drawer: e.target.value })} />
-        </Field>
-        <Field label="Fecha de cobro">
-          <Input
-            type="date"
-            value={c.dueDate}
-            onChange={(e) => setC({ ...c, dueDate: e.target.value })}
-          />
-        </Field>
-        <Field label="Monto">
-          <NumberInput value={c.amount} onChange={(v) => setC({ ...c, amount: v })} prefix="$" />
-        </Field>
-        <div className="flex items-end pb-2">
-          <Toggle checked={c.echeq} onChange={(v) => setC({ ...c, echeq: v })} label="Es e-cheq" />
-        </div>
-      </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <button className={btn.soft} onClick={onClose}>
-          Cancelar
-        </button>
-        <button
-          className={btn.primary}
-          disabled={!c.number || !c.bank || c.amount <= 0}
-          onClick={save}
-        >
-          Guardar en cartera
-        </button>
-      </div>
-    </Modal>
   );
 }
 

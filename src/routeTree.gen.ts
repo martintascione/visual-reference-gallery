@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CajaRouteImport } from './routes/caja'
 import { Route as CalendarioRouteImport } from './routes/calendario'
 import { Route as CatalogoRouteImport } from './routes/catalogo'
+import { Route as ChequesRouteImport } from './routes/cheques'
 import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
@@ -46,6 +47,11 @@ const CalendarioRoute = CalendarioRouteImport.update({
 const CatalogoRoute = CatalogoRouteImport.update({
   id: '/catalogo',
   path: '/catalogo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChequesRoute = ChequesRouteImport.update({
+  id: '/cheques',
+  path: '/cheques',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CierreRoute = CierreRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
+  '/cheques': typeof ChequesRoute
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
+  '/cheques': typeof ChequesRoute
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
+  '/cheques': typeof ChequesRoute
   '/cierre': typeof CierreRoute
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/caja'
     | '/calendario'
     | '/catalogo'
+    | '/cheques'
     | '/cierre'
     | '/clientes'
     | '/configuracion'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/caja'
     | '/calendario'
     | '/catalogo'
+    | '/cheques'
     | '/cierre'
     | '/clientes'
     | '/configuracion'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/caja'
     | '/calendario'
     | '/catalogo'
+    | '/cheques'
     | '/cierre'
     | '/clientes'
     | '/configuracion'
@@ -248,6 +260,7 @@ export interface RootRouteChildren {
   CajaRoute: typeof CajaRoute
   CalendarioRoute: typeof CalendarioRoute
   CatalogoRoute: typeof CatalogoRoute
+  ChequesRoute: typeof ChequesRoute
   CierreRoute: typeof CierreRoute
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/catalogo'
       fullPath: '/catalogo'
       preLoaderRoute: typeof CatalogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cheques': {
+      id: '/cheques'
+      path: '/cheques'
+      fullPath: '/cheques'
+      preLoaderRoute: typeof ChequesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cierre': {
@@ -400,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   CajaRoute: CajaRoute,
   CalendarioRoute: CalendarioRoute,
   CatalogoRoute: CatalogoRoute,
+  ChequesRoute: ChequesRoute,
   CierreRoute: CierreRoute,
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,

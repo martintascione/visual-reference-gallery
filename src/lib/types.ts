@@ -179,7 +179,9 @@ export type Due = {
   concept?: string | undefined;
 };
 
-export type ChequeStatus = "cartera" | "depositado" | "acreditado" | "endosado" | "rechazado";
+/** emitido = cheque propio entregado a un proveedor. endosado = cheque de un cliente entregado a un proveedor. */
+export type ChequeStatus =
+  "cartera" | "depositado" | "acreditado" | "endosado" | "rechazado" | "emitido";
 
 export type Cheque = {
   id: string;
@@ -194,6 +196,27 @@ export type Cheque = {
   saleId?: string | undefined;
   depositBank?: Bank | undefined;
   echeq: boolean;
+  /** Cheque propio (de la chequera del corralón). */
+  own?: boolean | undefined;
+  /** Día en que se recibió (AAAA-MM-DD). */
+  receivedDate?: string | undefined;
+  /** A quién se le entregó (proveedor o transporte) y cuándo. */
+  givenTo?: string | undefined;
+  givenDate?: string | undefined;
+};
+
+/** Datos del cheque con el que se le paga a un proveedor. */
+export type SupplierCheque = {
+  kind: "propio" | "tercero";
+  /** Cheque de la cartera que se entrega; vacío si se carga uno nuevo. */
+  id?: string | undefined;
+  number: string;
+  bank: string;
+  /** De quién es originalmente (librador). */
+  drawer: string;
+  /** Quién se lo dio al corralón. */
+  from: string;
+  dueDate: string;
 };
 
 export type MovementKind = "venta" | "cobro" | "gasto" | "debito" | "ingreso" | "compra" | "flete";
@@ -360,6 +383,10 @@ export type Purchase = {
   freightTotal: number;
   unloadCost: number;
   note?: string | undefined;
+  /** Día en que hay que avisar para pagarle el saldo a la cantera (AAAA-MM-DD). */
+  payDue?: string | undefined;
+  /** Día en que hay que avisar para pagarle el saldo al transporte (AAAA-MM-DD). */
+  freightDue?: string | undefined;
 };
 
 export type SupplierPayMethod = "efectivo" | "transferencia" | "cheque" | "gasoil";
@@ -381,6 +408,8 @@ export type SupplierPayment = {
   liters?: number | undefined;
   expenseId?: string | undefined;
   purchaseId?: string | undefined;
+  /** Cheque (propio o de terceros) con el que se pagó. */
+  chequeId?: string | undefined;
 };
 
 export type DB = {

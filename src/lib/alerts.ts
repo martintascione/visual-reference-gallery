@@ -1,16 +1,16 @@
 import type { DB } from "./types";
-import { clientBalance } from "./store";
+import { clientBalance, supplierAccounts } from "./store";
 import { addDays, ars, dayOf, daysBetween, fmtDate, num, todayISO } from "./format";
 
 export type AlertKind =
-  "stock" | "cuota" | "cheque" | "presupuesto" | "liquidacion" | "debito" | "entrega";
+  "stock" | "cuota" | "cheque" | "presupuesto" | "liquidacion" | "debito" | "entrega" | "proveedor";
 export type Alert = {
   id: string;
   kind: AlertKind;
   text: string;
   detail?: string | undefined;
   urgent: boolean;
-  to: "/stock" | "/clientes" | "/caja" | "/presupuestos" | "/gastos" | "/ventas";
+  to: "/stock" | "/clientes" | "/caja" | "/presupuestos" | "/gastos" | "/ventas" | "/descargas";
   date?: string | undefined;
 };
 
@@ -122,6 +122,22 @@ export function buildAlerts(db: DB): Alert[] {
       date: s.delivery!.date,
     });
 
+  // Saldos con canteras y transportes: avisa desde 2 días antes de la fecha elegida.
+  for (const a of supplierAccounts(db)) {
+    if (!a.remind || a.saldo <= 0) continue;
+    const d = daysBetween(today, a.remind);
+    if (d <= 2)
+      out.push({
+        id: "pv" + a.kind + a.party,
+        kind: "proveedor",
+        text: `Pagar a ${a.party}: saldo ${ars(a.saldo)}`,
+        detail: `${a.kind === "cantera" ? "Cantera" : "Transporte"} · ${d < 0 ? `había que pagar el ${fmtDate(a.remind)}` : d === 0 ? "hay que pagar hoy" : `hay que pagar en ${d} d`}`,
+        urgent: d <= 0,
+        to: "/descargas",
+        date: a.remind,
+      });
+  }
+
   return out.sort((a, b) => Number(b.urgent) - Number(a.urgent));
 }
 
@@ -183,6 +199,15 @@ export function buildAgenda(db: DB, days = 30): AgendaItem[] {
         text: `Acredita ${m.gateway ?? "depósito"} en ${m.account}`,
         amount: m.amount - Math.round((m.amount * (m.feePct ?? 0)) / 100),
         to: "/caja",
+      });
+  for (const a of supplierAccounts(db))
+    if (a.remind && a.saldo > 0 && a.remind <= end)
+      items.push({
+        date: a.remind,
+        kind: "proveedor",
+        text: `Pagar saldo a ${a.party} (${a.kind})`,
+        amount: a.saldo,
+        to: "/descargas",
       });
   const [y, mo] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
   for (const f of db.settings.fixedExpenses)

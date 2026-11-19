@@ -19,6 +19,7 @@ import {
   Truck,
   Wallet,
   type LucideIcon,
+  HandCoins,
 } from "lucide-react";
 import { clientBalance, feeFor, useStore } from "@/lib/store";
 import {
@@ -60,6 +61,7 @@ const alertIcons: Record<AlertKind, LucideIcon> = {
   liquidacion: CreditCard,
   debito: Receipt,
   entrega: Truck,
+  proveedor: HandCoins,
 };
 const methodIcon = (method: string): LucideIcon =>
   method === "efectivo"

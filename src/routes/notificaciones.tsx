@@ -8,6 +8,7 @@ import {
   Receipt,
   Truck,
   Wallet,
+  HandCoins,
 } from "lucide-react";
 import { buildAlerts, type AlertKind } from "@/lib/alerts";
 import { useStore } from "@/lib/store";
@@ -31,6 +32,7 @@ const icons: Record<AlertKind, typeof Bell> = {
   liquidacion: CreditCard,
   debito: Receipt,
   entrega: Truck,
+  proveedor: HandCoins,
 };
 
 function Notificaciones() {

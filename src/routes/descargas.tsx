@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp, Plus, Trash2, Truck, Wallet } from "lucide-react";
-import type { Bank, Purchase, PurchaseItem, SupplierPayMethod } from "@/lib/types";
+import type { Bank, Purchase, PurchaseItem, SupplierCheque, SupplierPayMethod } from "@/lib/types";
 import { supplierAccounts, useStore } from "@/lib/store";
 import { ars, fmtDate, num, todayISO, addDays, uid } from "@/lib/format";
 import {
@@ -211,6 +211,7 @@ function Descargas() {
                     <span className="block truncate text-sm font-medium">{a.party}</span>
                     <span className="text-[11px] text-muted-foreground">
                       {a.kind === "cantera" ? "Cantera" : "Transporte"}
+                      {a.remind && a.saldo > 0 ? ` · pagar el ${fmtDay(a.remind)}` : ""}
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
@@ -267,8 +268,56 @@ type PayNow = {
   detail: string;
   dueDate: string;
   liters: number;
+  /** Cheque propio o de un cliente (de terceros). */
+  chequeKind: "propio" | "tercero";
+  /** Cheque de la cartera elegido ("" = se carga uno nuevo). */
+  chequeId: string;
+  /** Quién me lo dio, de quién es y de qué banco (cheque de terceros que no estaba cargado). */
+  from: string;
+  drawer: string;
+  chequeBank: string;
+  /** Paga todo; si no, paga `amount` y el resto queda como saldo. */
+  full: boolean;
+  amount: number;
 };
+/** Pagos que se cargan al asentar la descarga: ninguno, uno o varios (ej. dos cheques). */
+type PayBox = { on: boolean; remind: number; lines: (PayNow & { id: string })[] };
+/** Monto de cada pago: el que está en "resto" toma lo que falta para llegar al total. */
+const amountsOf = (b: PayBox, total: number) => {
+  const fixed = b.lines.reduce((a, l) => a + (l.full ? 0 : Math.max(0, l.amount)), 0);
+  const autos = b.lines.filter((l) => l.full).length;
+  let left = total;
+  return b.lines.map((l) => {
+    const want = l.full ? Math.max(0, total - fixed) / autos : Math.max(0, l.amount);
+    const a = Math.round(Math.min(want, left));
+    left -= a;
+    return a;
+  });
+};
+const paidOf = (b: PayBox, total: number) =>
+  b.on ? amountsOf(b, total).reduce((a, n) => a + n, 0) : 0;
+const fmtDay = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+/** Datos del cheque para guardar en el historial de cheques. */
+const chequeOf = (v: PayNow): SupplierCheque | undefined =>
+  v.method !== "cheque"
+    ? undefined
+    : {
+        kind: v.chequeKind,
+        id: v.chequeKind === "tercero" && v.chequeId ? v.chequeId : undefined,
+        number: v.detail.trim(),
+        bank: v.chequeBank.trim(),
+        drawer: v.drawer.trim(),
+        from: v.from.trim(),
+        dueDate: v.dueDate,
+      };
 const payBlank = (): PayNow => ({
+  chequeKind: "propio",
+  chequeId: "",
+  from: "",
+  drawer: "",
+  chequeBank: "",
+  full: true,
+  amount: 0,
   on: false,
   method: "transferencia",
   account: "BBVA",
@@ -278,15 +327,25 @@ const payBlank = (): PayNow => ({
 });
 
 /** Campos de un pago: medio, cuenta y los datos propios de cheque o gasoil. */
+const boxBlank = (): PayBox => ({ on: false, remind: 30, lines: [{ ...payBlank(), id: uid() }] });
+
 function PayFields({
   v,
   set,
   allowGasoil,
+  onAmount,
 }: {
   v: PayNow;
   set: (p: Partial<PayNow>) => void;
   allowGasoil: boolean;
+  /** Al elegir un cheque de la cartera, el monto del pago pasa a ser el del cheque. */
+  onAmount?: ((n: number) => void) | undefined;
 }) {
+  const { db } = useStore();
+  const third = v.method === "cheque" && v.chequeKind === "tercero";
+  const wallet = db.cheques
+    .filter((c) => c.status === "cartera")
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-3">
       <Field label="Cómo se paga">
@@ -300,7 +359,29 @@ function PayFields({
           {allowGasoil && <option value="gasoil">Gasoil (carga en la estación)</option>}
         </Select>
       </Field>
-      {v.method !== "gasoil" ? (
+      {third ? (
+        <Field
+          label="Cheque que entregás"
+          help="Elegí un cheque de la cartera (los que te dieron los clientes) o cargá uno que todavía no estaba en el sistema. Queda en el historial de cheques con a quién se lo diste."
+        >
+          <Select
+            value={v.chequeId}
+            onChange={(e) => {
+              const c = wallet.find((x) => x.id === e.target.value);
+              if (!c) return set({ chequeId: "" });
+              set({ chequeId: c.id, detail: c.number, dueDate: c.dueDate });
+              onAmount?.(c.amount);
+            }}
+          >
+            <option value="">Uno que no está cargado…</option>
+            {wallet.map((c) => (
+              <option key={c.id} value={c.id}>
+                N° {c.number} · {c.clientName} · {ars(c.amount)} · vence {fmtDay(c.dueDate)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : v.method !== "gasoil" ? (
         <Field label="Sale de">
           <Select
             value={v.method === "efectivo" ? "Caja" : v.account === "Caja" ? "BBVA" : v.account}
@@ -321,6 +402,63 @@ function PayFields({
         </Field>
       )}
       {v.method === "cheque" && (
+        <div className="col-span-2">
+          <Segmented
+            value={v.chequeKind}
+            onChange={(k) => set({ chequeKind: k, chequeId: "" })}
+            options={[
+              { value: "propio", label: "Cheque propio" },
+              { value: "tercero", label: "Cheque de un cliente (terceros)" },
+            ]}
+          />
+        </div>
+      )}
+      {third && !v.chequeId && (
+        <>
+          <Field label="N° de cheque">
+            <Input value={v.detail} onChange={(e) => set({ detail: e.target.value })} />
+          </Field>
+          <Field label="Banco del cheque">
+            <Input value={v.chequeBank} onChange={(e) => set({ chequeBank: e.target.value })} />
+          </Field>
+          <Field label="Quién me lo dio" help="La persona o empresa que te entregó el cheque.">
+            <Input
+              list="quien-dio-cheque"
+              value={v.from}
+              onChange={(e) => set({ from: e.target.value })}
+            />
+            <datalist id="quien-dio-cheque">
+              {db.clients.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </Field>
+          <Field
+            label="De quién es (librador)"
+            help="El titular original del cheque: quien lo firmó. Si lo dejás vacío se toma a quien te lo dio."
+          >
+            <Input value={v.drawer} onChange={(e) => set({ drawer: e.target.value })} />
+          </Field>
+          <Field label="Fecha de vencimiento" className="col-span-2">
+            <Input
+              type="date"
+              value={v.dueDate}
+              onChange={(e) => set({ dueDate: e.target.value })}
+            />
+          </Field>
+        </>
+      )}
+      {third && v.chequeId && (
+        <p className="col-span-2 text-[11px] text-muted-foreground">
+          {(() => {
+            const c = wallet.find((x) => x.id === v.chequeId);
+            return c
+              ? `Me lo dio ${c.clientName || "—"} · es de ${c.drawer || "—"} · ${c.bank} · vence el ${fmtDay(c.dueDate)}. Sale de la cartera y queda entregado a este proveedor.`
+              : "";
+          })()}
+        </p>
+      )}
+      {v.method === "cheque" && !third && (
         <>
           <Field label="N° de cheque">
             <Input value={v.detail} onChange={(e) => set({ detail: e.target.value })} />
@@ -350,6 +488,176 @@ function PayFields({
   );
 }
 
+/** Pago al asentar la descarga: todo, una parte o nada, en uno o varios pagos, con aviso para el saldo. */
+function PayNowBox({
+  v,
+  set,
+  total,
+  who,
+  date,
+  allowGasoil,
+}: {
+  v: PayBox;
+  set: (f: (b: PayBox) => PayBox) => void;
+  total: number;
+  who: string;
+  date: string;
+  allowGasoil: boolean;
+}) {
+  const amounts = amountsOf(v, total);
+  const paid = paidOf(v, total);
+  const rest = total - paid;
+  const updLine = (id: string, patch: Partial<PayNow>) =>
+    set((b) => ({ ...b, lines: b.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+  const one = (patch: Partial<PayNow>) =>
+    set((b) => ({ ...b, lines: [{ ...payBlank(), id: uid(), ...patch }] }));
+  const cheque = (days: number, patch: Partial<PayNow> = {}) => ({
+    ...payBlank(),
+    id: uid(),
+    method: "cheque" as const,
+    dueDate: addDays(date, days),
+    ...patch,
+  });
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <Toggle
+        checked={v.on}
+        onChange={(on) => set((b) => ({ ...b, on }))}
+        label={`Le pago ahora ${who} (todo o una parte)`}
+      />
+      {v.on && (
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">Rápido:</span>
+            <button type="button" className={btn.ghost} onClick={() => one({ full: true })}>
+              Todo
+            </button>
+            <button
+              type="button"
+              className={btn.ghost}
+              onClick={() => one({ full: false, amount: Math.round(total / 2) })}
+            >
+              La mitad
+            </button>
+            <button
+              type="button"
+              className={btn.ghost}
+              onClick={() =>
+                set((b) => ({
+                  ...b,
+                  lines: [
+                    cheque(30, { full: false, amount: Math.round(total / 2) }),
+                    cheque(60, { full: true }),
+                  ],
+                }))
+              }
+            >
+              2 cheques a 30 y 60 días
+            </button>
+          </div>
+          {v.lines.map((l, i) => (
+            <div key={l.id} className="rounded-2xl bg-card p-3">
+              <div className="mb-3 flex items-end gap-2">
+                <Field
+                  label={v.lines.length > 1 ? `Pago ${i + 1} · monto` : "Cuánto le pagás ahora"}
+                  className="flex-1"
+                  help="Si pagás solo una parte, el resto queda como saldo en la cuenta del proveedor y lo vas pagando después."
+                >
+                  <NumberInput
+                    value={amounts[i] ?? 0}
+                    onChange={(n) => updLine(l.id, { full: false, amount: n })}
+                    prefix="$"
+                  />
+                </Field>
+                {v.lines.length > 1 && (
+                  <button
+                    type="button"
+                    className={btn.icon}
+                    aria-label="Quitar este pago"
+                    onClick={() =>
+                      set((b) => ({ ...b, lines: b.lines.filter((x) => x.id !== l.id) }))
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  </button>
+                )}
+              </div>
+              <PayFields
+                v={l}
+                set={(p) => updLine(l.id, p)}
+                allowGasoil={allowGasoil}
+                onAmount={(n) => updLine(l.id, { full: false, amount: n })}
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            className={`${btn.ghost} self-start`}
+            onClick={() =>
+              set((b) => {
+                const am = amountsOf(b, total);
+                const left = total - am.reduce((a, n) => a + n, 0);
+                // Si ya estaba todo cubierto, el pago anterior pasa a la mitad y el nuevo toma el resto.
+                const lines = b.lines.map((x, k) =>
+                  left > 0
+                    ? { ...x, full: false, amount: am[k] ?? 0 }
+                    : k === b.lines.length - 1
+                      ? { ...x, full: false, amount: Math.round((am[k] ?? 0) / 2) }
+                      : { ...x, full: false, amount: am[k] ?? 0 },
+                );
+                const prev = b.lines[b.lines.length - 1];
+                const next =
+                  prev?.method === "cheque"
+                    ? cheque(0, { dueDate: addDays(prev.dueDate, 30), account: prev.account })
+                    : { ...payBlank(), id: uid() };
+                return { ...b, lines: [...lines, { ...next, full: true }] };
+              })
+            }
+          >
+            <Plus className="h-3.5 w-3.5" /> Otro pago (otro cheque, efectivo, transferencia…)
+          </button>
+        </div>
+      )}
+      {rest > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-card p-3 text-xs">
+          <span>
+            {v.on ? `Paga ${ars(paid)} · queda` : "Queda"} debiendo{" "}
+            <b className="text-danger-soft-foreground">{ars(rest)}</b> · avisarme para pagarlo en
+          </span>
+          <span className="w-24">
+            <NumberInput
+              value={v.remind}
+              onChange={(n) => set((b) => ({ ...b, remind: Math.max(0, Math.round(n)) }))}
+              suffix="días"
+            />
+          </span>
+          {[7, 15, 30, 60].map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={v.remind === d ? btn.soft : btn.ghost}
+              onClick={() => set((b) => ({ ...b, remind: d }))}
+            >
+              {d}
+            </button>
+          ))}
+          <span className="text-muted-foreground">
+            {v.remind > 0
+              ? `Te avisa el ${fmtDay(addDays(date, v.remind))}`
+              : "Sin aviso: queda solo en la cuenta"}
+          </span>
+        </div>
+      ) : (
+        total > 0 && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Queda pago{v.lines.length > 1 ? ` en ${v.lines.length} pagos` : ""}, sin saldo.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
 function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { db, addPurchase, addSupplierPayment } = useStore();
   const products = useMemo(
@@ -367,8 +675,8 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [fValue, setFValue] = useState(0);
   const [unload, setUnload] = useState(0);
   const [updateCosts, setUpdateCosts] = useState(true);
-  const [payS, setPayS] = useState<PayNow>(payBlank);
-  const [payC, setPayC] = useState<PayNow>(payBlank);
+  const [payS, setPayS] = useState<PayBox>(boxBlank);
+  const [payC, setPayC] = useState<PayBox>(boxBlank);
   // Crear un producto sin salir de la descarga: al guardarlo queda elegido en ese renglón.
   const [creating, setCreating] = useState(false);
   const pending = useRef<{ lineId: string; known: Set<string> } | null>(null);
@@ -422,6 +730,8 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
       total: Math.round(l.tons * l.price),
     }));
     const iso = date === todayISO() ? new Date().toISOString() : date + "T12:00:00.000Z";
+    const remindDate = (v: PayBox, total: number) =>
+      total - paidOf(v, total) > 0 && v.remind > 0 ? addDays(date, v.remind) : undefined;
     const pur = addPurchase(
       {
         date: iso,
@@ -434,33 +744,43 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
           fMode === "t" ? fValue : freightTons > 0 ? Math.round(fValue / freightTons) : 0,
         freightTotal,
         unloadCost: unload,
+        payDue: remindDate(payS, Math.round(merch)),
+        freightDue: carrier.trim() ? remindDate(payC, freightTotal) : undefined,
       },
       updateCosts,
     );
-    const pay = (v: PayNow, party: string, kind: "cantera" | "transporte", amount: number) => {
-      if (!v.on || amount <= 0 || !party) return;
-      addSupplierPayment({
-        date: iso,
-        party,
-        kind,
-        amount,
-        method: v.method,
-        account:
-          v.method === "gasoil"
-            ? undefined
-            : v.method === "efectivo"
-              ? "Caja"
-              : v.account === "Caja"
-                ? "BBVA"
-                : v.account,
-        detail: v.method === "cheque" && v.detail ? `Cheque ${v.detail}` : undefined,
-        dueDate: v.method === "cheque" ? v.dueDate : undefined,
-        liters: v.method === "gasoil" ? v.liters || undefined : undefined,
-        purchaseId: pur.id,
-      });
+    const payAll = (b: PayBox, party: string, kind: "cantera" | "transporte", total: number) => {
+      if (!b.on || !party) return;
+      const am = amountsOf(b, total);
+      b.lines.forEach((l, k) => pay(l, party, kind, am[k] ?? 0));
     };
-    pay(payS, supplier.trim(), "cantera", Math.round(merch));
-    pay(payC, carrier.trim(), "transporte", freightTotal);
+    const pay = (v: PayNow, party: string, kind: "cantera" | "transporte", amount: number) => {
+      if (amount <= 0) return;
+      addSupplierPayment(
+        {
+          date: iso,
+          party,
+          kind,
+          amount,
+          method: v.method,
+          account:
+            v.method === "gasoil"
+              ? undefined
+              : v.method === "efectivo"
+                ? "Caja"
+                : v.account === "Caja"
+                  ? "BBVA"
+                  : v.account,
+          detail: v.method === "cheque" && v.detail ? `Cheque ${v.detail}` : undefined,
+          dueDate: v.method === "cheque" ? v.dueDate : undefined,
+          liters: v.method === "gasoil" ? v.liters || undefined : undefined,
+          purchaseId: pur.id,
+        },
+        chequeOf(v),
+      );
+    };
+    payAll(payS, supplier.trim(), "cantera", Math.round(merch));
+    payAll(payC, carrier.trim(), "transporte", freightTotal);
     setSupplier("");
     setRemito("");
     setLines([blankLine()]);
@@ -468,8 +788,8 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
     setFTons(0);
     setFValue(0);
     setUnload(0);
-    setPayS(payBlank());
-    setPayC(payBlank());
+    setPayS(boxBlank());
+    setPayC(boxBlank());
     onClose();
   };
 
@@ -642,22 +962,14 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
               {num(tons, 2)} t en total · mercadería <b className="text-foreground">{ars(merch)}</b>
             </p>
           </div>
-          <div className="mt-3 border-t border-border pt-3">
-            <Toggle
-              checked={payS.on}
-              onChange={(on) => setPayS({ ...payS, on })}
-              label="Ya le pagué a la cantera"
-            />
-            {payS.on ? (
-              <div className="mt-3">
-                <PayFields v={payS} set={(p) => setPayS({ ...payS, ...p })} allowGasoil={false} />
-              </div>
-            ) : (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Queda como deuda en la cuenta de la cantera. Después cargás los pagos, uno o varios.
-              </p>
-            )}
-          </div>
+          <PayNowBox
+            v={payS}
+            set={setPayS}
+            total={Math.round(merch)}
+            who="a la cantera"
+            date={date}
+            allowGasoil={false}
+          />
         </div>
 
         <div className="on-surface rounded-3xl bg-surface p-4">
@@ -712,23 +1024,14 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
             </div>
           </div>
           {carrier.trim() && freightTotal > 0 && (
-            <div className="mt-3 border-t border-border pt-3">
-              <Toggle
-                checked={payC.on}
-                onChange={(on) => setPayC({ ...payC, on })}
-                label="Ya le pagué todo el flete"
-              />
-              {payC.on ? (
-                <div className="mt-3">
-                  <PayFields v={payC} set={(p) => setPayC({ ...payC, ...p })} allowGasoil />
-                </div>
-              ) : (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Queda como deuda con el transporte. Los pagos parciales (gasoil, cheque, efectivo)
-                  se cargan desde su cuenta.
-                </p>
-              )}
-            </div>
+            <PayNowBox
+              v={payC}
+              set={setPayC}
+              total={freightTotal}
+              who="al transporte"
+              date={date}
+              allowGasoil
+            />
           )}
         </div>
 
@@ -745,7 +1048,7 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
 
 /** Cuenta de una cantera o transporte: debe, haber y saldo, como en la planilla. */
 function Ledger({ account, onClose }: { account: Account | null; onClose: () => void }) {
-  const { db, addSupplierPayment, removeSupplierPayment } = useStore();
+  const { db, addSupplierPayment, removeSupplierPayment, setSupplierReminder } = useStore();
   const [v, setV] = useState<PayNow>(payBlank);
   const [amount, setAmount] = useState(0);
   const [date, setDate] = useState(todayISO());
@@ -784,24 +1087,27 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
   const withSaldo = rows.map((r) => ({ ...r, saldo: (run += r.debe - r.haber) }));
 
   const pay = () => {
-    addSupplierPayment({
-      date: date === todayISO() ? new Date().toISOString() : date + "T12:00:00.000Z",
-      party: account.party,
-      kind: account.kind,
-      amount,
-      method: v.method,
-      account:
-        v.method === "gasoil"
-          ? undefined
-          : v.method === "efectivo"
-            ? "Caja"
-            : v.account === "Caja"
-              ? "BBVA"
-              : v.account,
-      detail: v.method === "cheque" && v.detail ? `Cheque ${v.detail}` : undefined,
-      dueDate: v.method === "cheque" ? v.dueDate : undefined,
-      liters: v.method === "gasoil" ? v.liters || undefined : undefined,
-    });
+    addSupplierPayment(
+      {
+        date: date === todayISO() ? new Date().toISOString() : date + "T12:00:00.000Z",
+        party: account.party,
+        kind: account.kind,
+        amount,
+        method: v.method,
+        account:
+          v.method === "gasoil"
+            ? undefined
+            : v.method === "efectivo"
+              ? "Caja"
+              : v.account === "Caja"
+                ? "BBVA"
+                : v.account,
+        detail: v.method === "cheque" && v.detail ? `Cheque ${v.detail}` : undefined,
+        dueDate: v.method === "cheque" ? v.dueDate : undefined,
+        liters: v.method === "gasoil" ? v.liters || undefined : undefined,
+      },
+      chequeOf(v),
+    );
     setAmount(0);
     setV(payBlank());
   };
@@ -855,6 +1161,44 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
           ))}
         </Table>
 
+        {account.saldo > 0 && (
+          <div className="on-surface flex flex-wrap items-center gap-2 rounded-3xl bg-surface p-4 text-xs">
+            <span className="font-semibold">Avisarme para pagar el saldo el</span>
+            <span className="w-40">
+              <Input
+                type="date"
+                value={account.remind ?? ""}
+                onChange={(e) =>
+                  setSupplierReminder(account.kind, account.party, e.target.value || undefined)
+                }
+              />
+            </span>
+            {[7, 15, 30, 60].map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={btn.ghost}
+                onClick={() =>
+                  setSupplierReminder(account.kind, account.party, addDays(todayISO(), d))
+                }
+              >
+                {d} d
+              </button>
+            ))}
+            {account.remind ? (
+              <button
+                type="button"
+                className={btn.ghost}
+                onClick={() => setSupplierReminder(account.kind, account.party)}
+              >
+                Quitar aviso
+              </button>
+            ) : (
+              <span className="text-muted-foreground">Sin aviso cargado</span>
+            )}
+          </div>
+        )}
+
         <div className="on-surface rounded-3xl bg-surface p-4">
           <p className="mb-3 text-xs font-semibold">Registrar un pago</p>
           <div className="mb-3 grid grid-cols-2 gap-x-3">
@@ -867,8 +1211,9 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
           </div>
           <PayFields
             v={v}
-            set={(p) => setV({ ...v, ...p })}
+            set={(p) => setV((x) => ({ ...x, ...p }))}
             allowGasoil={account.kind === "transporte"}
+            onAmount={setAmount}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {account.saldo > 0 ? (

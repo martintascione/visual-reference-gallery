@@ -14,6 +14,7 @@ import {
   Settings,
   Tags,
   Users,
+  FileCheck2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui-bits";
 
@@ -47,6 +48,12 @@ const items = [
     icon: Users,
   },
   { to: "/caja", label: "Caja y bancos", d: "Saldos, cheques y liquidaciones", icon: Landmark },
+  {
+    to: "/cheques",
+    label: "Cheques",
+    d: "Historial: quién lo dio y a quién se entregó",
+    icon: FileCheck2,
+  },
   {
     to: "/gastos",
     label: "Gastos y débitos",

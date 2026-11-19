@@ -22,6 +22,7 @@ import {
   Sparkles,
   Tags,
   Users,
+  FileCheck2,
 } from "lucide-react";
 import logo from "@/assets/aridos-petreos-logo.png";
 import { buildAlerts } from "@/lib/alerts";
@@ -42,6 +43,7 @@ const nav = [
   { to: "/descargas", label: "Descargas", icon: Truck },
   { to: "/clientes", label: "Clientes y cuentas corrientes", short: "Clientes", icon: Users },
   { to: "/caja", label: "Caja y bancos", icon: Landmark },
+  { to: "/cheques", label: "Cheques", icon: FileCheck2 },
   { to: "/gastos", label: "Gastos y débitos", icon: Receipt },
   { to: "/cierre", label: "Cierre del día", icon: Lock },
   { to: "/reportes", label: "Reportes", icon: ChartColumn },

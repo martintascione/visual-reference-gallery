@@ -28,6 +28,7 @@ import type {
   Sale,
   Settings,
   StockMove,
+  SupplierCheque,
 } from "./types";
 import { emptyDB } from "./seed";
 import { demoDB } from "./demo-seed";
@@ -81,14 +82,16 @@ type Actions = {
     gateway?: "Payway",
   ) => void;
   addCheque: (c: Draft<Cheque>) => Cheque;
-  setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank) => void;
+  setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank, givenTo?: string) => void;
   addExpense: (e: Draft<Expense>) => void;
   /** Asienta una descarga: suma stock, guarda el historial y (si se pide) actualiza costos y precios. */
   addPurchase: (p: Draft<Purchase>, updateCosts: boolean) => Purchase;
   /** Borra una descarga y descuenta el stock que había sumado (los costos no se tocan). */
   removePurchase: (id: string) => void;
   /** Pago a cantera o transporte. Efectivo, transferencia y cheque salen de caja/banco; gasoil no. */
-  addSupplierPayment: (p: Draft<SupplierPayment>) => void;
+  addSupplierPayment: (p: Draft<SupplierPayment>, cheque?: SupplierCheque) => void;
+  /** Cambia (o quita, sin fecha) el aviso para pagarle el saldo a una cantera o a un transporte. */
+  setSupplierReminder: (kind: "cantera" | "transporte", party: string, date?: string) => void;
   removeSupplierPayment: (id: string) => void;
   addIncome: (date: string, concept: string, amount: number, account: Bank) => void;
   settleMovement: (id: string, settled: boolean) => void;
@@ -212,7 +215,13 @@ function applySale(d: DB, sale: Sale, chequeDraft?: Draft<Cheque>, prevMoves: Mo
     }
     if (pay.method === "cheque") {
       if (chequeDraft) {
-        const ch: Cheque = { ...chequeDraft, id: uid(), saleId: sale.id, amount: pay.amount };
+        const ch: Cheque = {
+          receivedDate: dayOf(sale.date),
+          ...chequeDraft,
+          id: uid(),
+          saleId: sale.id,
+          amount: pay.amount,
+        };
         d.cheques.unshift(ch);
         pay.chequeId = ch.id;
       }
@@ -543,18 +552,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         }),
       addCheque: (c) => {
-        const ch: Cheque = { ...c, id: uid() };
+        const ch: Cheque = { receivedDate: todayISO(), ...c, id: uid() };
         mutate((d) => {
           d.cheques.unshift(ch);
           return d;
         });
         return ch;
       },
-      setChequeStatus: (id, status, depositBank) =>
+      setChequeStatus: (id, status, depositBank, givenTo) =>
         mutate((d) => {
           const ch = d.cheques.find((x) => x.id === id);
           if (!ch) return d;
           ch.status = status;
+          if (status === "endosado") {
+            ch.givenTo = givenTo?.trim() || ch.givenTo;
+            ch.givenDate = todayISO();
+          }
           if (status === "depositado" && depositBank) {
             ch.depositBank = depositBank;
             d.movements.unshift({
@@ -683,10 +696,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.purchases = d.purchases.filter((x) => x.id !== id);
           return d;
         }),
-      addSupplierPayment: (draft) =>
+      addSupplierPayment: (draft, cheque) =>
         mutate((d) => {
           const pay: SupplierPayment = { ...draft, id: uid() };
-          if (pay.method !== "gasoil") {
+          // Cheque de un cliente que se entrega al proveedor: no sale plata de caja ni del banco.
+          const third = pay.method === "cheque" && cheque?.kind === "tercero";
+          if (pay.method === "cheque" && cheque) {
+            const day = dayOf(pay.date);
+            if (third) {
+              let ch = cheque.id ? d.cheques.find((x) => x.id === cheque.id) : undefined;
+              if (!ch) {
+                ch = {
+                  id: uid(),
+                  number: cheque.number,
+                  bank: cheque.bank,
+                  drawer: cheque.drawer || cheque.from,
+                  dueDate: cheque.dueDate,
+                  amount: pay.amount,
+                  status: "endosado",
+                  clientName: cheque.from || cheque.drawer,
+                  echeq: false,
+                  receivedDate: day,
+                };
+                d.cheques.unshift(ch);
+              }
+              ch.status = "endosado";
+              ch.givenTo = pay.party;
+              ch.givenDate = day;
+              pay.chequeId = ch.id;
+              pay.dueDate = ch.dueDate;
+              pay.account = undefined;
+              pay.detail = `Cheque de terceros N° ${ch.number}${ch.clientName ? " · de " + ch.clientName : ""}`;
+            } else {
+              const ch: Cheque = {
+                id: uid(),
+                number: cheque.number,
+                bank: pay.account ?? "BBVA",
+                drawer: d.settings.businessName || "Propio",
+                dueDate: cheque.dueDate,
+                amount: pay.amount,
+                status: "emitido",
+                clientName: "",
+                echeq: false,
+                own: true,
+                givenTo: pay.party,
+                givenDate: day,
+              };
+              d.cheques.unshift(ch);
+              pay.chequeId = ch.id;
+            }
+          }
+          if (pay.method !== "gasoil" && !third) {
             // Sale de caja o banco. El cheque diferido se asienta en su fecha de cobro.
             const date =
               pay.method === "cheque" && pay.dueDate ? pay.dueDate + "T12:00:00.000Z" : pay.date;
@@ -716,6 +776,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.supplierPayments.unshift(pay);
           return d;
         }),
+      setSupplierReminder: (kind, party, date) =>
+        mutate((d) => {
+          const k = party.trim().toLowerCase();
+          const mine = d.purchases.filter(
+            (p) => (kind === "cantera" ? p.supplier : (p.carrier ?? "")).trim().toLowerCase() === k,
+          );
+          // El aviso es uno por proveedor: queda guardado en su descarga más reciente.
+          const last = [...mine].sort((a, b) => b.date.localeCompare(a.date))[0];
+          for (const p of mine) {
+            const v = p === last ? date || undefined : undefined;
+            if (kind === "cantera") p.payDue = v;
+            else p.freightDue = v;
+          }
+          return d;
+        }),
       removeSupplierPayment: (id) =>
         mutate((d) => {
           const pay = d.supplierPayments.find((x) => x.id === id);
@@ -723,6 +798,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (pay.expenseId) {
             d.expenses = d.expenses.filter((e) => e.id !== pay.expenseId);
             d.movements = d.movements.filter((m) => m.refId !== pay.expenseId);
+          }
+          // El cheque propio se anula; el de un cliente vuelve a la cartera.
+          const ch = pay.chequeId ? d.cheques.find((c) => c.id === pay.chequeId) : undefined;
+          if (ch?.own) d.cheques = d.cheques.filter((c) => c.id !== ch.id);
+          else if (ch) {
+            ch.status = "cartera";
+            ch.givenTo = undefined;
+            ch.givenDate = undefined;
           }
           d.supplierPayments = d.supplierPayments.filter((x) => x.id !== id);
           return d;
@@ -945,8 +1028,18 @@ export function periodProfit(db: DB, from: string, to: string) {
 export function supplierAccounts(db: DB) {
   const map = new Map<
     string,
-    { party: string; kind: "cantera" | "transporte"; debe: number; haber: number; last: string }
+    {
+      party: string;
+      kind: "cantera" | "transporte";
+      debe: number;
+      haber: number;
+      last: string;
+      /** Día del aviso para pagar el saldo (el más próximo, si hay varios). */
+      remind?: string | undefined;
+    }
   >();
+  const sooner = (a: string | undefined, b: string | undefined) =>
+    a && b ? (a < b ? a : b) : a || b;
   const get = (party: string, kind: "cantera" | "transporte") => {
     const key = kind + "|" + party.trim().toLowerCase();
     let a = map.get(key);
@@ -957,10 +1050,12 @@ export function supplierAccounts(db: DB) {
     const a = get(p.supplier, "cantera");
     a.debe += p.items.reduce((x, i) => x + i.total, 0);
     if (p.date > a.last) a.last = p.date;
+    a.remind = sooner(a.remind, p.payDue);
     if (p.carrier && p.freightTotal > 0) {
       const c = get(p.carrier, "transporte");
       c.debe += p.freightTotal;
       if (p.date > c.last) c.last = p.date;
+      c.remind = sooner(c.remind, p.freightDue);
     }
   }
   for (const pay of db.supplierPayments) get(pay.party, pay.kind).haber += pay.amount;

@@ -30,6 +30,10 @@ export const fmtDate = (iso: string) => {
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 };
 
+/** 19/11/2026 */
+export const fmtDateNum = (iso: string | undefined) =>
+  iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "";
+
 export const fmtDateLong = (iso: string) => {
   const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
   const s = d.toLocaleDateString("es-AR", {

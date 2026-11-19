@@ -7,6 +7,7 @@ import {
   Truck,
   Wallet,
   type LucideIcon,
+  HandCoins,
 } from "lucide-react";
 import { buildAgenda, type AlertKind } from "@/lib/alerts";
 import { useStore } from "@/lib/store";
@@ -30,6 +31,7 @@ const icons: Partial<Record<AlertKind, LucideIcon>> = {
   presupuesto: FileText,
   liquidacion: CreditCard,
   debito: Receipt,
+  proveedor: HandCoins,
 };
 const labels: Partial<Record<AlertKind, string>> = {
   entrega: "Entrega",
@@ -38,6 +40,7 @@ const labels: Partial<Record<AlertKind, string>> = {
   presupuesto: "Presupuesto",
   liquidacion: "Acredita",
   debito: "Débito",
+  proveedor: "Pago a proveedor",
 };
 
 function Calendario() {

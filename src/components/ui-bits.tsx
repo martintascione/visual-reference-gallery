@@ -294,6 +294,8 @@ function DateInput({
           const prev = draft ?? isoToAr(iso);
           let t = e.target.value.replace(/[^\d/]/g, "").slice(0, 10);
           // Al escribir, la barra se agrega sola después del día y del mes.
+          // Si además se tipea la barra a mano, no queda doble.
+          t = t.replace(/\/{2,}/g, "/").replace(/^\//, "");
           if (t.length > prev.length && (/^\d{2}$/.test(t) || /^\d{1,2}\/\d{2}$/.test(t))) t += "/";
           setDraft(t);
           if (t === "") emit("");
