@@ -88,7 +88,7 @@ function Catalogo() {
         title="Catálogo y precios"
         subtitle={`${db.products.filter((p) => p.active).length} productos · ${low} con stock bajo`}
       >
-        <button className={btn.soft} onClick={() => setPriceList(true)}>
+        <button data-tour="lista-precios" className={btn.soft} onClick={() => setPriceList(true)}>
           <List className="h-4 w-4" strokeWidth={1.6} /> Lista de precios
         </button>
         <button className={btn.soft} onClick={() => setCalc(true)}>

@@ -133,7 +133,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex max-w-[1480px] gap-5 px-4 pb-28 pt-5 md:px-6 md:pb-8">
         {/* Menú lateral */}
         {/* Menú lateral: en tablet solo íconos (con el nombre al pasar el mouse); en computadora, ícono + nombre. */}
-        <aside className="sticky top-[92px] z-30 hidden max-h-[calc(100vh-112px)] w-11 shrink-0 flex-col md:flex lg:w-[212px]">
+        <aside
+          data-tour="menu"
+          className="sticky top-[92px] z-30 hidden max-h-[calc(100vh-112px)] w-11 shrink-0 flex-col md:flex lg:w-[212px]"
+        >
           <nav className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:gap-1 lg:rounded-3xl lg:bg-card lg:p-2 lg:shadow-soft">
             {nav.map((item) => {
               const { to, label, icon: Icon } = item;

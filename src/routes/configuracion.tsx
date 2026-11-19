@@ -138,6 +138,12 @@ function Configuracion() {
             >
               <CircleHelp className="h-3.5 w-3.5" /> Recorrido guiado
             </button>
+            <button
+              className={btn.soft}
+              onClick={() => window.dispatchEvent(new Event("abrir-novedades"))}
+            >
+              Novedades
+            </button>
             <button className={btn.ghost} onClick={() => setConfirmReset(true)}>
               <RotateCcw className="h-3.5 w-3.5" /> Borrar todos los datos
             </button>

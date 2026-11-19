@@ -70,7 +70,7 @@ function Clientes() {
   return (
     <>
       <PageHeader title="Clientes y cuentas corrientes" subtitle={`${db.clients.length} clientes`}>
-        <button className={btn.soft} onClick={() => setDebt(true)}>
+        <button data-tour="cargar-cc" className={btn.soft} onClick={() => setDebt(true)}>
           <Wallet className="h-4 w-4" strokeWidth={1.6} /> Cargar cuenta corriente
         </button>
         <button className={btn.primary} onClick={() => setEdit("new")}>

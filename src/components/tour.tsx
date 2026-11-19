@@ -15,7 +15,7 @@ type Step = {
   tip?: string;
 };
 
-const steps: Step[] = [
+const fullSteps: Step[] = [
   {
     route: "/",
     title: "Bienvenido al panel de Áridos Petreos",
@@ -161,6 +161,84 @@ const steps: Step[] = [
   },
 ];
 
+// Novedades: cambiar NEWS_VERSION cada vez que se publican herramientas nuevas para que
+// el aviso vuelva a aparecer una vez a cada usuario.
+const NEWS_KEY = "ap-novedades-vistas";
+const NEWS_VERSION = "2026-11-19";
+const newsList = [
+  "Calculadora de precios más corta, con base de gastos",
+  "Bolsa, bolsón de 1.000 kg y segundo bolsón (ej. 1.200 kg)",
+  "Lista de precios para imprimir o mandar por WhatsApp",
+  "Descarga cobrada al cliente en ventas y presupuestos",
+  "Editar y eliminar ventas y presupuestos",
+  "Cargar una cuenta corriente sin hacer una venta",
+  "El asistente lee fotos, PDF y Excel con tus listas",
+  "Mail de seguimiento de presupuestos de lunes a viernes",
+];
+
+const newsSteps: Step[] = [
+  {
+    target: "menu",
+    title: "El menú ahora muestra los nombres",
+    body: "Cada sección aparece con su nombre al lado del ícono, así no hay que adivinar. La sección en la que estás queda marcada en negro. En el celular sigue la barra de abajo.",
+  },
+  {
+    route: "/catalogo",
+    target: "catalogo-nuevo",
+    title: "Cargar un producto es más corto",
+    body: 'Una piedra se carga con 5 datos: precio del proveedor, flete, descarga, base de gastos y margen. La base de gastos es un monto fijo por tonelada para cubrir los gastos del negocio. Palet, Sampi, desperdicio y las medidas de las bolsas están en "Más costos y medidas", que se abre solo si hace falta.',
+    tip: "Todos los precios se cargan sin IVA. El signo ? al lado de cada campo explica para qué sirve.",
+  },
+  {
+    route: "/catalogo",
+    target: "page",
+    title: "Bolsa, bolsón y tonelada",
+    body: 'Cada piedra tiene precio por bolsa de 25 kg, por bolsón de 1.000 kg y por tonelada, y la bolsa vale lo mismo por kilo que la tonelada. Si una piedra también se vende en otro bolsón (por ejemplo 1.200 kg, como la grava), se carga como "Segundo bolsón" y aparece como una unidad más al vender. Los líquidos ahora tienen su flete por unidad.',
+  },
+  {
+    route: "/catalogo",
+    target: "lista-precios",
+    title: "Lista de precios",
+    body: "Una tabla simple con todos los productos y su precio por bolsa, bolsón y tonelada. Elegís sin IVA o con IVA y la imprimís, la guardás en PDF o la copiás para mandar por WhatsApp.",
+  },
+  {
+    route: "/nueva-venta",
+    target: "venta-productos",
+    title: "Vender por bolsa o por bolsón, con descarga",
+    body: 'En cada renglón elegís la unidad: kg, bolsa, bolsón o tonelada. Al prender la entrega a domicilio aparece "Descarga al cliente": se completa sola según el pedido lleve bolsas o bolsones y la podés cambiar a mano. En el presupuesto con IVA, los precios salen con el IVA incluido y un solo total.',
+  },
+  {
+    route: "/ventas",
+    target: "page",
+    title: "Editar o eliminar una venta",
+    body: 'Tocás una venta y abajo tenés "Editar venta" y "Eliminar venta". Al editar se corrigen solos el stock, la caja y las cuotas, y la venta conserva su número. Al eliminar, el stock vuelve y se borran sus cobros.',
+    tip: "Si la venta ya tiene factura en ARCA, eliminarla no anula la factura: hace falta una nota de crédito.",
+  },
+  {
+    route: "/presupuestos",
+    target: "page",
+    title: "Editar o eliminar un presupuesto",
+    body: 'Cada presupuesto tiene "Editar" (cambia productos, cantidades, precios o cliente y conserva el número) y "Eliminar". Además, de lunes a viernes a las 8:30 llega un mail con los presupuestos que hay que llamar ese día.',
+    tip: "El mail se prende, se apaga o cambia de dirección en Configuración.",
+  },
+  {
+    route: "/clientes",
+    target: "cargar-cc",
+    title: "Cargar una cuenta corriente",
+    body: "Para anotar una deuda sin hacer una venta: escribís el nombre, WhatsApp, email y CUIT, el monto y las cuotas. Si el cliente ya existe se le suma a su cuenta; si es nuevo, se guarda solo. Los vencimientos aparecen en Avisos.",
+  },
+  {
+    target: "asistente",
+    title: "El asistente lee tus listas",
+    body: "Con el clip le mandás una foto, un PDF o un Excel con tu lista de productos y precios. La lee, te muestra una tabla para revisar y con un toque crea o actualiza los productos. También le podés pedir mejoras: quedan anotadas para el programador.",
+  },
+  {
+    route: "/",
+    title: "Eso es todo lo nuevo",
+    body: 'Los números ahora se muestran y se escriben con punto para los miles y coma para los centavos. Este repaso lo podés volver a ver cuando quieras desde Configuración, en "Novedades".',
+  },
+];
+
 type Rect = { top: number; left: number; width: number; height: number };
 
 /** Celular: por ancho de pantalla física, no del viewport (que se agranda si algo desborda). */
@@ -186,23 +264,57 @@ export function Tour() {
   const [sheetTop, setSheetTop] = useState(false);
   const cardHRef = useRef(cardH);
   cardHRef.current = cardH;
+  const [mode, setMode] = useState<"full" | "news">("full");
+  const [news, setNews] = useState(false);
+  const steps = mode === "news" ? newsSteps : fullSteps;
   const step = steps[i] ?? steps[0]!;
+  const markNews = () => {
+    try {
+      localStorage.setItem(NEWS_KEY, NEWS_VERSION);
+    } catch {
+      /* sin storage */
+    }
+  };
+  const startNews = () => {
+    markNews();
+    setNews(false);
+    setMode("news");
+    setI(0);
+    setOpen(true);
+  };
 
   // Apertura por evento o primera vez.
   useEffect(() => {
     const show = () => {
+      setNews(false);
+      setMode("full");
       setI(0);
       setOpen(true);
     };
+    const showNews = () => setNews(true);
     window.addEventListener("abrir-tour", show);
+    window.addEventListener("abrir-novedades", showNews);
     let seen = true;
     try {
       seen = localStorage.getItem(DONE_KEY) === "1";
     } catch {
       /* sin storage */
     }
-    const t = !seen ? window.setTimeout(show, 900) : 0;
+    // Usuario nuevo: recorrido completo (ya incluye lo nuevo). Usuario que ya lo vio: aviso de novedades.
+    let newsSeen = true;
+    try {
+      newsSeen = localStorage.getItem(NEWS_KEY) === NEWS_VERSION;
+    } catch {
+      /* sin storage */
+    }
+    if (!seen) markNews();
+    const t = !seen
+      ? window.setTimeout(show, 900)
+      : !newsSeen
+        ? window.setTimeout(showNews, 900)
+        : 0;
     return () => {
+      window.removeEventListener("abrir-novedades", showNews);
       window.removeEventListener("abrir-tour", show);
       if (t) window.clearTimeout(t);
     };
@@ -322,6 +434,57 @@ export function Tour() {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  if (news && !open)
+    return (
+      <div
+        className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+        role="dialog"
+        aria-label="Actualizaciones nuevas"
+      >
+        <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-card shadow-soft">
+          <div className="overflow-y-auto p-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Actualizaciones nuevas
+            </p>
+            <h2 className="mt-1.5 text-xl font-bold tracking-tight">
+              Hay herramientas nuevas en el panel
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sumamos lo que nos fueron pidiendo. En dos minutos te mostramos dónde está cada cosa y
+              cómo se usa.
+            </p>
+            <ul className="mt-4 flex flex-col gap-2">
+              {newsList.map((t) => (
+                <li key={t} className="flex items-start gap-2.5 text-sm">
+                  <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                  </span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex flex-col gap-2 border-t border-border p-4 sm:flex-row-reverse">
+            <button
+              className="h-11 shrink-0 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground sm:flex-1"
+              onClick={startNews}
+            >
+              Iniciar tutorial
+            </button>
+            <button
+              className="h-11 shrink-0 rounded-full px-5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => {
+                markNews();
+                setNews(false);
+              }}
+            >
+              Ahora no
+            </button>
+          </div>
+        </div>
+      </div>
+    );
 
   if (!open) return null;
 
