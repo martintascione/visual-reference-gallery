@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp, Plus, Trash2, Truck, Wallet } from "lucide-react";
 import type { Bank, Purchase, PurchaseItem, SupplierPayMethod } from "@/lib/types";
 import { supplierAccounts, useStore } from "@/lib/store";
@@ -21,6 +21,7 @@ import {
   btn,
   tr,
 } from "@/components/ui-bits";
+import { ProductEditor } from "@/components/product-editor";
 
 export const Route = createFileRoute("/descargas")({
   head: () => ({
@@ -359,6 +360,25 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [updateCosts, setUpdateCosts] = useState(true);
   const [payS, setPayS] = useState<PayNow>(payBlank);
   const [payC, setPayC] = useState<PayNow>(payBlank);
+  // Crear un producto sin salir de la descarga: al guardarlo queda elegido en ese renglón.
+  const [creating, setCreating] = useState(false);
+  const pending = useRef<{ lineId: string; known: Set<string> } | null>(null);
+  const startCreate = (lineId: string) => {
+    pending.current = { lineId, known: new Set(db.products.map((p) => p.id)) };
+    setCreating(true);
+  };
+  useEffect(() => {
+    const c = pending.current;
+    if (!c) return;
+    const nuevo = db.products.find((p) => p.active && !c.known.has(p.id));
+    if (!nuevo) return;
+    pending.current = null;
+    setLines((ls) => ls.map((l) => (l.id === c.lineId ? { ...l, productId: nuevo.id } : l)));
+  }, [db.products]);
+  // Si se cierra sin guardar, se descarta (este efecto corre después del anterior).
+  useEffect(() => {
+    if (!creating) pending.current = null;
+  }, [creating]);
 
   const suppliers = [...new Set(db.purchases.map((p) => p.supplier))];
   const carriers = [...new Set(db.purchases.map((p) => p.carrier).filter(Boolean) as string[])];
@@ -507,9 +527,14 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
                   >
                     <Select
                       value={l.productId}
-                      onChange={(e) => upd(l.id, { productId: e.target.value })}
+                      onChange={(e) =>
+                        e.target.value === "__nuevo"
+                          ? startCreate(l.id)
+                          : upd(l.id, { productId: e.target.value })
+                      }
                     >
                       <option value="">Elegir producto…</option>
+                      <option value="__nuevo">+ Crear producto nuevo…</option>
                       {products.map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.name}
@@ -565,6 +590,18 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <button className={btn.ghost} onClick={() => setLines((ls) => [...ls, blankLine()])}>
               <Plus className="h-3.5 w-3.5" /> Otro material del mismo camión
+            </button>
+            <button
+              className={btn.ghost}
+              onClick={() => {
+                const empty = lines.find((l) => !l.productId);
+                if (empty) return startCreate(empty.id);
+                const nl = blankLine();
+                setLines((ls) => [...ls, nl]);
+                startCreate(nl.id);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> Producto nuevo
             </button>
             <p className="text-xs text-muted-foreground">
               {num(tons, 2)} en total · mercadería <b className="text-foreground">{ars(merch)}</b>
@@ -666,6 +703,7 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
           label="Actualizar costos y precios de los productos con esta descarga"
         />
       </div>
+      <ProductEditor open={creating} onClose={() => setCreating(false)} product={null} />
     </Modal>
   );
 }
