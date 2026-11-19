@@ -338,6 +338,51 @@ export type InvoicingConfig = {
   genericItems: string[];
 };
 
+/** Renglón de una descarga: qué material entró, cuánto y a qué precio. */
+export type PurchaseItem = {
+  productId?: string | undefined;
+  name: string;
+  tons: number;
+  pricePerTon: number;
+  total: number;
+};
+
+/** Descarga de un proveedor (asiento): mercadería de la cantera + flete del transporte. */
+export type Purchase = {
+  id: string;
+  date: string;
+  supplier: string;
+  remito?: string | undefined;
+  items: PurchaseItem[];
+  carrier?: string | undefined;
+  freightTons: number;
+  freightRate: number;
+  freightTotal: number;
+  unloadCost: number;
+  note?: string | undefined;
+};
+
+export type SupplierPayMethod = "efectivo" | "transferencia" | "cheque" | "gasoil";
+
+/** Pago a una cantera o a un transporte. */
+export type SupplierPayment = {
+  id: string;
+  date: string;
+  party: string;
+  kind: "cantera" | "transporte";
+  amount: number;
+  method: SupplierPayMethod;
+  account?: Bank | undefined;
+  /** N° de cheque, comprobante, etc. */
+  detail?: string | undefined;
+  /** Cheque diferido: fecha de cobro. */
+  dueDate?: string | undefined;
+  /** Gasoil: litros cargados. */
+  liters?: number | undefined;
+  expenseId?: string | undefined;
+  purchaseId?: string | undefined;
+};
+
 export type DB = {
   version: number;
   products: Product[];
@@ -350,6 +395,8 @@ export type DB = {
   expenses: Expense[];
   stockMoves: StockMove[];
   closures: Closure[];
+  purchases: Purchase[];
+  supplierPayments: SupplierPayment[];
   settings: Settings;
   counters: { sale: number; quote: number };
 };

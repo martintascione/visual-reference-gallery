@@ -75,7 +75,12 @@ const quick = [
   { to: "/nueva-venta", icon: Plus, t: "Nueva venta", d: "Mostrador o presupuesto", dark: true },
   { to: "/clientes", icon: Wallet, t: "Cobrar", d: "Cuotas y cuenta corriente" },
   { to: "/gastos", icon: Receipt, t: "Gasto o débito", d: "De qué cuenta salió" },
-  { to: "/stock", icon: ArrowDownToLine, t: "Entró mercadería", d: "Suma stock y actualiza costo" },
+  {
+    to: "/descargas",
+    icon: ArrowDownToLine,
+    t: "Entró mercadería",
+    d: "Descarga: stock, costos y cuenta",
+  },
   { to: "/catalogo", icon: Calculator, t: "Precios", d: "Calculadora y catálogo" },
   { to: "/cierre", icon: Lock, t: "Cerrar el día", d: "Cierre de lote y caja" },
 ] as const;

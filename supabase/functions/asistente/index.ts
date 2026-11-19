@@ -73,6 +73,10 @@ CARGAR UN PRODUCTO (CATÁLOGO)
 4. Stock actual, mínimo para avisar y descuentos por cantidad (los precios se cargan siempre sin IVA) (ej. desde 10 bolsones −5%).
 5. "Actualizar precios": sube o baja un % toda una categoría de una vez (precio, o costo recalculando precio). "Calcular cantidad": por m² y espesor dice kg, bolsones y litros de fijador que necesita el cliente.
 
+DESCARGAS DE PROVEEDORES (/descargas)
+- "Nueva descarga" asienta el camión que llegó: cantera, N° de remito, uno o varios materiales (producto, toneladas, precio por tonelada; muestra el último precio pagado y si subió o bajó), transporte, flete (por tonelada o total del viaje) y costo de descarga. Al guardar suma el stock, actualiza costos y precios de esos productos (los precios fijos de bolsa no cambian) y deja la deuda en la cuenta de la cantera y del transporte. Se puede marcar "ya le pagué" en el momento.
+- "Cuentas con proveedores": cada cantera y transporte con su saldo. Al tocar una se ve el detalle (debe, pagado, saldo) y se registran pagos parciales o totales: transferencia, efectivo, cheque (con fecha de cobro a 30 o 60 días; sale del banco ese día) o gasoil para transportes (con litros; descuenta la deuda pero no saca plata de caja ni bancos). El historial de descargas guarda los precios de cada compra.
+
 STOCK
 - Se descuenta solo al vender. "Compra": cantidad (toneladas o unidades), proveedor, precio, flete (como total del camión o por tonelada) y descarga; suma stock, registra el pago como gasto (eligiendo cuenta) y, si se deja marcado, actualiza el costo del producto y recalcula precios. "Ajuste": conteo físico (cargás lo que hay) o merma. Historial de movimientos a la derecha.
 

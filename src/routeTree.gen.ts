@@ -17,6 +17,7 @@ import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as CorreoRouteImport } from './routes/correo'
+import { Route as DescargasRouteImport } from './routes/descargas'
 import { Route as FacturaloRouteImport } from './routes/facturalo'
 import { Route as GastosRouteImport } from './routes/gastos'
 import { Route as MasRouteImport } from './routes/mas'
@@ -65,6 +66,11 @@ const ConfiguracionRoute = ConfiguracionRouteImport.update({
 const CorreoRoute = CorreoRouteImport.update({
   id: '/correo',
   path: '/correo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DescargasRoute = DescargasRouteImport.update({
+  id: '/descargas',
+  path: '/descargas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FacturaloRoute = FacturaloRouteImport.update({
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
   '/mas': typeof MasRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/descargas'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/descargas'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/descargas'
     | '/facturalo'
     | '/gastos'
     | '/mas'
@@ -240,6 +252,7 @@ export interface RootRouteChildren {
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   CorreoRoute: typeof CorreoRoute
+  DescargasRoute: typeof DescargasRoute
   FacturaloRoute: typeof FacturaloRoute
   GastosRoute: typeof GastosRoute
   MasRoute: typeof MasRoute
@@ -307,6 +320,13 @@ declare module '@tanstack/react-router' {
       path: '/correo'
       fullPath: '/correo'
       preLoaderRoute: typeof CorreoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/descargas': {
+      id: '/descargas'
+      path: '/descargas'
+      fullPath: '/descargas'
+      preLoaderRoute: typeof DescargasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facturalo': {
@@ -384,6 +404,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   CorreoRoute: CorreoRoute,
+  DescargasRoute: DescargasRoute,
   FacturaloRoute: FacturaloRoute,
   GastosRoute: GastosRoute,
   MasRoute: MasRoute,

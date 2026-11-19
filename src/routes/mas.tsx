@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Truck,
   Bell,
   CalendarDays,
   ChartColumn,
@@ -38,6 +39,7 @@ const items = [
   { to: "/facturalo", label: "Facturalo Fácil", d: "Facturas desde los dos CUIT", icon: FileCheck },
   { to: "/correo", label: "Casilla", d: "Correo del negocio", icon: Mail },
   { to: "/catalogo", label: "Catálogo y precios", d: "Calculadora de costos", icon: Tags },
+  { to: "/descargas", label: "Descargas", d: "Proveedores, fletes y pagos", icon: Truck },
   {
     to: "/clientes",
     label: "Clientes y cuentas corrientes",

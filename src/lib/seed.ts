@@ -152,6 +152,8 @@ export function emptyDB(): DB {
     expenses: [],
     stockMoves: [],
     closures: [],
+    purchases: [],
+    supplierPayments: [],
     settings: structuredClone(defaultSettings),
     counters: { sale: 1000, quote: 500 },
   };

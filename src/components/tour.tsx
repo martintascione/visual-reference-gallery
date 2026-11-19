@@ -164,7 +164,7 @@ const fullSteps: Step[] = [
 // Novedades: cambiar NEWS_VERSION cada vez que se publican herramientas nuevas para que
 // el aviso vuelva a aparecer una vez a cada usuario.
 const NEWS_KEY = "ap-novedades-vistas";
-const NEWS_VERSION = "2026-11-19";
+const NEWS_VERSION = "2026-11-19c";
 const newsList = [
   "Calculadora de precios más corta, con base de gastos",
   "Bolsa, bolsón de 1.000 kg y segundo bolsón (ej. 1.200 kg)",
@@ -172,8 +172,72 @@ const newsList = [
   "Descarga cobrada al cliente en ventas y presupuestos",
   "Editar y eliminar ventas y presupuestos",
   "Cargar una cuenta corriente sin hacer una venta",
+  "Descargas de proveedores, con cuentas de canteras y transportes",
+  "Precio fijo de la bolsa y venta por viaje en construcción",
   "El asistente lee fotos, PDF y Excel con tus listas",
   "Mail de seguimiento de presupuestos de lunes a viernes",
+];
+
+// Tutorial de la sección Descargas: se abre solo la primera vez que se entra y con el botón "Cómo funciona".
+const DESC_KEY = "ap-tour-descargas";
+const descargasSteps: Step[] = [
+  {
+    route: "/descargas",
+    target: "page",
+    title: "Descargas de proveedores",
+    body: "Acá se asienta cada camión que llega de la cantera. Con un solo formulario queda todo hecho: entra el stock, se actualizan los costos y los precios, y queda anotado cuánto se le debe a la cantera y al transporte. Reemplaza la planilla de canteras y transportes.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-nueva",
+    title: "1. Cargar la descarga",
+    body: 'Tocás "Nueva descarga" y completás la cantera, el número de remito y la fecha. Las canteras y los transportes que ya usaste aparecen en la lista para no escribirlos de nuevo.',
+  },
+  {
+    route: "/descargas",
+    target: "desc-nueva",
+    title: "2. El material que llegó",
+    body: "Elegís el producto, las toneladas y el precio por tonelada (o el total, y el precio se calcula solo). Si el mismo camión trajo varios materiales, agregás un renglón por cada uno.",
+    tip: "Al elegir el producto te muestra cuánto pagaste la última vez y a quién, y si ahora subió o bajó.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-nueva",
+    title: "3. El flete y la descarga",
+    body: "Cargás el transporte y el flete, por tonelada o como total del viaje, y si hubo costo de descarga. Si el camión trajo varios materiales, el flete y la descarga se reparten por tonelada entre todos.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-nueva",
+    title: "4. Pagado o queda debiendo",
+    body: "Si ya le pagaste a la cantera o al transporte, lo marcás ahí mismo y elegís cómo. Si no marcás nada, queda como deuda en su cuenta y los pagos se cargan después, de a uno o en partes.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-nueva",
+    title: "Qué pasa al asentar",
+    body: "Se suma el stock de cada producto, se actualiza su costo (precio de cantera, flete y descarga por tonelada) y se recalculan los precios de bolsón, tonelada y viaje con el margen de cada uno. Los precios fijos de la bolsa no cambian.",
+    tip: 'Si no querés tocar los precios con esa descarga, apagás "Actualizar costos y precios" antes de guardar.',
+  },
+  {
+    route: "/descargas",
+    target: "desc-historial",
+    title: "Historial de descargas",
+    body: "Queda cada descarga con su fecha, cantera, remito, materiales y el precio que se pagó, más el transporte y el flete. Sirve para ver cómo fueron cambiando los precios de cada cantera. Cada una marca si se debe o está al día.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-cuentas",
+    title: "Cuentas con canteras y transportes",
+    body: "Cada proveedor tiene su cuenta con lo que se le debe. Al tocarla ves el detalle de debe, pagado y saldo, y registrás los pagos: transferencia, efectivo o cheque. Para el cheque ponés el número y la fecha de cobro, con botones de 30 y 60 días; sale del banco ese día.",
+    tip: "A los transportes también se les paga con gasoil: cargás el monto y los litros. Descuenta la deuda, pero no saca plata de caja ni de los bancos.",
+  },
+  {
+    route: "/descargas",
+    target: "desc-stats",
+    title: "Cuánto se debe hoy",
+    body: 'Arriba ves el total que se les debe a las canteras y a los transportes. Este recorrido lo podés repetir cuando quieras con el botón "Cómo funciona".',
+  },
 ];
 
 const newsSteps: Step[] = [
@@ -221,6 +285,7 @@ const newsSteps: Step[] = [
     body: 'Cada presupuesto tiene "Editar" (cambia productos, cantidades, precios o cliente y conserva el número) y "Eliminar". Además, de lunes a viernes a las 8:30 llega un mail con los presupuestos que hay que llamar ese día.',
     tip: "El mail se prende, se apaga o cambia de dirección en Configuración.",
   },
+  ...descargasSteps,
   {
     route: "/clientes",
     target: "cargar-cc",
@@ -264,9 +329,11 @@ export function Tour() {
   const [sheetTop, setSheetTop] = useState(false);
   const cardHRef = useRef(cardH);
   cardHRef.current = cardH;
-  const [mode, setMode] = useState<"full" | "news">("full");
+  const [mode, setMode] = useState<"full" | "news" | "descargas">("full");
   const [news, setNews] = useState(false);
-  const steps = mode === "news" ? newsSteps : fullSteps;
+  const steps = mode === "news" ? newsSteps : mode === "descargas" ? descargasSteps : fullSteps;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const step = steps[i] ?? steps[0]!;
   const markNews = () => {
     try {
@@ -277,6 +344,11 @@ export function Tour() {
   };
   const startNews = () => {
     markNews();
+    try {
+      localStorage.setItem(DESC_KEY, "1"); // el repaso de novedades ya incluye Descargas
+    } catch {
+      /* sin storage */
+    }
     setNews(false);
     setMode("news");
     setI(0);
@@ -293,7 +365,14 @@ export function Tour() {
     };
     const showNews = () => setNews(true);
     window.addEventListener("abrir-tour", show);
+    const showDesc = () => {
+      setNews(false);
+      setMode("descargas");
+      setI(0);
+      setOpen(true);
+    };
     window.addEventListener("abrir-novedades", showNews);
+    window.addEventListener("abrir-tour-descargas", showDesc);
     let seen = true;
     try {
       seen = localStorage.getItem(DONE_KEY) === "1";
@@ -315,13 +394,31 @@ export function Tour() {
         : 0;
     return () => {
       window.removeEventListener("abrir-novedades", showNews);
+      window.removeEventListener("abrir-tour-descargas", showDesc);
       window.removeEventListener("abrir-tour", show);
       if (t) window.clearTimeout(t);
     };
   }, []);
 
+  // La primera vez que se entra a Descargas, se abre su tutorial solo.
+  useEffect(() => {
+    if (pathname !== "/descargas" || open || news) return;
+    let seen = true;
+    try {
+      seen = localStorage.getItem(DESC_KEY) === "1";
+      if (!seen) localStorage.setItem(DESC_KEY, "1");
+    } catch {
+      /* sin storage */
+    }
+    if (seen) return;
+    const t = window.setTimeout(() => window.dispatchEvent(new Event("abrir-tour-descargas")), 600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   const finish = () => {
     setOpen(false);
+    if (modeRef.current === "descargas") return; // se queda en la sección
     try {
       localStorage.setItem(DONE_KEY, "1");
     } catch {
@@ -545,14 +642,17 @@ function cardPosition(rect: Rect | null, cardH: number, sheetTop = false): CSSPr
   const gap = 14;
   const h = cardH + 8; // alto real de la tarjeta
   let top = rect.top + rect.height + gap;
-  if (top + h > vh - 12) top = Math.max(12, rect.top - h - gap);
-  // Si tampoco entra arriba, va al costado.
-  if (top + h > vh - 12 && rect.left + rect.width + gap + w < vw)
-    return {
-      left: rect.left + rect.width + gap,
-      top: Math.max(12, Math.min(rect.top, vh - h - 12)),
-      width: w,
-    };
+  const fitsBelow = top + h <= vh - 12;
+  const fitsAbove = rect.top - h - gap >= 12;
+  if (!fitsBelow && fitsAbove) top = rect.top - h - gap;
+  // Si no entra ni abajo ni arriba, va al costado (derecha o izquierda) para no tapar el elemento.
+  if (!fitsBelow && !fitsAbove) {
+    const sideTop = Math.max(12, Math.min(rect.top, vh - h - 12));
+    if (rect.left + rect.width + gap + w < vw)
+      return { left: rect.left + rect.width + gap, top: sideTop, width: w };
+    if (rect.left - gap - w > 12) return { left: rect.left - gap - w, top: sideTop, width: w };
+    top = Math.max(12, vh - h - 12);
+  }
   let left = rect.left + rect.width / 2 - w / 2;
   left = Math.max(12, Math.min(left, vw - w - 12));
   return { left, top, width: w };

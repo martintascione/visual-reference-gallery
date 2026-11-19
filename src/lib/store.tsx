@@ -19,6 +19,8 @@ import type {
   Due,
   Expense,
   Movement,
+  Purchase,
+  SupplierPayment,
   Payment,
   PaymentMethod,
   Product,
@@ -33,6 +35,7 @@ import { demoDB } from "./demo-seed";
 /** Modo demo: datos de ejemplo en memoria, sin Supabase (para previsualizar y probar). */
 export const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 import { addDays, dayOf, todayISO, uid } from "./format";
+import { stoneCalc } from "./pricing";
 import { fromRow, supabase, toRow } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
 import type { AssistantAction } from "./assistant";
@@ -80,6 +83,13 @@ type Actions = {
   addCheque: (c: Draft<Cheque>) => Cheque;
   setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank) => void;
   addExpense: (e: Draft<Expense>) => void;
+  /** Asienta una descarga: suma stock, guarda el historial y (si se pide) actualiza costos y precios. */
+  addPurchase: (p: Draft<Purchase>, updateCosts: boolean) => Purchase;
+  /** Borra una descarga y descuenta el stock que había sumado (los costos no se tocan). */
+  removePurchase: (id: string) => void;
+  /** Pago a cantera o transporte. Efectivo, transferencia y cheque salen de caja/banco; gasoil no. */
+  addSupplierPayment: (p: Draft<SupplierPayment>) => void;
+  removeSupplierPayment: (id: string) => void;
   addIncome: (date: string, concept: string, amount: number, account: Bank) => void;
   settleMovement: (id: string, settled: boolean) => void;
   closeDay: (cashCounted: number, note?: string) => Closure;
@@ -112,7 +122,9 @@ type Collection =
   | "movements"
   | "expenses"
   | "stockMoves"
-  | "closures";
+  | "closures"
+  | "purchases"
+  | "supplierPayments";
 const collections: { key: Collection; table: string }[] = [
   { key: "products", table: "products" },
   { key: "clients", table: "clients" },
@@ -124,6 +136,8 @@ const collections: { key: Collection; table: string }[] = [
   { key: "expenses", table: "expenses" },
   { key: "stockMoves", table: "stock_moves" },
   { key: "closures", table: "closures" },
+  { key: "purchases", table: "purchases" },
+  { key: "supplierPayments", table: "supplier_payments" },
 ];
 
 async function loadAll(): Promise<DB> {
@@ -146,6 +160,8 @@ async function loadAll(): Promise<DB> {
   db.stockMoves.sort((a, b) => b.date.localeCompare(a.date));
   db.cheques.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   db.closures.sort((a, b) => b.date.localeCompare(a.date));
+  db.purchases.sort((a, b) => b.date.localeCompare(a.date));
+  db.supplierPayments.sort((a, b) => b.date.localeCompare(a.date));
   const st = await supabase.from("settings").select("*").eq("id", "main").maybeSingle();
   if (st.error) throw st.error;
   if (st.data) {
@@ -600,6 +616,117 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
           return d;
         }),
+      addPurchase: (draft, updateCosts) => {
+        const pur: Purchase = { ...draft, id: uid() };
+        mutate((d) => {
+          const tons = pur.items.reduce((a, i) => a + i.tons, 0);
+          const freightPerTon = tons > 0 ? pur.freightTotal / tons : 0;
+          const unloadPerTon = tons > 0 ? pur.unloadCost / tons : 0;
+          for (const it of pur.items) {
+            const p = d.products.find((x) => x.id === it.productId);
+            if (!p || it.tons <= 0) continue;
+            const qty = p.unit === "kg" ? it.tons * 1000 : it.tons;
+            p.stock += qty;
+            d.stockMoves.unshift({
+              id: uid(),
+              date: pur.date,
+              productId: p.id,
+              qty,
+              reason: "compra",
+              note: `${pur.supplier}${pur.remito ? " · Rto " + pur.remito : ""}`,
+            });
+            if (!updateCosts || it.pricePerTon <= 0) continue;
+            if (p.category === "piedra" && p.stoneCost) {
+              p.stoneCost = {
+                ...p.stoneCost,
+                purchasePerTon: Math.round(it.pricePerTon),
+                ...(pur.freightTotal > 0 ? { freightPerTon: Math.round(freightPerTon) } : {}),
+                ...(pur.unloadCost > 0 ? { unloadPerTon: Math.round(unloadPerTon) } : {}),
+              };
+              const c = stoneCalc(p.stoneCost, p.bagKg ?? d.settings.bagKg);
+              p.cost = c.costKg;
+              p.price = c.priceKg;
+              p.bagPrice = c.priceBag;
+            } else {
+              // Lajas, líquidos y unitarios: el precio es por unidad; se mantiene el mismo margen.
+              const margin =
+                p.cost > 0 ? p.price / p.cost : 1 + (d.settings.defaultMarginPct ?? 40) / 100;
+              const fr = pur.freightTotal > 0 ? freightPerTon : (p.freight ?? 0);
+              p.freight = fr || undefined;
+              p.cost = Math.round(it.pricePerTon + fr + unloadPerTon);
+              p.price = Math.round(p.cost * margin);
+            }
+          }
+          d.purchases.unshift(pur);
+          return d;
+        });
+        return pur;
+      },
+      removePurchase: (id) =>
+        mutate((d) => {
+          const pur = d.purchases.find((x) => x.id === id);
+          if (!pur) return d;
+          for (const it of pur.items) {
+            const p = d.products.find((x) => x.id === it.productId);
+            if (!p) continue;
+            const qty = p.unit === "kg" ? it.tons * 1000 : it.tons;
+            p.stock -= qty;
+            d.stockMoves.unshift({
+              id: uid(),
+              date: new Date().toISOString(),
+              productId: p.id,
+              qty: -qty,
+              reason: "ajuste",
+              note: `Descarga eliminada · ${pur.supplier}`,
+            });
+          }
+          d.purchases = d.purchases.filter((x) => x.id !== id);
+          return d;
+        }),
+      addSupplierPayment: (draft) =>
+        mutate((d) => {
+          const pay: SupplierPayment = { ...draft, id: uid() };
+          if (pay.method !== "gasoil") {
+            // Sale de caja o banco. El cheque diferido se asienta en su fecha de cobro.
+            const date =
+              pay.method === "cheque" && pay.dueDate ? pay.dueDate + "T12:00:00.000Z" : pay.date;
+            const ex: Expense = {
+              id: uid(),
+              date,
+              type: pay.kind === "transporte" ? "flete" : "compra",
+              concept: `Pago a ${pay.party}${pay.detail ? " · " + pay.detail : ""}`,
+              amount: pay.amount,
+              account: pay.account ?? "Caja",
+              method: pay.method,
+            };
+            d.expenses.unshift(ex);
+            d.movements.unshift({
+              id: uid(),
+              date,
+              kind: ex.type === "flete" ? "flete" : "compra",
+              account: ex.account,
+              amount: -ex.amount,
+              concept: ex.concept,
+              method: ex.method,
+              settled: true,
+              refId: ex.id,
+            });
+            pay.expenseId = ex.id;
+          }
+          d.supplierPayments.unshift(pay);
+          return d;
+        }),
+      removeSupplierPayment: (id) =>
+        mutate((d) => {
+          const pay = d.supplierPayments.find((x) => x.id === id);
+          if (!pay) return d;
+          if (pay.expenseId) {
+            d.expenses = d.expenses.filter((e) => e.id !== pay.expenseId);
+            d.movements = d.movements.filter((m) => m.refId !== pay.expenseId);
+          }
+          d.supplierPayments = d.supplierPayments.filter((x) => x.id !== id);
+          return d;
+        }),
       addIncome: (date, concept, amount, account) =>
         mutate((d) => {
           d.movements.unshift({
@@ -812,4 +939,32 @@ export function periodProfit(db: DB, from: string, to: string) {
     profit: salesTotal - cost - fees - exp - fixed,
     days,
   };
+}
+
+/** Cuentas con canteras y transportes: lo comprado, lo pagado y el saldo de cada uno. */
+export function supplierAccounts(db: DB) {
+  const map = new Map<
+    string,
+    { party: string; kind: "cantera" | "transporte"; debe: number; haber: number; last: string }
+  >();
+  const get = (party: string, kind: "cantera" | "transporte") => {
+    const key = kind + "|" + party.trim().toLowerCase();
+    let a = map.get(key);
+    if (!a) map.set(key, (a = { party: party.trim(), kind, debe: 0, haber: 0, last: "" }));
+    return a;
+  };
+  for (const p of db.purchases) {
+    const a = get(p.supplier, "cantera");
+    a.debe += p.items.reduce((x, i) => x + i.total, 0);
+    if (p.date > a.last) a.last = p.date;
+    if (p.carrier && p.freightTotal > 0) {
+      const c = get(p.carrier, "transporte");
+      c.debe += p.freightTotal;
+      if (p.date > c.last) c.last = p.date;
+    }
+  }
+  for (const pay of db.supplierPayments) get(pay.party, pay.kind).haber += pay.amount;
+  return [...map.values()]
+    .map((a) => ({ ...a, saldo: a.debe - a.haber }))
+    .sort((a, b) => b.saldo - a.saldo);
 }
