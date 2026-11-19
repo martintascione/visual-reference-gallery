@@ -949,7 +949,7 @@ function NewPurchase({
               return (
                 <div
                   key={l.id}
-                  className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1.6fr)_110px_150px_120px_auto]"
+                  className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1.2fr)_150px_minmax(150px,1fr)_130px_auto]"
                 >
                   <Field
                     label="Producto"
@@ -987,7 +987,7 @@ function NewPurchase({
                   <Field
                     label={
                       k !== 1
-                        ? `Precio por bolsón de ${(k * 1000).toLocaleString("es-AR")} kg`
+                        ? `Precio bolsón ${(k * 1000).toLocaleString("es-AR")} kg`
                         : `Precio por ${unit === "t" ? "tonelada" : unit}`
                     }
                     hint={

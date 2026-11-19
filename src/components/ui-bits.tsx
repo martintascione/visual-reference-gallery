@@ -375,6 +375,11 @@ export function NumberInput({
         </span>
       )}
       <input
+        style={
+          suffix && suffix.length > 4
+            ? { paddingRight: `${suffix.length * 6.6 + 24}px` }
+            : undefined
+        }
         type="text"
         inputMode="decimal"
         autoComplete="off"
