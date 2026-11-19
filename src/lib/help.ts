@@ -18,6 +18,16 @@ export const FIELD_HELP: Record<string, string> = {
     "Cualquier otro costo por tonelada: mermas, limpieza, zarandeo. Opcional.",
   "Margen de ganancia":
     "Porcentaje que le sumás al costo total por tonelada para armar el precio de venta. Ej: costo $100 + 40% = precio $140 (sin IVA).",
+  "Precio fijo de la bolsa":
+    "Precio minorista de la bolsa chica (25 kg). Es fijo: no cambia aunque cambien los costos. El bolsón y la tonelada siguen saliendo de los costos y el margen. Si lo dejás vacío, la bolsa se calcula por fórmula.",
+  "Precio fijo por kg":
+    "Precio minorista por kilo suelto (por ejemplo, piedrones que se venden de a uno). Es fijo y no depende de los costos. La tonelada sigue saliendo de la fórmula.",
+  "Bolsa fija · decorativas":
+    "Precio fijo de la bolsa de 25 kg que se propone al cargar una piedra decorativa nueva.",
+  "Bolsa fija · gravas":
+    "Precio fijo de la bolsa de 25 kg que se propone al cargar una grava nueva.",
+  "Bolsa fija · construcción":
+    "Precio fijo de la bolsa de 25 kg que se propone al cargar un producto de construcción nuevo.",
   "Base de gastos":
     "Monto fijo por tonelada para cubrir los gastos generales del negocio (por ejemplo $ 50.000). Se suma al costo antes de aplicar el margen.",
   "Base de gastos por tonelada":

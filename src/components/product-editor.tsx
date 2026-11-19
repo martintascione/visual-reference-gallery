@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { Category, Product, QtyDiscount, SaleUnit, StoneCost } from "@/lib/types";
 import {
+  type CatFilter,
+  catFilters,
   marginOnPrice,
   markup,
   saleUnitsFor,
@@ -41,6 +43,7 @@ type Defaults = {
   bigBagKg?: number | undefined;
   bigBagPackaging?: number | undefined;
   baseExpensePerTon?: number | undefined;
+  bagFixedDefaults?: { decorativa?: number; grava?: number; construccion?: number } | undefined;
   defaultMarginPct?: number | undefined;
 };
 
@@ -71,6 +74,7 @@ export function blankProduct(cat: Category, s: Defaults): Product {
       bigBagKg: s.bigBagKg ?? 1000,
       bigBagPackaging: s.bigBagPackaging ?? 0,
       basePerTon: s.baseExpensePerTon ?? 0,
+      bagFixedPrice: s.bagFixedDefaults?.decorativa || undefined,
     };
   }
   if (cat === "liquido") base.liters = 10;
@@ -200,6 +204,26 @@ export function ProductEditor({
               title="Costo por tonelada"
               hint="Los valores por defecto vienen de Configuración"
             >
+              <div className="mb-4">
+                <Segmented
+                  value={p.stoneCost.group ?? "decorativa"}
+                  onChange={(g) =>
+                    setSC({
+                      group: g,
+                      // Gravas: bolsón de 1.200 kg. Construcción: se vende por viaje de 7.000 kg.
+                      bigBagKg: g === "grava" ? 1200 : 1000,
+                      bigBag2Kg: undefined,
+                      ...(product ? {} : { bagFixedPrice: s.bagFixedDefaults?.[g] || undefined }),
+                      tripKg: g === "construccion" ? (p.stoneCost?.tripKg ?? 7000) : undefined,
+                    })
+                  }
+                  options={[
+                    { value: "decorativa", label: "Decorativa" },
+                    { value: "grava", label: "Grava" },
+                    { value: "construccion", label: "Construcción" },
+                  ]}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-4">
                 <Field label="Precio del proveedor" className="col-span-2">
                   <NumberInput
@@ -234,11 +258,25 @@ export function ProductEditor({
                     suffix="/ t"
                   />
                 </Field>
-                <Field label="Margen de ganancia" hint="Sobre el costo">
+                <Field label="Margen de ganancia" hint="Para bolsón y tonelada">
                   <NumberInput
                     value={p.stoneCost.marginPct}
                     onChange={(v) => setSC({ marginPct: v })}
                     suffix="%"
+                  />
+                </Field>
+                <Field label="Precio fijo de la bolsa" hint="Minorista. Vacío = por fórmula">
+                  <NumberInput
+                    value={p.stoneCost.bagFixedPrice ?? 0}
+                    onChange={(v) => setSC({ bagFixedPrice: v || undefined })}
+                    prefix="$"
+                  />
+                </Field>
+                <Field label="Precio fijo por kg" hint="Suelto. Vacío = por fórmula">
+                  <NumberInput
+                    value={p.stoneCost.kgFixedPrice ?? 0}
+                    onChange={(v) => setSC({ kgFixedPrice: v || undefined })}
+                    prefix="$"
                   />
                 </Field>
               </div>
@@ -319,7 +357,16 @@ export function ProductEditor({
                       prefix="$"
                     />
                   </Field>
-                  <Field label="Segundo bolsón" hint="Ej. 1.200 kg. Vacío = no se vende">
+                  {p.stoneCost.group === "construccion" && (
+                    <Field label="Kg por viaje" hint="Chasis completo">
+                      <NumberInput
+                        value={p.stoneCost.tripKg ?? 7000}
+                        onChange={(v) => setSC({ tripKg: v || 7000 })}
+                        suffix="kg"
+                      />
+                    </Field>
+                  )}
+                  <Field label="Segundo bolsón" hint="Otro tamaño. Vacío = no se vende">
                     <NumberInput
                       value={p.stoneCost.bigBag2Kg ?? 0}
                       onChange={(v) => setSC({ bigBag2Kg: v || undefined })}
@@ -349,18 +396,26 @@ export function ProductEditor({
               </p>
               <div className="mt-3 flex flex-col gap-2">
                 {[
-                  { l: "Por kg", c: ars2(calc.costKg), v: ars2(calc.priceKg) },
                   {
-                    l: `Bolsa de ${(p.bagKg ?? s.bagKg).toLocaleString("es-AR")} kg`,
+                    l: p.stoneCost?.kgFixedPrice ? "Por kg · precio fijo" : "Por kg",
+                    c: ars2(calc.costKg),
+                    v: p.stoneCost?.kgFixedPrice ? ars(calc.retailKg) : ars2(calc.priceKg),
+                  },
+                  {
+                    l: `Bolsa de ${(p.bagKg ?? s.bagKg).toLocaleString("es-AR")} kg${calc.bagFixed ? " · precio fijo" : ""}`,
                     c: ars(calc.costBag),
                     v: ars(calc.priceBag),
-                    big: true,
+                    big: p.stoneCost?.group !== "construccion",
                   },
-                  {
-                    l: `Bolsón de ${calc.bigKg.toLocaleString("es-AR")} kg`,
-                    c: ars(calc.costBig),
-                    v: ars(calc.priceBig),
-                  },
+                  ...(calc.bigKg !== 1000
+                    ? [
+                        {
+                          l: `Bolsón de ${calc.bigKg.toLocaleString("es-AR")} kg`,
+                          c: ars(calc.costBig),
+                          v: ars(calc.priceBig),
+                        },
+                      ]
+                    : []),
                   ...(calc.big2Kg > 0
                     ? [
                         {
@@ -370,7 +425,21 @@ export function ProductEditor({
                         },
                       ]
                     : []),
-                  { l: "Por tonelada", c: ars(calc.costTon), v: ars(calc.priceTon) },
+                  {
+                    l: calc.bigKg === 1000 ? "Por tonelada o bolsón de 1.000 kg" : "Por tonelada",
+                    c: ars(calc.costTon),
+                    v: ars(calc.priceTon),
+                  },
+                  ...(p.stoneCost?.group === "construccion"
+                    ? [
+                        {
+                          l: `Por viaje · chasis de ${calc.tripKg.toLocaleString("es-AR")} kg`,
+                          c: ars(calc.costTrip),
+                          v: ars(calc.priceTrip),
+                          big: true,
+                        },
+                      ]
+                    : []),
                 ].map((r) => (
                   <div
                     key={r.l}
@@ -558,16 +627,10 @@ export function CategoryTabs({
   value,
   onChange,
 }: {
-  value: Category | "todos";
-  onChange: (v: Category | "todos") => void;
+  value: CatFilter;
+  onChange: (v: CatFilter) => void;
 }) {
-  return (
-    <Segmented
-      value={value}
-      onChange={onChange}
-      options={[{ value: "todos", label: "Todos" }, ...categories]}
-    />
-  );
+  return <Segmented value={value} onChange={onChange} options={catFilters} />;
 }
 
 export function StockBadge({ p }: { p: Product }) {

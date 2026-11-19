@@ -212,6 +212,33 @@ function Configuracion() {
                 suffix="/ t"
               />
             </Field>
+            <Field label="Bolsa fija · decorativas" hint="Se propone en cada producto nuevo">
+              <NumberInput
+                value={s.bagFixedDefaults?.decorativa ?? 0}
+                onChange={(v) =>
+                  updateSettings({ bagFixedDefaults: { ...s.bagFixedDefaults, decorativa: v } })
+                }
+                prefix="$"
+              />
+            </Field>
+            <Field label="Bolsa fija · gravas" hint="Se propone en cada producto nuevo">
+              <NumberInput
+                value={s.bagFixedDefaults?.grava ?? 0}
+                onChange={(v) =>
+                  updateSettings({ bagFixedDefaults: { ...s.bagFixedDefaults, grava: v } })
+                }
+                prefix="$"
+              />
+            </Field>
+            <Field label="Bolsa fija · construcción" hint="Se propone en cada producto nuevo">
+              <NumberInput
+                value={s.bagFixedDefaults?.construccion ?? 0}
+                onChange={(v) =>
+                  updateSettings({ bagFixedDefaults: { ...s.bagFixedDefaults, construccion: v } })
+                }
+                prefix="$"
+              />
+            </Field>
             <Field label="Kg por bolsón grande">
               <NumberInput
                 value={s.bigBagKg ?? 1000}

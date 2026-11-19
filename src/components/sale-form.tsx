@@ -259,7 +259,10 @@ export function SaleForm({
   }, [total]);
 
   const addLine = (p: Product) => {
-    const unit: SaleUnit = saleUnitsFor(p)[p.category === "piedra" ? 1 : 0] ?? "u";
+    // Construcción arranca por viaje; el resto de las piedras, por bolsa.
+    const us = saleUnitsFor(p);
+    const unit: SaleUnit =
+      (us[0] === "viaje" ? "viaje" : us[p.category === "piedra" ? 1 : 0]) ?? "u";
     setLines((ls) => {
       const i = ls.findIndex((l) => l.productId === p.id && l.unit === unit);
       if (i >= 0) return ls.map((l, j) => (j === i ? { ...l, qty: l.qty + 1 } : l));

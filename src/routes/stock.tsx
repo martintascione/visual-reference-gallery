@@ -4,7 +4,7 @@ import { ArrowDownToLine, History, Package, SlidersHorizontal } from "lucide-rea
 import type { Bank, Category, PaymentMethod, Product, StockMove } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, fmtDate, fmtTime, num } from "@/lib/format";
-import { round, stoneCalc } from "@/lib/pricing";
+import { type CatFilter, matchCat, round, stoneCalc } from "@/lib/pricing";
 import {
   Badge,
   Card,
@@ -44,7 +44,7 @@ const reasonLabel: Record<StockMove["reason"], string> = {
 
 function Stock() {
   const { db, pendingAction, setPendingAction } = useStore();
-  const [cat, setCat] = useState<Category | "todos">("todos");
+  const [cat, setCat] = useState<CatFilter>("todos");
   const [purchase, setPurchase] = useState<Product | null>(null);
   const [adjust, setAdjust] = useState<Product | null>(null);
   useEffect(() => {
@@ -58,7 +58,7 @@ function Stock() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction]);
-  const products = db.products.filter((p) => p.active && (cat === "todos" || p.category === cat));
+  const products = db.products.filter((p) => p.active && matchCat(p, cat));
   const low = db.products.filter((p) => p.active && p.stock < p.minStock);
   const valued = db.products
     .filter((p) => p.active)

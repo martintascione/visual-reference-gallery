@@ -4,7 +4,9 @@ export type Bank = "Caja" | "BBVA" | "Provincia";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
 /** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */
-export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "bigbag2" | "m2" | "u";
+export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "bigbag2" | "viaje" | "m2" | "u";
+/** Grupo dentro de las piedras: decorativas, gravas (bolsón de 1.200 kg) o construcción (por viaje). */
+export type StoneGroup = "decorativa" | "grava" | "construccion";
 
 export type QtyDiscount = { minQty: number; unit: SaleUnit; pct: number };
 
@@ -20,6 +22,13 @@ export type StoneCost = {
   /** Bolsón grande (big bag): kg y embalaje por bolsón. */
   bigBagKg?: number | undefined;
   bigBagPackaging?: number | undefined;
+  group?: StoneGroup | undefined;
+  /** Precio fijo minorista de la bolsa chica: no depende de los costos. Vacío = sale de la fórmula. */
+  bagFixedPrice?: number | undefined;
+  /** Precio fijo minorista por kg suelto (ej. piedrones). Vacío = sale de la fórmula. */
+  kgFixedPrice?: number | undefined;
+  /** Construcción: kilos de un viaje (chasis completo). */
+  tripKg?: number | undefined;
   /** Segundo tamaño de bolsón (ej. 1.200 kg). 0 o vacío = no se vende. */
   bigBag2Kg?: number | undefined;
   /** Base fija por tonelada para cubrir gastos generales. */
@@ -291,6 +300,8 @@ export type Settings = {
   fixedExpenses: FixedExpense[];
   quoteValidDays: number;
   followUpDays: number;
+  /** Precio fijo de la bolsa que se propone en cada piedra nueva, según el grupo. */
+  bagFixedDefaults?: { decorativa?: number; grava?: number; construccion?: number } | undefined;
   /** Base por tonelada para cubrir gastos, que se propone en cada piedra nueva. */
   baseExpensePerTon?: number | undefined;
   /** Bolsón grande: kg y embalaje por defecto para productos nuevos. */

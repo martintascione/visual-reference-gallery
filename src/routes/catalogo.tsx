@@ -6,11 +6,15 @@ import type { Category, Product } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, num, pctAr } from "@/lib/format";
 import {
+  type CatFilter,
   listPrice,
   marginOnPrice,
+  matchCat,
+  productPrices,
   round,
   simplePrice,
   stoneCalc,
+  stoneGroup,
   stoneKgForArea,
 } from "@/lib/pricing";
 import {
@@ -43,7 +47,7 @@ const unitName: Record<Product["unit"], string> = { kg: "kg", m2: "m²", l: "L",
 function Catalogo() {
   const { db, pendingAction, setPendingAction } = useStore();
   const [q, setQ] = useState("");
-  const [cat, setCat] = useState<Category | "todos">("todos");
+  const [cat, setCat] = useState<CatFilter>("todos");
   const [editing, setEditing] = useState<Product | null | "new">(null);
   const [bulk, setBulk] = useState(false);
   const [calc, setCalc] = useState(false);
@@ -74,7 +78,7 @@ function Catalogo() {
     () =>
       db.products
         .filter((p) => p.active)
-        .filter((p) => cat === "todos" || p.category === cat)
+        .filter((p) => matchCat(p, cat))
         .filter((p) => p.name.toLowerCase().includes(q.toLowerCase()))
         .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)),
     [db.products, cat, q],
@@ -122,50 +126,58 @@ function Catalogo() {
         <Table
           head={[
             "Producto",
+            "Precios de venta (sin IVA)",
             { label: "Costo", right: true },
-            { label: "Precio", right: true },
-            { label: "Bolsa", right: true },
-            { label: "Bolsón", right: true },
             { label: "Margen", right: true },
             { label: "Stock", right: true },
             "",
             "",
           ]}
-          min={860}
+          min={900}
         >
           {list.map((p) => {
             const m = marginOnPrice(p.cost, p.price);
             return (
               <tr key={p.id} className={tr}>
-                <td>
+                <td className="max-w-[240px]">
                   <p className="font-medium">{p.name}</p>
                   <p className="text-[11px] text-muted-foreground">
                     {p.category === "piedra"
-                      ? "Piedra · por kg, bolsón o tonelada"
+                      ? stoneGroup(p) === "construccion"
+                        ? "Construcción"
+                        : stoneGroup(p) === "grava"
+                          ? "Grava"
+                          : "Piedra decorativa"
                       : p.category === "laja"
-                        ? "Laja · por m²"
+                        ? "Laja"
                         : p.category === "liquido"
-                          ? `Bidón de ${p.liters} L`
+                          ? "Líquido"
                           : "Unitario"}
                     {p.discounts.length > 0 &&
                       ` · ${p.discounts.length} descuento${p.discounts.length > 1 ? "s" : ""}`}
                   </p>
                 </td>
+                <td>
+                  <div className="flex flex-wrap gap-1.5">
+                    {productPrices(p).map((x) => (
+                      <span
+                        key={x.label}
+                        className="inline-flex min-w-[92px] flex-col rounded-2xl bg-surface px-3 py-1.5"
+                        title={x.fixed ? "Precio fijo minorista" : "Calculado con costos y margen"}
+                      >
+                        <span className="text-[10px] leading-tight text-muted-foreground">
+                          {x.label}
+                          {x.fixed ? " · fijo" : ""}
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums">{ars(x.value)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </td>
                 <td className="text-right tabular-nums text-muted-foreground">
                   {p.unit === "kg"
                     ? `${ars(p.cost * 1000)}/t`
                     : `${ars(p.cost)}/${unitName[p.unit]}`}
-                </td>
-                <td className="text-right font-semibold tabular-nums">
-                  {p.unit === "kg"
-                    ? `${ars(p.price * 1000)}/t`
-                    : `${ars(p.price)}/${unitName[p.unit]}`}
-                </td>
-                <td className="text-right tabular-nums">
-                  {p.category === "piedra" ? ars(listPrice(p, "bolson")) : "—"}
-                </td>
-                <td className="text-right tabular-nums">
-                  {p.category === "piedra" ? ars(listPrice(p, "bigbag")) : "—"}
                 </td>
                 <td className="text-right tabular-nums">
                   <Badge tone={m < db.settings.minMarginPct ? "danger" : "muted"}>{pctAr(m)}</Badge>
@@ -222,10 +234,10 @@ function Catalogo() {
 
 function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { db, upsertProduct } = useStore();
-  const [cat, setCat] = useState<Category | "todos">("todos");
+  const [cat, setCat] = useState<CatFilter>("todos");
   const [pct, setPct] = useState(10);
   const [what, setWhat] = useState<"precio" | "costo">("precio");
-  const targets = db.products.filter((p) => p.active && (cat === "todos" || p.category === cat));
+  const targets = db.products.filter((p) => p.active && matchCat(p, cat));
 
   const apply = () => {
     const f = 1 + pct / 100;
@@ -275,7 +287,7 @@ function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
             </Select>
           </Field>
           <Field label="Categoría">
-            <Select value={cat} onChange={(e) => setCat(e.target.value as Category | "todos")}>
+            <Select value={cat} onChange={(e) => setCat(e.target.value as CatFilter)}>
               <option value="todos">Todas</option>
               <option value="piedra">Piedras</option>
               <option value="laja">Lajas</option>

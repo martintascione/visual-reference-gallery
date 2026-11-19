@@ -51,6 +51,7 @@ export const defaultSettings: Settings = {
   quoteValidDays: 7,
   followUpDays: 2,
   baseExpensePerTon: 50000,
+  bagFixedDefaults: { decorativa: 15000, grava: 15000, construccion: 8000 },
   bigBagKg: 1000,
   bigBagPackaging: 0,
   unloadChargeBags: 20000,

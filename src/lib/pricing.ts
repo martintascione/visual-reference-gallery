@@ -1,4 +1,4 @@
-import type { Product, QtyDiscount, SaleUnit, StoneCost } from "./types";
+import type { Product, QtyDiscount, SaleUnit, StoneCost, StoneGroup } from "./types";
 
 export const round = (n: number, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
@@ -30,11 +30,20 @@ export function stoneCalc(c: StoneCost, bagKg: number) {
   const priceKg = perKg * factor;
   // Por defecto la bolsa y los bolsones valen lo mismo por kilo que la tonelada.
   const same = c.bagSamePerKg !== false;
-  const priceBag = same ? priceKg * bagKg : perBag * factor;
+  // La bolsa chica puede tener un precio fijo minorista, sin importar los costos.
+  const bagFixed = (c.bagFixedPrice ?? 0) > 0;
+  const priceBag = bagFixed ? (c.bagFixedPrice ?? 0) : same ? priceKg * bagKg : perBag * factor;
   const priceTon = perTon * factor;
   const priceBig = same ? priceKg * bigKg : perBig * factor;
   const priceBig2 = same ? priceKg * big2Kg : perBig2 * factor;
+  const tripKg = c.tripKg ?? 7000;
   return {
+    bagFixed,
+    /** Precio de venta por kg suelto (fijo si se cargó; si no, el de la fórmula). */
+    retailKg: (c.kgFixedPrice ?? 0) > 0 ? (c.kgFixedPrice ?? 0) : round(priceKg),
+    tripKg,
+    costTrip: round(perKg * tripKg, 0),
+    priceTrip: round(priceKg * tripKg, 0),
     bigKg,
     costBig: round(perBig, 0),
     priceBig: round(priceBig, 0),
@@ -72,12 +81,38 @@ export function markup(cost: number, price: number) {
 /** Kilos del bolsón grande de un producto (1.000 kg si no se cargó otro valor). */
 export const bigBagKg = (p: Product) => p.stoneCost?.bigBagKg ?? 1000;
 
+export const tripKgOf = (p: Product) => p.stoneCost?.tripKg ?? 7000;
+export const stoneGroup = (p: Product): StoneGroup => p.stoneCost?.group ?? "decorativa";
+
+/** Filtros del catálogo: las piedras se separan en decorativas, gravas y construcción. */
+export type CatFilter =
+  "todos" | "piedra" | "grava" | "construccion" | "laja" | "liquido" | "unitario";
+export const catFilters: { value: CatFilter; label: string }[] = [
+  { value: "todos", label: "Todos" },
+  { value: "piedra", label: "Decorativas" },
+  { value: "grava", label: "Gravas" },
+  { value: "construccion", label: "Construcción" },
+  { value: "laja", label: "Laja" },
+  { value: "liquido", label: "Líquido" },
+  { value: "unitario", label: "Unitario" },
+];
+export function matchCat(p: Product, f: CatFilter) {
+  if (f === "todos") return true;
+  if (p.category !== "piedra") return p.category === f;
+  return f === (stoneGroup(p) === "decorativa" ? "piedra" : stoneGroup(p));
+}
+
 /** Unidades en las que se puede vender cada producto. */
 export function saleUnitsFor(p: Product): SaleUnit[] {
-  if (p.category === "piedra")
-    return (p.stoneCost?.bigBag2Kg ?? 0) > 0
-      ? ["kg", "bolson", "bigbag", "bigbag2", "t"]
-      : ["kg", "bolson", "bigbag", "t"];
+  if (p.category === "piedra") {
+    // El bolsón de 1.000 kg es lo mismo que la tonelada: solo se ofrece si pesa distinto (ej. 1.200 kg).
+    const units: SaleUnit[] =
+      stoneGroup(p) === "construccion" ? ["viaje", "t", "bolson", "kg"] : ["kg", "bolson"];
+    if (bigBagKg(p) !== 1000) units.push("bigbag");
+    if ((p.stoneCost?.bigBag2Kg ?? 0) > 0) units.push("bigbag2");
+    if (!units.includes("t")) units.push("t");
+    return units;
+  }
   if (p.category === "laja") return ["m2"];
   return ["u"];
 }
@@ -88,6 +123,7 @@ export const unitLabel: Record<SaleUnit, string> = {
   bolson: "bolsa",
   bigbag: "bolsón",
   bigbag2: "bolsón grande",
+  viaje: "viaje",
   m2: "m²",
   u: "unidad",
 };
@@ -98,6 +134,7 @@ const unitPlural: Record<SaleUnit, string> = {
   bolson: "bolsas",
   bigbag: "bolsones",
   bigbag2: "bolsones grandes",
+  viaje: "viajes",
   m2: "m²",
   u: "unidades",
 };
@@ -112,6 +149,7 @@ export function qtyUnit(qty: number, unit: SaleUnit) {
 export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
   if (unit === "t") return qty * 1000;
   if (unit === "bolson") return qty * (p.bagKg ?? 25);
+  if (unit === "viaje") return qty * tripKgOf(p);
   if (unit === "bigbag") return qty * bigBagKg(p);
   if (unit === "bigbag2") return qty * (p.stoneCost?.bigBag2Kg ?? 1200);
   return qty;
@@ -119,11 +157,16 @@ export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
 
 /** Precio unitario de lista según la unidad elegida. */
 export function listPrice(p: Product, unit: SaleUnit) {
+  if (unit === "kg" && (p.stoneCost?.kgFixedPrice ?? 0) > 0) return p.stoneCost?.kgFixedPrice ?? 0;
   if (unit === "t") return round(p.price * 1000, 0);
   if (unit === "bolson")
     return p.stoneCost
       ? stoneCalc(p.stoneCost, p.bagKg ?? 25).priceBag
       : round(p.bagPrice ?? p.price * (p.bagKg ?? 25), 0);
+  if (unit === "viaje")
+    return p.stoneCost
+      ? stoneCalc(p.stoneCost, p.bagKg ?? 25).priceTrip
+      : round(p.price * tripKgOf(p), 0);
   if (unit === "bigbag")
     return p.stoneCost
       ? stoneCalc(p.stoneCost, p.bagKg ?? 25).priceBig
@@ -137,6 +180,7 @@ export function listPrice(p: Product, unit: SaleUnit) {
 export function unitCost(p: Product, unit: SaleUnit) {
   if (unit === "t") return p.cost * 1000;
   if (unit === "bolson") return p.cost * (p.bagKg ?? 25) + (p.stoneCost?.packagingPerBag ?? 0);
+  if (unit === "viaje") return p.cost * tripKgOf(p);
   if (unit === "bigbag") return p.cost * bigBagKg(p) + (p.stoneCost?.bigBagPackaging ?? 0);
   if (unit === "bigbag2")
     return p.cost * (p.stoneCost?.bigBag2Kg ?? 1200) + (p.stoneCost?.bigBagPackaging ?? 0);
@@ -172,8 +216,42 @@ export function stoneKgForArea(m2: number, thicknessCm: number, density = 1600) 
 /** Nombre de la unidad con sus kilos, para elegir al vender: "bolsa 25 kg", "bolsón 1.000 kg". */
 export function unitLabelFor(p: Product, unit: SaleUnit) {
   const kg = (n: number) => `${n.toLocaleString("es-AR")} kg`;
+  if (unit === "viaje") return `viaje ${kg(tripKgOf(p))}`;
   if (unit === "bolson") return `bolsa ${kg(p.bagKg ?? 25)}`;
   if (unit === "bigbag") return `bolsón ${kg(bigBagKg(p))}`;
   if (unit === "bigbag2") return `bolsón ${kg(p.stoneCost?.bigBag2Kg ?? 1200)}`;
   return unitLabel[unit];
+}
+
+/** Precios de venta de un producto, uno por cada forma en que se vende (para catálogo y lista de precios). */
+export function productPrices(p: Product): { label: string; value: number; fixed?: boolean }[] {
+  const kg = (n: number) => `${n.toLocaleString("es-AR")} kg`;
+  if (p.category !== "piedra") {
+    const label =
+      p.category === "laja"
+        ? "Por m²"
+        : p.category === "liquido"
+          ? `Bidón ${p.liters ?? ""} L`
+          : "Unidad";
+    return [{ label, value: p.price }];
+  }
+  const out: { label: string; value: number; fixed?: boolean }[] = [];
+  if ((p.stoneCost?.kgFixedPrice ?? 0) > 0)
+    out.push({ label: "Por kg", value: listPrice(p, "kg"), fixed: true });
+  out.push({
+    label: `Bolsa ${kg(p.bagKg ?? 25)}`,
+    value: listPrice(p, "bolson"),
+    fixed: (p.stoneCost?.bagFixedPrice ?? 0) > 0,
+  });
+  if (bigBagKg(p) !== 1000)
+    out.push({ label: `Bolsón ${kg(bigBagKg(p))}`, value: listPrice(p, "bigbag") });
+  if ((p.stoneCost?.bigBag2Kg ?? 0) > 0)
+    out.push({
+      label: `Bolsón ${kg(p.stoneCost?.bigBag2Kg ?? 0)}`,
+      value: listPrice(p, "bigbag2"),
+    });
+  out.push({ label: "Tonelada", value: listPrice(p, "t") });
+  if (stoneGroup(p) === "construccion")
+    out.push({ label: `Viaje ${kg(tripKgOf(p))}`, value: listPrice(p, "viaje") });
+  return out;
 }
