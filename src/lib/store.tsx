@@ -639,7 +639,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (p.category === "piedra" && p.stoneCost) {
               p.stoneCost = {
                 ...p.stoneCost,
-                purchasePerTon: Math.round(it.pricePerTon),
+                purchasePerTon: it.pricePerTon,
                 ...(pur.freightTotal > 0 ? { freightPerTon: Math.round(freightPerTon) } : {}),
                 ...(pur.unloadCost > 0 ? { unloadPerTon: Math.round(unloadPerTon) } : {}),
               };

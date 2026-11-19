@@ -22,6 +22,7 @@ import {
   tr,
 } from "@/components/ui-bits";
 import { ProductEditor } from "@/components/product-editor";
+import { bigBagKg, stoneGroup } from "@/lib/pricing";
 
 export const Route = createFileRoute("/descargas")({
   head: () => ({
@@ -116,7 +117,15 @@ function Descargas() {
                       )}
                       {p.items.map((i, k) => (
                         <p key={k} className="text-[11px] text-muted-foreground">
-                          {i.name}: {num(i.tons, 2)} × {ars(i.pricePerTon)} = {ars(i.total)}
+                          {i.name}:{" "}
+                          {(() => {
+                            const pr = db.products.find((x) => x.id === i.productId);
+                            const k = pr && stoneGroup(pr) === "grava" ? bigBagKg(pr) / 1000 : 1;
+                            return k !== 1
+                              ? `${num(i.tons / k, 2)} bolsones × ${ars(i.pricePerTon * k)}`
+                              : `${num(i.tons, 2)} × ${ars(i.pricePerTon)}`;
+                          })()}{" "}
+                          = {ars(i.total)}
                         </p>
                       ))}
                     </td>
@@ -392,8 +401,13 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
     }
     return null;
   };
+  // Gravas: se cargan por bolsón (1.200 kg) al precio del bolsón; el sistema lo pasa a toneladas.
+  const kOf = (productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    return p && stoneGroup(p) === "grava" ? bigBagKg(p) / 1000 : 1;
+  };
   const valid = lines.filter((l) => l.productId && l.tons > 0);
-  const tons = valid.reduce((a, l) => a + l.tons, 0);
+  const tons = valid.reduce((a, l) => a + l.tons * kOf(l.productId), 0);
   const merch = valid.reduce((a, l) => a + l.tons * l.price, 0);
   const freightTons = fTons || tons;
   const freightTotal = fMode === "t" ? Math.round(freightTons * fValue) : fValue;
@@ -403,8 +417,8 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
     const items: PurchaseItem[] = valid.map((l) => ({
       productId: l.productId,
       name: products.find((p) => p.id === l.productId)?.name ?? "",
-      tons: l.tons,
-      pricePerTon: l.price,
+      tons: l.tons * kOf(l.productId),
+      pricePerTon: l.price / kOf(l.productId),
       total: Math.round(l.tons * l.price),
     }));
     const iso = date === todayISO() ? new Date().toISOString() : date + "T12:00:00.000Z";
@@ -509,8 +523,11 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
           <div className="flex flex-col gap-3">
             {lines.map((l) => {
               const p = products.find((x) => x.id === l.productId);
-              const unit = !p || p.unit === "kg" ? "t" : p.unit === "m2" ? "m²" : "u";
-              const last = l.productId ? lastPrice(l.productId) : null;
+              const k = kOf(l.productId);
+              const unit =
+                k !== 1 ? "bolsones" : !p || p.unit === "kg" ? "t" : p.unit === "m2" ? "m²" : "u";
+              const lastT = l.productId ? lastPrice(l.productId) : null;
+              const last = lastT ? { ...lastT, price: Math.round(lastT.price * k) } : null;
               return (
                 <div
                   key={l.id}
@@ -550,7 +567,11 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
                     />
                   </Field>
                   <Field
-                    label={`Precio por ${unit === "t" ? "tonelada" : unit}`}
+                    label={
+                      k !== 1
+                        ? `Precio por bolsón de ${(k * 1000).toLocaleString("es-AR")} kg`
+                        : `Precio por ${unit === "t" ? "tonelada" : unit}`
+                    }
                     hint={
                       last && l.price > 0 && l.price !== last.price
                         ? `${l.price > last.price ? "Subió" : "Bajó"} ${num(Math.abs((l.price / last.price - 1) * 100), 1)} %`
@@ -583,6 +604,20 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
                   >
                     <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
                   </button>
+                  {k !== 1 && (
+                    <div className="col-span-full -mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      o cargá el precio por tonelada
+                      <span className="w-40">
+                        <NumberInput
+                          value={Math.round((l.price / k) * 100) / 100}
+                          onChange={(v) => upd(l.id, { price: Math.round(v * k * 100) / 100 })}
+                          prefix="$"
+                          suffix="/ t"
+                        />
+                      </span>
+                      y el del bolsón se completa solo
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -604,7 +639,7 @@ function NewPurchase({ open, onClose }: { open: boolean; onClose: () => void }) 
               <Plus className="h-3.5 w-3.5" /> Producto nuevo
             </button>
             <p className="text-xs text-muted-foreground">
-              {num(tons, 2)} en total · mercadería <b className="text-foreground">{ars(merch)}</b>
+              {num(tons, 2)} t en total · mercadería <b className="text-foreground">{ars(merch)}</b>
             </p>
           </div>
           <div className="mt-3 border-t border-border pt-3">

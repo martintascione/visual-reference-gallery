@@ -133,6 +133,8 @@ export function ProductEditor({
     setMargin(s.defaultMarginPct ?? 40);
   };
 
+  // Factor para cargar el precio del proveedor por bolsón en las gravas (1.200 kg → 1,2).
+  const gravaK = p.stoneCost?.group === "grava" ? (p.stoneCost.bigBagKg ?? 1200) / 1000 : 1;
   const lowMargin = p.price > 0 && marginOnPrice(p.cost, p.price) < s.minMarginPct;
   const canSave = p.name.trim().length > 1 && p.price > 0;
   const unitName =
@@ -225,15 +227,47 @@ export function ProductEditor({
                 />
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-                <Field label="Precio del proveedor" className="col-span-2">
-                  <NumberInput
-                    value={p.stoneCost.purchasePerTon ?? 0}
-                    onChange={(v) => setSC({ purchasePerTon: v })}
-                    prefix="$"
-                    suffix="/ t"
-                    className="h-11 text-base font-semibold"
-                  />
-                </Field>
+                {/* Gravas: el precio se carga por bolsón de 1.200 kg o por tonelada; el otro se completa solo. */}
+                {gravaK !== 1 ? (
+                  <>
+                    <Field
+                      label={`Proveedor · por ${(gravaK * 1000).toLocaleString("es-AR")} kg`}
+                      help="Precio de lista de la cantera por bolsón. Si cargás este, el precio por tonelada se calcula solo."
+                    >
+                      <NumberInput
+                        value={Math.round((p.stoneCost.purchasePerTon ?? 0) * gravaK * 100) / 100}
+                        onChange={(v) => setSC({ purchasePerTon: v / gravaK })}
+                        prefix="$"
+                        className="h-11 text-base font-semibold"
+                      />
+                    </Field>
+                    <Field
+                      label="Proveedor · por tonelada"
+                      help="Si ya tenés el valor por tonelada, cargalo acá y el precio por bolsón se calcula solo."
+                    >
+                      <NumberInput
+                        value={Math.round((p.stoneCost.purchasePerTon ?? 0) * 100) / 100}
+                        onChange={(v) => setSC({ purchasePerTon: v })}
+                        prefix="$"
+                        suffix="/ t"
+                        className="h-11 text-base font-semibold"
+                      />
+                    </Field>
+                    <p className="col-span-2 -mt-2 px-1 text-[11px] text-muted-foreground">
+                      Cargá cualquiera de los dos: el otro se completa solo.
+                    </p>
+                  </>
+                ) : (
+                  <Field label="Precio del proveedor" className="col-span-2">
+                    <NumberInput
+                      value={p.stoneCost.purchasePerTon ?? 0}
+                      onChange={(v) => setSC({ purchasePerTon: v })}
+                      prefix="$"
+                      suffix="/ t"
+                      className="h-11 text-base font-semibold"
+                    />
+                  </Field>
+                )}
                 <Field label="Flete">
                   <NumberInput
                     value={p.stoneCost.freightPerTon ?? 0}
