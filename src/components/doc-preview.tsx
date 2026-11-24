@@ -39,19 +39,32 @@ export function DocPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [doc?.id, kind, db.settings, client],
   );
+  // El PDF se arma apenas se abre la vista previa: así WhatsApp y el mail salen al toque.
+  const [pdf, setPdf] = useState<{ blob: Blob; base64: string } | null>(null);
+  useEffect(() => {
+    setPdf(null);
+    if (!built) return;
+    let alive = true;
+    pdfFromHtml(built.html)
+      .then((r) => alive && setPdf(r))
+      .catch(() => alive && setPdf(null));
+    return () => {
+      alive = false;
+    };
+  }, [built]);
   if (!doc || !built) return null;
   const label = kind === "presupuesto" ? "presupuesto" : "comprobante";
 
   const sendWa = async () => {
     setWa(true);
     try {
-      const r = await shareDocWhatsApp(db, doc, kind);
+      const r = await shareDocWhatsApp(db, doc, kind, pdf?.blob);
       setState({
         s: "ok",
         msg:
           r === "link"
-            ? "Se abrió WhatsApp con el mensaje y el link al PDF listos para enviar."
-            : "Listo para elegir el chat en WhatsApp con el PDF adjunto.",
+            ? "Este navegador no deja adjuntar archivos: se abrió WhatsApp con el mensaje y un link corto al PDF."
+            : "PDF compartido: elegí WhatsApp y el chat, y se manda como archivo.",
       });
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError"))
@@ -69,7 +82,8 @@ export function DocPreview({
     if (!okEmail(to)) return;
     setState({ s: "sending", msg: `Enviando a ${to}…` });
     try {
-      const { base64: pdf } = await pdfFromHtml(built.html);
+      const ready = pdf ?? (await pdfFromHtml(built.html));
+      const base64 = ready.base64;
       const s = db.settings;
       const n = String(doc.number).padStart(4, "0");
       const hello =
@@ -85,7 +99,7 @@ export function DocPreview({
         attachments: [
           {
             filename: `${built.fileName}.pdf`,
-            content: pdf,
+            content: base64,
             contentType: "application/pdf",
             encoding: "base64",
           },
@@ -114,8 +128,13 @@ export function DocPreview({
           <button className={`${btn.soft} mr-auto`} onClick={() => openDocumentPdf(db, doc, kind)}>
             <FileDown className="h-4 w-4" strokeWidth={1.6} /> Descargar PDF
           </button>
-          <button className={btn.soft} disabled={wa} onClick={() => void sendWa()}>
-            {wa ? (
+          <button
+            className={btn.soft}
+            disabled={wa || !pdf}
+            onClick={() => void sendWa()}
+            title={pdf ? "Enviar el PDF por WhatsApp" : "Preparando el PDF…"}
+          >
+            {wa || !pdf ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <MessageCircle className="h-4 w-4" strokeWidth={1.6} />

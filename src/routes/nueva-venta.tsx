@@ -11,6 +11,9 @@ export const Route = createFileRoute("/nueva-venta")({
       { name: "description", content: "Cargar una venta o un presupuesto." },
     ],
   }),
+  // ?modo=presupuesto: entrar directo a armar un presupuesto (desde Presupuestos).
+  validateSearch: (s: Record<string, unknown>): { modo?: "presupuesto" | undefined } =>
+    s["modo"] === "presupuesto" ? { modo: "presupuesto" } : {},
   component: NuevaVenta,
 });
 
@@ -27,7 +30,19 @@ function NuevaVenta() {
   const editSale = db.sales.find((x) => x.id === editSaleId);
   const fromQuote = db.quotes.find((q) => q.id === pendingQuoteId);
   const editQuote = db.quotes.find((q) => q.id === editQuoteId);
-  const [mode, setMode] = useState<"venta" | "presupuesto">("venta");
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [mode, setModeState] = useState<"venta" | "presupuesto">(
+    search.modo === "presupuesto" ? "presupuesto" : "venta",
+  );
+  // Si se vuelve a entrar con otro modo (ej. desde Presupuestos), se respeta.
+  useEffect(() => {
+    setModeState(search.modo === "presupuesto" ? "presupuesto" : "venta");
+  }, [search.modo]);
+  const setMode = (m: "venta" | "presupuesto") => {
+    setModeState(m);
+    void navigate({ search: m === "presupuesto" ? { modo: "presupuesto" } : {}, replace: true });
+  };
 
   if (editSale)
     return (
@@ -55,7 +70,13 @@ function NuevaVenta() {
     <>
       <PageHeader
         title={mode === "venta" ? "Nueva venta" : "Nuevo presupuesto"}
-        subtitle={fromQuote ? `Convirtiendo el presupuesto #${fromQuote.number}` : "Mostrador"}
+        subtitle={
+          fromQuote
+            ? `Convirtiendo el presupuesto #${fromQuote.number}`
+            : mode === "presupuesto"
+              ? "Se guarda en Presupuestos, no descuenta stock ni cobra"
+              : "Mostrador: descuenta stock y registra el cobro"
+        }
       >
         {!fromQuote && (
           <Segmented
@@ -69,7 +90,7 @@ function NuevaVenta() {
         )}
       </PageHeader>
       <SaleForm
-        key={(fromQuote?.id ?? "") + mode}
+        key={fromQuote?.id ?? "nueva"}
         mode={fromQuote ? "venta" : mode}
         fromQuote={fromQuote}
       />

@@ -492,6 +492,14 @@ export type Stockpile = {
   payments: StockpilePayment[];
   withdrawals: StockpileWithdrawal[];
   closed?: boolean | undefined;
+  /** Presupuesto del que salió el acopio. */
+  quoteId?: string | undefined;
+  /** Lo presupuestado, con el precio final por unidad (ya con bonificaciones y, si va, IVA). */
+  items?:
+    | { productId: string; name: string; qty: number; unit: SaleUnit; unitPrice: number }[]
+    | undefined;
+  /** El acopio se pactó con IVA: los retiros se valorizan con IVA incluido. */
+  withIva?: boolean | undefined;
 };
 
 export type DB = {

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Package, Plus, Search, Trash2, Truck, Wallet } from "lucide-react";
-import type { Bank, SaleUnit, Stockpile } from "@/lib/types";
+import type { Bank, Quote, SaleUnit, Stockpile } from "@/lib/types";
 import { stockpileBalance, useStore } from "@/lib/store";
 import { ars, fmtDateNum, num, todayISO } from "@/lib/format";
 import { listPrice, qtyUnit, saleUnitsFor, toBaseQty, unitLabelFor } from "@/lib/pricing";
@@ -42,6 +42,23 @@ function Acopios() {
   const [q, setQ] = useState("");
   const [showClosed, setShowClosed] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [fromQuote, setFromQuote] = useState<Quote | null>(null);
+  // Desde Presupuestos ("Pasar a acopio"): se abre el alta ya cargada con ese presupuesto.
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem("ap-acopio-desde");
+      if (!id) return;
+      sessionStorage.removeItem("ap-acopio-desde");
+      const q = db.quotes.find((x) => x.id === id);
+      if (q) {
+        setFromQuote(q);
+        setAdding(true);
+      }
+    } catch {
+      /* sin storage */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = list.find((s) => s.id === openId) ?? null;
 
@@ -141,7 +158,11 @@ function Acopios() {
 
       <NewStockpile
         open={adding}
-        onClose={() => setAdding(false)}
+        fromQuote={fromQuote}
+        onClose={() => {
+          setAdding(false);
+          setFromQuote(null);
+        }}
         onCreated={(id) => setOpenId(id)}
       />
       <StockpileDetail s={open} onClose={() => setOpenId(null)} />
@@ -204,12 +225,14 @@ function NewStockpile({
   open,
   onClose,
   onCreated,
+  fromQuote,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (id: string) => void;
+  fromQuote?: Quote | null;
 }) {
-  const { db, upsertClient, addStockpile, addStockpilePayment } = useStore();
+  const { db, upsertClient, addStockpile, addStockpilePayment, updateQuote } = useStore();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
@@ -219,12 +242,13 @@ function NewStockpile({
   const [account, setAccount] = useState<Bank>("BBVA");
   useEffect(() => {
     if (!open) return;
-    setName("");
-    setPhone("");
-    setNote("");
-    setAmount(0);
+    const q = fromQuote;
+    setName(q && q.clientName.toLowerCase() !== "consumidor final" ? q.clientName : "");
+    setPhone(q?.phone ?? "");
+    setNote(q ? `Presupuesto N° ${String(q.number).padStart(4, "0")}` : "");
+    setAmount(q?.total ?? 0);
     setDate(todayISO());
-  }, [open]);
+  }, [open, fromQuote]);
   const norm = (t: string) => t.trim().toLowerCase();
   const match = db.clients.find((c) => name.trim() && norm(c.name) === norm(name));
   const ok = name.trim().length > 1 && amount > 0;
@@ -237,12 +261,31 @@ function NewStockpile({
         phone: phone.trim() || undefined,
         creditLimit: 0,
       });
+    const q = fromQuote;
+    // Precio final por unidad de lo presupuestado: con la bonificación del ítem, la del total y el IVA si va.
+    const k = q
+      ? (1 - (q.discountPct ?? 0) / 100) * (q.withIva ? 1 + db.settings.ivaPct / 100 : 1)
+      : 1;
     const id = addStockpile({
       clientId,
       clientName: match?.name ?? name.trim(),
       date: isoOf(date),
       note: note.trim() || undefined,
+      ...(q
+        ? {
+            quoteId: q.id,
+            withIva: q.withIva || undefined,
+            items: q.items.map((i) => ({
+              productId: i.productId,
+              name: i.name,
+              qty: i.qty,
+              unit: i.unit,
+              unitPrice: Math.round((i.qty ? i.subtotal / i.qty : i.unitPrice) * k),
+            })),
+          }
+        : {}),
     });
+    if (q) updateQuote(q.id, { status: "aceptado" });
     addStockpilePayment(id, {
       date: isoOf(date),
       amount,
@@ -257,8 +300,16 @@ function NewStockpile({
       open={open}
       onClose={onClose}
       wide
-      title="Nuevo acopio"
-      subtitle="Lo que el cliente paga a cuenta para ir retirando la mercadería de a poco"
+      title={
+        fromQuote
+          ? `Acopio del presupuesto N° ${String(fromQuote.number).padStart(4, "0")}`
+          : "Nuevo acopio"
+      }
+      subtitle={
+        fromQuote
+          ? `Lo presupuestado (${ars(fromQuote.total)}) queda guardado con sus precios para valorizar cada retiro`
+          : "Lo que el cliente paga a cuenta para ir retirando la mercadería de a poco"
+      }
       footer={
         <>
           <button className={btn.soft} onClick={onClose}>
@@ -366,7 +417,10 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
   const p = products.find((x) => x.id === pid);
   const units = p ? saleUnitsFor(p) : [];
   const u = p && units.includes(unit) ? unit : (units[0] ?? "u");
-  const unitPrice = price ?? (p ? listPrice(p, u) : 0);
+  const quoted = p ? s.items?.find((x) => x.productId === p.id && x.unit === u) : undefined;
+  const ivaK = s.withIva ? 1 + db.settings.ivaPct / 100 : 1;
+  // Precio del presupuesto si ese producto estaba presupuestado; si no, lista de hoy (con IVA si el acopio va con IVA).
+  const unitPrice = price ?? quoted?.unitPrice ?? (p ? Math.round(listPrice(p, u) * ivaK) : 0);
   const total = Math.round(unitPrice * qty);
   const after = b.saldo - total;
   const client = db.clients.find((c) => c.id === s.clientId);
@@ -434,6 +488,42 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
       subtitle={`Pagó ${ars(b.paid)} · retiró ${ars(b.taken)} · ${b.saldo >= 0 ? `le quedan ${ars(b.saldo)}` : `debe ${ars(-b.saldo)}`}`}
     >
       <div className="flex flex-col gap-4">
+        {!!s.items?.length && (
+          <div className="rounded-3xl bg-surface p-4">
+            <p className="mb-2 text-xs font-semibold">
+              Lo presupuestado{s.withIva ? " (precios con IVA)" : ""}
+            </p>
+            <div className="flex flex-col gap-1 text-xs">
+              {s.items.map((it) => {
+                const took = s.withdrawals
+                  .filter((w) => w.productId === it.productId && w.unit === it.unit)
+                  .reduce((a, w) => a + w.qty, 0);
+                const left = Math.max(0, it.qty - took);
+                return (
+                  <button
+                    key={it.productId + it.unit}
+                    type="button"
+                    className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-card"
+                    title="Cargar un retiro de este producto"
+                    onClick={() => {
+                      setPid(it.productId);
+                      setUnit(it.unit);
+                      setPrice(undefined);
+                      setQty(left || 0);
+                    }}
+                  >
+                    <span>
+                      {qtyUnit(it.qty, it.unit)} {it.name} · {ars(it.unitPrice)} c/u
+                    </span>
+                    <span className={left > 0 ? "font-semibold" : "text-success-foreground"}>
+                      {left > 0 ? `faltan retirar ${qtyUnit(left, it.unit)}` : "retirado todo"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="on-surface rounded-3xl bg-surface p-4">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold">
             <Truck className="h-4 w-4" strokeWidth={1.6} /> Registrar un retiro
@@ -487,7 +577,8 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
             </Field>
             <Field
               label="Precio unitario"
-              help="Sale solo con el precio de lista de hoy, sin IVA. Si se le respeta otro precio (por ejemplo el del día que pagó), se cambia acá."
+              hint={quoted && price === undefined ? "Precio del presupuesto" : undefined}
+              help="Si el producto estaba en el presupuesto, sale con ese precio. Si no, con la lista de hoy. Se puede cambiar a mano."
             >
               <NumberInput value={unitPrice} onChange={(v) => setPrice(v)} prefix="$" />
             </Field>
@@ -651,7 +742,8 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
         )}
         <p className="text-[11px] text-muted-foreground">
           Los pagos entran en caja o banco el día que se cargan. Cada retiro descuenta el stock y el
-          saldo del cliente. Precios sin IVA. {num(s.withdrawals.length)} retiros cargados.
+          saldo del cliente. {s.withIva ? "Precios con IVA incluido." : "Precios sin IVA."}{" "}
+          {num(s.withdrawals.length)} retiros cargados.
         </p>
       </div>
     </Modal>

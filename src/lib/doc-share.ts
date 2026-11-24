@@ -15,7 +15,9 @@ export async function uploadDocPdf(blob: Blob, fileName: string) {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const path = `${crypto.randomUUID()}/${safe || "documento"}.pdf`;
+  // Nombre corto para que el link no quede largo.
+  const id = Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6);
+  const path = `${id}-${(safe || "doc").slice(0, 24)}.pdf`;
   const { error } = await supabase.storage
     .from("documentos")
     .upload(path, blob, { contentType: "application/pdf", upsert: false });
@@ -50,27 +52,44 @@ export function waPhone(raw: string | undefined) {
   return "549" + d;
 }
 
+/** ¿El navegador puede compartir el archivo PDF directo (menú de compartir con WhatsApp)? */
+export function canShareFile() {
+  try {
+    const f = new File([new Blob(["x"], { type: "application/pdf" })], "x.pdf", {
+      type: "application/pdf",
+    });
+    return !!navigator.canShare?.({ files: [f] });
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Manda el documento por WhatsApp con el PDF listo para abrir.
- * En el celular usa el menú de compartir con el archivo adjunto; en la compu, un link al PDF.
+ * Manda el documento por WhatsApp. Si el navegador lo permite, abre el menú de compartir
+ * con el PDF adjunto (se elige WhatsApp y el chat). Si no, abre WhatsApp con el mensaje y un link corto al PDF.
+ * El PDF ya tiene que estar armado (blob) para no perder el clic del usuario.
  */
-export async function shareDocWhatsApp(db: DB, doc: Quote | Sale, kind: "presupuesto" | "venta") {
+export async function shareDocWhatsApp(
+  db: DB,
+  doc: Quote | Sale,
+  kind: "presupuesto" | "venta",
+  ready?: Blob,
+) {
   const { html, fileName } = documentHtml(db, doc, kind, false);
   const phone = waPhone(
     ("phone" in doc ? doc.phone : undefined) ??
       db.clients.find((c) => c.id === doc.clientId)?.phone,
   );
-  const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-  // La ventana se abre antes de armar el PDF para que el navegador no la bloquee.
-  const win = mobile ? null : window.open("about:blank", "_blank");
+  if (ready && canShareFile()) {
+    const file = new File([ready], `${fileName}.pdf`, { type: "application/pdf" });
+    const text = waCopy(db, doc, kind, "").replace(/\n\nLo podés ver acá: \n/, "\n");
+    await navigator.share({ files: [file], title: fileName, text });
+    return "compartido";
+  }
+  // La ventana se abre antes de subir el PDF para que el navegador no la bloquee.
+  const win = window.open("about:blank", "_blank");
   try {
-    const { blob } = await pdfFromHtml(html);
-    const file = new File([blob], `${fileName}.pdf`, { type: "application/pdf" });
-    if (mobile && navigator.canShare?.({ files: [file] })) {
-      const text = waCopy(db, doc, kind, "").replace(/\n\nLo podés ver acá: \n/, "\n");
-      await navigator.share({ files: [file], text });
-      return "compartido";
-    }
+    const blob = ready ?? (await pdfFromHtml(html)).blob;
     const link = await uploadDocPdf(blob, fileName);
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(waCopy(db, doc, kind, link))}`;
     if (win) win.location.href = url;

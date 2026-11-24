@@ -1,8 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Check, FileDown, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, FileDown, MessageCircle, Pencil, Plus, Trash2, X, Warehouse } from "lucide-react";
 import { DocPreview } from "@/components/doc-preview";
-import { shareDocWhatsApp } from "@/lib/doc-share";
 import type { Quote, QuoteStatus } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
@@ -36,7 +35,6 @@ function Presupuestos() {
   const [lost, setLost] = useState<Quote | null>(null);
   const [toDelete, setToDelete] = useState<Quote | null>(null);
   const [preview, setPreview] = useState<Quote | null>(null);
-  const [waBusy, setWaBusy] = useState<string | null>(null);
   // Recién guardado en Nueva venta: se abre la vista previa sola.
   useEffect(() => {
     try {
@@ -50,16 +48,8 @@ function Presupuestos() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const sendWa = async (q: Quote) => {
-    setWaBusy(q.id);
-    try {
-      await shareDocWhatsApp(db, q, "presupuesto");
-    } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError")) setPreview(q);
-    } finally {
-      setWaBusy(null);
-    }
-  };
+  // WhatsApp abre la vista previa: ahí el PDF ya está armado y se comparte como archivo.
+  const sendWa = (q: Quote) => setPreview(q);
   const editQ = (q: Quote) => {
     setPendingQuote(undefined);
     setEditQuote(q.id);
@@ -112,8 +102,8 @@ function Presupuestos() {
             { value: "cerrados", label: `Vencidos/perdidos (${closedCount})` },
           ]}
         />
-        <Link to="/nueva-venta" className={btn.primary}>
-          <Plus className="h-4 w-4" /> Nuevo
+        <Link to="/nueva-venta" search={{ modo: "presupuesto" }} className={btn.primary}>
+          <Plus className="h-4 w-4" /> Nuevo presupuesto
         </Link>
       </PageHeader>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -219,16 +209,25 @@ function Presupuestos() {
                   <button className={`${btn.primary} h-9 px-4 text-xs`} onClick={() => convert(q)}>
                     <Check className="h-3.5 w-3.5" /> Aceptado → venta
                   </button>
+                  <button
+                    className={btn.ghost}
+                    title="El cliente paga ahora y retira de a poco: se arma un acopio con lo presupuestado"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem("ap-acopio-desde", q.id);
+                      } catch {
+                        /* sin storage */
+                      }
+                      void nav({ to: "/acopios" });
+                    }}
+                  >
+                    <Warehouse className="h-3.5 w-3.5" /> Pasar a acopio
+                  </button>
                   <button className={btn.ghost} onClick={() => setPreview(q)}>
                     <FileDown className="h-3.5 w-3.5" /> Ver PDF
                   </button>
-                  <button
-                    className={btn.ghost}
-                    disabled={waBusy === q.id}
-                    onClick={() => void sendWa(q)}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />{" "}
-                    {waBusy === q.id ? "Preparando…" : "WhatsApp"}
+                  <button className={btn.ghost} onClick={() => sendWa(q)}>
+                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                   </button>
                   {needsCall && (
                     <button
@@ -301,7 +300,7 @@ function Presupuestos() {
               : 'Todavía no hay presupuestos. Se arman desde Nueva venta eligiendo "Presupuesto" arriba a la derecha, y después se mandan por WhatsApp.'
           }
           action={
-            <Link to="/nueva-venta" className={btn.primary}>
+            <Link to="/nueva-venta" search={{ modo: "presupuesto" }} className={btn.primary}>
               <Plus className="h-4 w-4" /> Nuevo presupuesto
             </Link>
           }
