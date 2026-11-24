@@ -529,11 +529,16 @@ export function SaleForm({
             : undefined,
       });
       setEditQuote(undefined);
+      try {
+        sessionStorage.setItem("ap-preview-quote", editQuote.id);
+      } catch {
+        /* sin storage */
+      }
       setSaved("Presupuesto actualizado");
       setTimeout(() => nav({ to: "/presupuestos" }), 900);
       return;
     }
-    addQuote({
+    const newQ = addQuote({
       date: new Date().toISOString(),
       validUntil: addDays(today, validDays),
       followUp: addDays(today, s.followUpDays),
@@ -555,6 +560,12 @@ export function SaleForm({
           ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
           : undefined,
     });
+    // Al llegar a Presupuestos se abre sola la vista previa para mandarlo.
+    try {
+      sessionStorage.setItem("ap-preview-quote", newQ.id);
+    } catch {
+      /* sin storage */
+    }
     setSaved("Presupuesto guardado");
     setTimeout(() => nav({ to: "/presupuestos" }), 900);
   };
@@ -724,7 +735,7 @@ export function SaleForm({
               <Toggle
                 checked={pickupOn}
                 onChange={setPickupOn}
-                label="Cobrar flete por su cuenta (lo busca o pone su transporte)"
+                label="Cobrar servicio de embolsado (retira el cliente)"
               />
               {pickupOn && (
                 <span className="w-40">
@@ -960,7 +971,7 @@ export function SaleForm({
             )}
             {pickup > 0 && (
               <p className="flex justify-between text-muted-foreground">
-                <span>Flete por su cuenta</span>
+                <span>Servicio de embolsado</span>
                 <span className="tabular-nums">{ars(pickup)}</span>
               </p>
             )}

@@ -14,7 +14,13 @@ import logo from "@/assets/aridos-petreos-logo.png";
  * Replica el formato del Word que usa el corralón: cotización, fecha, válido hasta, datos del
  * cliente, tabla de ítems, bonificación, IVA, total y la franja de contacto.
  */
-export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" | "venta") {
+/** HTML del presupuesto o comprobante, con el formato de la casa. */
+export function documentHtml(
+  db: DB,
+  doc: Quote | Sale,
+  kind: "presupuesto" | "venta",
+  autoPrint = true,
+) {
   const s = db.settings;
   const client = doc.clientId ? db.clients.find((c) => c.id === doc.clientId) : undefined;
   const number = String(doc.number).padStart(4, "0");
@@ -54,7 +60,7 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   const fleteRow = doc.delivery
     ? `<tr><td class="c">1</td><td><span class="name">Flete a domicilio</span> · ${esc(doc.delivery.zone)}${doc.delivery.address ? " · " + esc(doc.delivery.address) : ""}</td><td class="r">${ars2(fleteSolo * k)}</td><td class="r">${ars2(fleteSolo * k)}</td></tr>${descarga ? `<tr><td class="c">1</td><td><span class="name">Descarga</span></td><td class="r">${ars2(descarga * k)}</td><td class="r">${ars2(descarga * k)}</td></tr>` : ""}`
     : pickupFee
-      ? `<tr><td class="c">1</td><td><span class="name">Flete por su cuenta</span></td><td class="r">${ars2(pickupFee * k)}</td><td class="r">${ars2(pickupFee * k)}</td></tr>`
+      ? `<tr><td class="c">1</td><td><span class="name">Servicio de embolsado</span></td><td class="r">${ars2(pickupFee * k)}</td><td class="r">${ars2(pickupFee * k)}</td></tr>`
       : "";
   const installRow = install
     ? `<tr><td class="c">1</td><td><span class="name">Servicio de colocación</span></td><td class="r">${ars2(install * k)}</td><td class="r">${ars2(install * k)}</td></tr>`
@@ -170,9 +176,14 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   </div>
   <div class="tiny">${esc(s.businessName)} · ${kind === "presupuesto" ? "Presupuesto sin valor fiscal" : "Comprobante interno sin valor fiscal"}</div>
 </div>
-<script>window.addEventListener("load", function(){ setTimeout(function(){ window.print(); }, 400); });</script>
+${autoPrint ? `<script>window.addEventListener("load", function(){ setTimeout(function(){ window.print(); }, 400); });</script>` : ""}
 </body></html>`;
+  return { html, fileName, title, total };
+}
 
+/** Abre el documento en una pestaña nueva para guardarlo como PDF o imprimirlo. */
+export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" | "venta") {
+  const { html } = documentHtml(db, doc, kind);
   const w = window.open("", "_blank");
   if (!w) {
     console.warn("Ventana emergente bloqueada: permití pop-ups para generar el PDF.");
@@ -182,4 +193,61 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   w.document.write(html);
   w.document.close();
   return true;
+}
+
+/**
+ * Arma el PDF (A4) del documento dibujándolo en un iframe oculto, igual a lo que se ve en pantalla.
+ * Sirve para adjuntarlo en un mail o compartirlo por WhatsApp sin descargar nada.
+ */
+export async function pdfFromHtml(html: string) {
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:800px;height:1200px;border:0;";
+  document.body.appendChild(frame);
+  try {
+    await new Promise<void>((resolve) => {
+      frame.onload = () => resolve();
+      frame.srcdoc = html;
+    });
+    const doc = frame.contentDocument;
+    if (!doc?.body) throw new Error("No se pudo armar el documento.");
+    // Que termine de cargar el logo antes de dibujar.
+    await Promise.all(
+      [...doc.images].map((im) =>
+        im.complete ? null : new Promise((r) => ((im.onload = r), (im.onerror = r))),
+      ),
+    );
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
+    const page = (doc.querySelector(".page") as HTMLElement | null) ?? doc.body;
+    const canvas = await html2canvas(page, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const w = pw - margin * 2;
+    const pxPerMm = canvas.width / w;
+    const sliceH = Math.floor((ph - margin * 2) * pxPerMm);
+    for (let y = 0, n = 0; y < canvas.height; y += sliceH, n++) {
+      const part = document.createElement("canvas");
+      part.width = canvas.width;
+      part.height = Math.min(sliceH, canvas.height - y);
+      part.getContext("2d")!.drawImage(canvas, 0, -y);
+      if (n > 0) pdf.addPage();
+      pdf.addImage(
+        part.toDataURL("image/jpeg", 0.92),
+        "JPEG",
+        margin,
+        margin,
+        w,
+        part.height / pxPerMm,
+      );
+    }
+    const blob = pdf.output("blob");
+    const base64 = pdf.output("datauristring").split(",")[1] ?? "";
+    return { blob, base64 };
+  } finally {
+    frame.remove();
+  }
 }

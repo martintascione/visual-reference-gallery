@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, FileDown, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
-import { openDocumentPdf } from "@/lib/quote-pdf";
+import { DocPreview } from "@/components/doc-preview";
+import { shareDocWhatsApp } from "@/lib/doc-share";
 import type { Quote, QuoteStatus } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
@@ -34,6 +35,31 @@ function Presupuestos() {
   const [tab, setTab] = useState<"abiertos" | "aceptados" | "cerrados">("abiertos");
   const [lost, setLost] = useState<Quote | null>(null);
   const [toDelete, setToDelete] = useState<Quote | null>(null);
+  const [preview, setPreview] = useState<Quote | null>(null);
+  const [waBusy, setWaBusy] = useState<string | null>(null);
+  // Recién guardado en Nueva venta: se abre la vista previa sola.
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem("ap-preview-quote");
+      if (!id) return;
+      sessionStorage.removeItem("ap-preview-quote");
+      const q = db.quotes.find((x) => x.id === id);
+      if (q) setPreview(q);
+    } catch {
+      /* sin storage */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const sendWa = async (q: Quote) => {
+    setWaBusy(q.id);
+    try {
+      await shareDocWhatsApp(db, q, "presupuesto");
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === "AbortError")) setPreview(q);
+    } finally {
+      setWaBusy(null);
+    }
+  };
   const editQ = (q: Quote) => {
     setPendingQuote(undefined);
     setEditQuote(q.id);
@@ -69,30 +95,6 @@ function Presupuestos() {
   const convert = (q: Quote) => {
     setPendingQuote(q.id);
     nav({ to: "/nueva-venta" });
-  };
-
-  const waText = (q: Quote) => {
-    const ri = db.clients.find((c) => c.id === q.clientId)?.ivaCategory === "Responsable inscripto";
-    const incl = q.withIva && !ri;
-    const k = incl ? 1 + db.settings.ivaPct / 100 : 1;
-    return encodeURIComponent(
-      [
-        `Hola ${q.clientName}, te paso el presupuesto #${q.number} de ${db.settings.businessName}:`,
-        ...q.items.map(
-          (i) =>
-            `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal * k)}${i.note ? ` (${i.note})` : ""}`,
-        ),
-        q.install ? `• Servicio de colocación: ${ars(q.install.amount * k)}` : "",
-        q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price * k)}` : "",
-        q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice * k)}` : "",
-        !q.delivery && q.pickupFee ? `• Flete por su cuenta: ${ars(q.pickupFee * k)}` : "",
-        incl ? "Precios con IVA incluido." : q.withIva ? `IVA: ${ars(q.iva)}` : "",
-        `*Total: ${ars(q.total)}*`,
-        `Válido hasta el ${fmtDate(q.validUntil)}.`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    );
   };
 
   return (
@@ -191,7 +193,7 @@ function Presupuestos() {
                 )}
                 {!q.delivery && !!q.pickupFee && (
                   <li className="flex justify-between">
-                    <span>Flete por su cuenta</span>
+                    <span>Servicio de embolsado</span>
                     <span className="tabular-nums">{ars(q.pickupFee)}</span>
                   </li>
                 )}
@@ -217,20 +219,17 @@ function Presupuestos() {
                   <button className={`${btn.primary} h-9 px-4 text-xs`} onClick={() => convert(q)}>
                     <Check className="h-3.5 w-3.5" /> Aceptado → venta
                   </button>
+                  <button className={btn.ghost} onClick={() => setPreview(q)}>
+                    <FileDown className="h-3.5 w-3.5" /> Ver PDF
+                  </button>
                   <button
                     className={btn.ghost}
-                    onClick={() => openDocumentPdf(db, q, "presupuesto")}
+                    disabled={waBusy === q.id}
+                    onClick={() => void sendWa(q)}
                   >
-                    <FileDown className="h-3.5 w-3.5" /> PDF
+                    <MessageCircle className="h-3.5 w-3.5" />{" "}
+                    {waBusy === q.id ? "Preparando…" : "WhatsApp"}
                   </button>
-                  <a
-                    href={`https://wa.me/${q.phone ? "54" + q.phone.replace(/\D/g, "") : ""}?text=${waText(q)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={btn.ghost}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-                  </a>
                   {needsCall && (
                     <button
                       className={btn.ghost}
@@ -260,11 +259,8 @@ function Presupuestos() {
               )}
               {tab !== "abiertos" && (
                 <div className="flex flex-wrap gap-1.5">
-                  <button
-                    className={btn.ghost}
-                    onClick={() => openDocumentPdf(db, q, "presupuesto")}
-                  >
-                    <FileDown className="h-3.5 w-3.5" /> PDF
+                  <button className={btn.ghost} onClick={() => setPreview(q)}>
+                    <FileDown className="h-3.5 w-3.5" /> Ver PDF
                   </button>
                   {q.status !== "aceptado" && (
                     <button className={btn.ghost} onClick={() => editQ(q)}>
@@ -383,6 +379,7 @@ function Presupuestos() {
           </div>
         </div>
       </Modal>
+      <DocPreview doc={preview} kind="presupuesto" onClose={() => setPreview(null)} />
     </>
   );
 }

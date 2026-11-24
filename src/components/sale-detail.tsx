@@ -7,7 +7,7 @@ import { qtyUnit, unitLabel } from "@/lib/pricing";
 import { Badge, Modal, btn } from "./ui-bits";
 import { FileCheck, FileDown, Pencil, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { openDocumentPdf } from "@/lib/quote-pdf";
+import { DocPreview } from "@/components/doc-preview";
 
 const methodLabel: Record<string, string> = {
   efectivo: "Efectivo",
@@ -39,6 +39,7 @@ export function PayChips({ sale }: { sale: Sale }) {
 }
 
 export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
+  const [preview, setPreview] = useState(false);
   const { db, setInvoicePending, setPendingAction, setEditSale, removeSale } = useStore();
   const navigate = useNavigate();
   const [confirmDel, setConfirmDel] = useState(false);
@@ -118,7 +119,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
         )}
         {!sale.delivery && !!sale.pickupFee && (
           <p className="flex justify-between gap-3">
-            <span>Flete por su cuenta</span>
+            <span>Servicio de embolsado</span>
             <span className="tabular-nums">{ars(sale.pickupFee)}</span>
           </p>
         )}
@@ -179,8 +180,8 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <button className={btn.soft} onClick={() => openDocumentPdf(db, sale, "venta")}>
-            <FileDown className="h-4 w-4" strokeWidth={1.6} /> Comprobante PDF
+          <button className={btn.soft} onClick={() => setPreview(true)}>
+            <FileDown className="h-4 w-4" strokeWidth={1.6} /> Ver comprobante
           </button>
           <button
             className={btn.soft}
@@ -278,6 +279,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
           </div>
         </div>
       )}
+      <DocPreview doc={preview ? sale : null} kind="venta" onClose={() => setPreview(false)} />
     </Modal>
   );
 }

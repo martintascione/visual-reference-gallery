@@ -315,7 +315,7 @@ function Configuracion() {
               />
             </Field>
             <Field
-              label="Flete por su cuenta"
+              label="Servicio de embolsado"
               hint="Cuando el cliente lo busca o pone su transporte; editable en cada venta"
             >
               <NumberInput

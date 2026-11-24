@@ -166,13 +166,14 @@ const fullSteps: Step[] = [
 const NEWS_KEY = "ap-novedades-vistas";
 const NEWS_VERSION = "2026-11-24";
 const newsList = [
+  "Vista previa del presupuesto con envío por WhatsApp y por email en un clic",
   "Acopios: pagos a cuenta y retiros de mercadería con el saldo calculado solo",
   "Bonificación por ítem y por el total en presupuestos y ventas",
   "Elegí en qué se vende cada piedra (viaje, tonelada, bolsa, kg)",
   "Cuentas y saldos: lo que nos deben y lo que debemos, con cronograma de pagos",
   "Servicio de colocación en ventas y presupuestos, con el % para la empresa",
   "Nota en cada ítem del presupuesto",
-  "Flete por su cuenta cuando el cliente retira",
+  "Servicio de embolsado cuando el cliente retira",
   "Calculadora por largo × ancho y espesor, con fijador",
   "El PDF del presupuesto se guarda con el nombre del cliente",
   "Eliminar productos del catálogo",
@@ -264,8 +265,8 @@ const newsSteps: Step[] = [
   {
     route: "/nueva-venta",
     target: "page",
-    title: "Colocación, notas y flete por su cuenta",
-    body: 'En una venta o presupuesto podés sumar el servicio de colocación: se le cobra al cliente y ves cuánto queda para la empresa (20 a 30 %) y cuánto para el colocador. Cada ítem puede llevar una nota que sale en el presupuesto. Si el cliente retira o pone su transporte, prendés "Cobrar flete por su cuenta" ($ 30.000, editable).',
+    title: "Colocación, notas y embolsado",
+    body: 'En una venta o presupuesto podés sumar el servicio de colocación: se le cobra al cliente y ves cuánto queda para la empresa (20 a 30 %) y cuánto para el colocador. Cada ítem puede llevar una nota que sale en el presupuesto. Si el cliente retira o pone su transporte, prendés "Cobrar servicio de embolsado" ($ 30.000, editable).',
   },
   {
     route: "/catalogo",

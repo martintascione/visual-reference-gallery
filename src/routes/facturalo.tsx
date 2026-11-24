@@ -216,7 +216,7 @@ function Facturalo() {
     if (!sale.delivery && sale.pickupFee)
       setLines((ls) => [
         ...ls,
-        { id: uid(), desc: "Flete por su cuenta", qty: 1, unit: "u", price: sale.pickupFee ?? 0 },
+        { id: uid(), desc: "Servicio de embolsado", qty: 1, unit: "u", price: sale.pickupFee ?? 0 },
       ]);
     setNote(`Venta #${sale.number}`);
     setManualTotal(0);
