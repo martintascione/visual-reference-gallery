@@ -28,7 +28,8 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
   const fleteSolo = doc.delivery?.price ?? 0;
   const descarga = doc.delivery?.unloadPrice ?? 0;
   const pickupFee = doc.delivery ? 0 : (doc.pickupFee ?? 0);
-  const flete = fleteSolo + descarga + pickupFee;
+  const install = doc.install?.amount ?? 0;
+  const flete = fleteSolo + descarga + pickupFee + install;
   const base = itemsTotal - discount + flete;
   const iva = doc.withIva ? Math.round(base * (s.ivaPct / 100)) : 0;
   const total = base + iva;
@@ -44,7 +45,7 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
     .map(
       (i) => `<tr>
         <td class="c">${esc(qtyUnit(i.qty, i.unit))}</td>
-        <td><span class="name">${esc(i.name)}</span>${i.discountPct ? ` <span class="muted">(−${i.discountPct}% por cantidad)</span>` : ""}</td>
+        <td><span class="name">${esc(i.name)}</span>${i.discountPct ? ` <span class="muted">(bonif. −${i.discountPct}%)</span>` : ""}${i.note ? `<div class="muted" style="margin-top:2px">${esc(i.note)}</div>` : ""}</td>
         <td class="r">${ars2(i.unitPrice * k)}</td>
         <td class="r">${ars2(i.subtotal * k)}</td>
       </tr>`,
@@ -55,6 +56,9 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
     : pickupFee
       ? `<tr><td class="c">1</td><td><span class="name">Flete por su cuenta</span></td><td class="r">${ars2(pickupFee * k)}</td><td class="r">${ars2(pickupFee * k)}</td></tr>`
       : "";
+  const installRow = install
+    ? `<tr><td class="c">1</td><td><span class="name">Servicio de colocación</span></td><td class="r">${ars2(install * k)}</td><td class="r">${ars2(install * k)}</td></tr>`
+    : "";
 
   const ico = {
     wa: `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.5 3.5A11.8 11.8 0 0 0 12.1 0C5.6 0 .3 5.3.3 11.8c0 2.1.5 4.1 1.6 5.9L0 24l6.5-1.7a11.8 11.8 0 0 0 5.6 1.4c6.5 0 11.8-5.3 11.8-11.8 0-3.2-1.2-6.1-3.4-8.4zM12.1 21.7c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.9 1 1-3.8-.2-.4a9.8 9.8 0 1 1 8.5 4.8zm5.4-7.3c-.3-.1-1.7-.9-2-1-.3-.1-.5-.1-.7.1l-.9 1.1c-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.4-1.5-.9-.8-1.5-1.8-1.6-2.1-.2-.3 0-.5.1-.6l.4-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3z"/></svg>`,
@@ -143,7 +147,7 @@ export function openDocumentPdf(db: DB, doc: Quote | Sale, kind: "presupuesto" |
 
   <div class="tbl"><table>
     <thead><tr><th class="c">Cantidad</th><th>Producto / Servicio / Detalle</th><th class="r">P. unitario</th><th class="r">Subtotal</th></tr></thead>
-    <tbody>${rows}${fleteRow}</tbody>
+    <tbody>${rows}${fleteRow}${installRow}</tbody>
   </table></div>
 
   <div class="bottom">

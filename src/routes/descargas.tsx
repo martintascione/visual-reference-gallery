@@ -22,6 +22,7 @@ import {
   tr,
 } from "@/components/ui-bits";
 import { ProductEditor } from "@/components/product-editor";
+import { SupplierDebtForm } from "@/components/debt-forms";
 import { bigBagKg, stoneGroup } from "@/lib/pricing";
 
 export const Route = createFileRoute("/descargas")({
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/descargas")({
   component: Descargas,
 });
 
-type Account = ReturnType<typeof supplierAccounts>[number];
+export type Account = ReturnType<typeof supplierAccounts>[number];
 const methodName: Record<SupplierPayMethod, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
@@ -332,7 +333,11 @@ function Descargas() {
 
       <NewPurchase open={adding} onClose={() => setAdding(false)} />
       <NewPurchase open={!!edit} onClose={() => setEdit(null)} edit={edit} />
-      <DebtForm open={debt.open} edit={debt.edit} onClose={() => setDebt({ open: false })} />
+      <SupplierDebtForm
+        open={debt.open}
+        edit={debt.edit}
+        onClose={() => setDebt({ open: false })}
+      />
       <Ledger account={open} onClose={() => setLedger(null)} />
       <Modal
         open={!!del}
@@ -1199,8 +1204,13 @@ function NewPurchase({
               <NumberInput value={fValue} onChange={setFValue} prefix="$" />
             </Field>
             <Field
-              label="Costo de descarga"
-              help="Lo que costó bajar la carga (máquina o personal). Se reparte por tonelada en el costo de los productos."
+              label="Total pagado por la descarga"
+              hint={
+                unload > 0 && tons > 0
+                  ? `= ${ars(Math.round(unload / tons))} por tonelada`
+                  : "Camión o palero, el total"
+              }
+              help="El total que se pagó por bajar la carga (camión, máquina o palero). El sistema lo divide por las toneladas y lo suma al costo de cada producto. Si lo cobra alguien de afuera, abajo ponés quién y queda en su cuenta."
             >
               <NumberInput value={unload} onChange={setUnload} prefix="$" />
             </Field>
@@ -1289,7 +1299,7 @@ function NewPurchase({
 }
 
 /** Cuenta de una cantera o transporte: debe, haber y saldo, como en la planilla. */
-function Ledger({ account, onClose }: { account: Account | null; onClose: () => void }) {
+export function Ledger({ account, onClose }: { account: Account | null; onClose: () => void }) {
   const { db, addSupplierPayment, removeSupplierPayment, setSupplierReminder } = useStore();
   const [v, setV] = useState<PayNow>(payBlank);
   const [amount, setAmount] = useState(0);
@@ -1498,202 +1508,6 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
             </p>
           )}
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-/** Deuda con un proveedor sin cargar mercadería: saldos anteriores, facturas viejas, etc. */
-function DebtForm({
-  open,
-  onClose,
-  edit,
-}: {
-  open: boolean;
-  onClose: () => void;
-  edit?: Purchase | undefined;
-}) {
-  const { db, addPurchase, updatePurchase } = useStore();
-  const [kind, setKind] = useState<"cantera" | "transporte">("cantera");
-  const [party, setParty] = useState("");
-  const [amount, setAmount] = useState(0);
-  const [date, setDate] = useState(todayISO());
-  const [note, setNote] = useState("");
-  const [due, setDue] = useState("");
-  useEffect(() => {
-    if (!open) return;
-    const k = edit?.debtOnly ?? "cantera";
-    setKind(k);
-    setParty(edit ? (k === "cantera" ? edit.supplier : (edit.carrier ?? "")) : "");
-    setAmount(
-      edit
-        ? k === "cantera"
-          ? edit.items.reduce((a, i) => a + i.total, 0)
-          : edit.freightTotal
-        : 0,
-    );
-    setDate(edit ? edit.date.slice(0, 10) : todayISO());
-    setNote(edit?.note ?? "");
-    setDue(edit ? ((k === "cantera" ? edit.payDue : edit.freightDue) ?? "") : "");
-  }, [open, edit]);
-
-  const accounts = supplierAccounts(db);
-  const names = [
-    ...new Set(
-      (kind === "cantera"
-        ? db.purchases.filter((p) => p.debtOnly !== "transporte").map((p) => p.supplier)
-        : db.purchases.flatMap((p) => [p.carrier ?? "", p.unloadBy ?? ""])
-      ).filter((x) => x.trim()),
-    ),
-  ].sort((a, b) => a.localeCompare(b));
-  const current = accounts.find(
-    (a) => a.kind === kind && key(a.kind, a.party) === key(kind, party),
-  );
-  // Si se está editando, el saldo de hoy ya incluye esta misma deuda.
-  const before =
-    (current?.saldo ?? 0) -
-    (edit &&
-    key(kind, party) ===
-      key(edit.debtOnly ?? "", (edit.debtOnly === "cantera" ? edit.supplier : edit.carrier) ?? "")
-      ? edit.debtOnly === "cantera"
-        ? edit.items.reduce((a, i) => a + i.total, 0)
-        : edit.freightTotal
-      : 0);
-  const ok = party.trim().length > 1 && amount > 0;
-
-  const save = () => {
-    const name = party.trim();
-    const iso = edit && date === edit.date.slice(0, 10) ? edit.date : date + "T12:00:00.000Z";
-    const detail = note.trim() || "Deuda anterior";
-    const draft =
-      kind === "cantera"
-        ? {
-            date: iso,
-            supplier: name,
-            items: [{ name: detail, tons: 0, pricePerTon: 0, total: Math.round(amount) }],
-            freightTons: 0,
-            freightRate: 0,
-            freightTotal: 0,
-            unloadCost: 0,
-            note: note.trim() || undefined,
-            payDue: due || undefined,
-            debtOnly: "cantera" as const,
-          }
-        : {
-            date: iso,
-            supplier: "",
-            items: [],
-            carrier: name,
-            freightTons: 0,
-            freightRate: 0,
-            freightTotal: Math.round(amount),
-            unloadCost: 0,
-            note: note.trim() || undefined,
-            freightDue: due || undefined,
-            debtOnly: "transporte" as const,
-          };
-    if (edit) updatePurchase(edit.id, draft, false);
-    else addPurchase(draft, false);
-    onClose();
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={edit ? "Editar deuda" : "Cargar deuda con un proveedor"}
-      subtitle="Para deudas que vienen de antes o que no son de una descarga. No toca el stock ni los costos."
-      footer={
-        <>
-          <button className={btn.soft} onClick={onClose}>
-            Cancelar
-          </button>
-          <button className={btn.primary} disabled={!ok} onClick={save}>
-            {edit ? "Guardar cambios" : `Cargar deuda${amount > 0 ? " " + ars(amount) : ""}`}
-          </button>
-        </>
-      }
-    >
-      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-        <div className="col-span-2">
-          <Segmented
-            value={kind}
-            onChange={(k) => {
-              setKind(k);
-              setParty("");
-            }}
-            options={[
-              { value: "cantera", label: "Cantera / proveedor" },
-              { value: "transporte", label: "Transporte" },
-            ]}
-          />
-        </div>
-        <Field
-          label={kind === "cantera" ? "Cantera o proveedor" : "Transporte"}
-          className="col-span-2"
-          help="Elegí uno que ya tengas en la lista o escribí el nombre de uno nuevo: queda creado con su cuenta."
-        >
-          <Input
-            list="deuda-proveedores"
-            value={party}
-            onChange={(e) => setParty(e.target.value)}
-            placeholder={kind === "cantera" ? "Ej: La Helena" : "Ej: Cucumelo"}
-            autoFocus
-          />
-          <datalist id="deuda-proveedores">
-            {names.map((x) => (
-              <option key={x} value={x} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="Importe que se le debe">
-          <NumberInput value={amount} onChange={setAmount} prefix="$" />
-        </Field>
-        <Field label="Fecha de la deuda" help="El día de la factura o del saldo, aunque sea viejo.">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <Field label="Detalle (opcional)" className="col-span-2">
-          <Input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Ej: saldo anterior, factura 0001-00000234, remito 552"
-          />
-        </Field>
-        <Field
-          label="Avisarme para pagarla (opcional)"
-          className="col-span-2"
-          help="Ese día aparece en Inicio, Notificaciones y Calendario, mientras quede saldo."
-        >
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="w-40">
-              <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-            </span>
-            {[7, 15, 30, 60].map((d) => (
-              <button
-                key={d}
-                type="button"
-                className={btn.ghost}
-                onClick={() => setDue(addDays(todayISO(), d))}
-              >
-                {d} d
-              </button>
-            ))}
-            {due && (
-              <button type="button" className={btn.ghost} onClick={() => setDue("")}>
-                Sin aviso
-              </button>
-            )}
-          </div>
-        </Field>
-        {party.trim().length > 1 && (
-          <p className="col-span-2 rounded-2xl bg-surface p-3 text-xs">
-            {current || before > 0
-              ? `Hoy se le debe ${ars(Math.max(0, before))}. Con esta deuda queda en `
-              : "Es un proveedor nuevo: queda creado con una deuda de "}
-            <b className="text-danger-soft-foreground">{ars(Math.max(0, before) + amount)}</b>. Los
-            pagos se cargan desde su cuenta, total o en partes.
-          </p>
-        )}
       </div>
     </Modal>
   );

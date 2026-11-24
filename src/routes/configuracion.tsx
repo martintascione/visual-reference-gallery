@@ -324,6 +324,16 @@ function Configuracion() {
                 prefix="$"
               />
             </Field>
+            <Field
+              label="Colocación: % para la empresa"
+              hint="El resto es del colocador; editable en cada venta"
+            >
+              <NumberInput
+                value={s.installFeePct ?? 20}
+                onChange={(v) => updateSettings({ installFeePct: Math.min(100, Math.max(0, v)) })}
+                suffix="%"
+              />
+            </Field>
             <Field label="Descarga bolsón grande" hint="Por pedido; editable en cada venta">
               <NumberInput
                 value={s.unloadChargeBigBag ?? 70000}

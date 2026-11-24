@@ -15,6 +15,8 @@ import {
   Tags,
   Users,
   FileCheck2,
+  Scale,
+  Warehouse,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui-bits";
 
@@ -46,6 +48,18 @@ const items = [
     label: "Clientes y cuentas corrientes",
     d: "Cuotas, cobros y deudores",
     icon: Users,
+  },
+  {
+    to: "/cuentas",
+    label: "Cuentas y saldos",
+    d: "Lo que nos deben y lo que debemos, con vencimientos",
+    icon: Scale,
+  },
+  {
+    to: "/acopios",
+    label: "Acopios",
+    d: "Pagos a cuenta y retiros de mercadería",
+    icon: Warehouse,
   },
   { to: "/caja", label: "Caja y bancos", d: "Saldos, cheques y liquidaciones", icon: Landmark },
   {

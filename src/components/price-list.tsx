@@ -36,7 +36,10 @@ export function PriceList({ open, onClose }: { open: boolean; onClose: () => voi
       { title: "Piedras decorativas", items: st("decorativa") },
       { title: "Gravas", items: st("grava") },
       { title: "Construcción", items: st("construccion") },
-      { title: "Lajas", items: act.filter((p) => p.category === "laja") },
+      {
+        title: "Revestimientos",
+        items: act.filter((p) => p.category === "laja" || st("revestimiento").includes(p)),
+      },
       { title: "Líquidos", items: act.filter((p) => p.category === "liquido") },
       { title: "Otros", items: act.filter((p) => p.category === "unitario") },
     ].filter((x) => x.items.length > 0);

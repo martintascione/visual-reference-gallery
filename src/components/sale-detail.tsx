@@ -81,6 +81,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
               {i.discountPct > 0 && (
                 <span className="text-muted-foreground"> · −{num(i.discountPct, 1)} %</span>
               )}
+              {i.note && <span className="block text-xs text-muted-foreground">{i.note}</span>}
             </span>
             <span className="tabular-nums">{ars(i.subtotal)}</span>
           </p>
@@ -97,6 +98,22 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
           <p className="flex justify-between gap-3">
             <span>Descarga</span>
             <span className="tabular-nums">{ars(sale.delivery.unloadPrice)}</span>
+          </p>
+        )}
+        {!!sale.install && (
+          <p className="flex justify-between gap-3">
+            <span>
+              Servicio de colocación
+              <span className="block text-xs text-muted-foreground">
+                Empresa {ars(Math.round((sale.install.amount * sale.install.feePct) / 100))} ·{" "}
+                {sale.install.installer || "Colocador"}{" "}
+                {ars(
+                  sale.install.amount -
+                    Math.round((sale.install.amount * sale.install.feePct) / 100),
+                )}
+              </span>
+            </span>
+            <span className="tabular-nums">{ars(sale.install.amount)}</span>
           </p>
         )}
         {!sale.delivery && !!sale.pickupFee && (

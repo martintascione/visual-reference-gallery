@@ -56,7 +56,7 @@ const fullSteps: Step[] = [
     route: "/catalogo",
     target: "catalogo-nuevo",
     title: "Catálogo y calculadora de precios",
-    body: "Acá viven los productos. Al crear o editar uno cargás lo que pagás por tonelada (proveedor, flete, descarga, embalaje, mano de obra, extras) y el margen; la calculadora te devuelve el precio por kilo, por bolsón de 25 kg y por tonelada. Las lajas van por m², el fijador por litros y los unitarios por unidad.",
+    body: "Acá viven los productos. Al crear o editar uno cargás lo que pagás por tonelada (proveedor, flete, descarga, embalaje, mano de obra, extras) y el margen; la calculadora te devuelve el precio por kilo, por bolsón de 25 kg y por tonelada. Los revestimientos van por m², el fijador por litros y los unitarios por unidad.",
     tip: "Con 'Actualizar precios' ajustás toda una categoría por porcentaje en un paso.",
   },
   {
@@ -166,14 +166,18 @@ const fullSteps: Step[] = [
 const NEWS_KEY = "ap-novedades-vistas";
 const NEWS_VERSION = "2026-11-24";
 const newsList = [
+  "Acopios: pagos a cuenta y retiros de mercadería con el saldo calculado solo",
+  "Bonificación por ítem y por el total en presupuestos y ventas",
+  "Elegí en qué se vende cada piedra (viaje, tonelada, bolsa, kg)",
+  "Cuentas y saldos: lo que nos deben y lo que debemos, con cronograma de pagos",
+  "Servicio de colocación en ventas y presupuestos, con el % para la empresa",
+  "Nota en cada ítem del presupuesto",
+  "Flete por su cuenta cuando el cliente retira",
+  "Calculadora por largo × ancho y espesor, con fijador",
+  "El PDF del presupuesto se guarda con el nombre del cliente",
   "Eliminar productos del catálogo",
   "El cliente nuevo se guarda solo al hacer una venta o presupuesto",
-  "Cargar deudas con proveedores sin cargar mercadería",
-  "Pagos en partes y con varios cheques a canteras, transportes y descarga",
-  "Aviso para pagar el saldo a cada proveedor",
-  "Editar y eliminar descargas ya asentadas",
-  "Historial de cheques: quién lo dio, de quién es y a quién se entregó",
-  "Fechas siempre en día/mes/año",
+  "Pagos en partes y con varios cheques a proveedores",
 ];
 
 // Tutorial de la sección Descargas: se abre solo la primera vez que se entra y con el botón "Cómo funciona".
@@ -245,6 +249,30 @@ const descargasSteps: Step[] = [
 ];
 
 const newsSteps: Step[] = [
+  {
+    route: "/acopios",
+    target: "page",
+    title: "Acopios",
+    body: 'Cuando un cliente paga a cuenta para ir retirando, tocás "Nuevo acopio": cliente (de la lista o nuevo), cuánto pagó y cómo. Después, en cada retiro elegís el producto, la cantidad, la fecha y el lugar: el importe y lo que le queda se calculan solos y se descuenta el stock.',
+  },
+  {
+    route: "/cuentas",
+    target: "page",
+    title: "Cuentas y saldos",
+    body: 'Sección nueva con lo que nos deben los clientes y lo que les debemos a los proveedores, con cada vencimiento. Con "Saldo de cliente" o "Deuda con proveedor" cargás una deuda en segundos: elegís el nombre de la lista o escribís uno nuevo (se crea solo), el importe y el cronograma de pagos (un pago o en cuotas, con importe y fecha de cada una).',
+  },
+  {
+    route: "/nueva-venta",
+    target: "page",
+    title: "Colocación, notas y flete por su cuenta",
+    body: 'En una venta o presupuesto podés sumar el servicio de colocación: se le cobra al cliente y ves cuánto queda para la empresa (20 a 30 %) y cuánto para el colocador. Cada ítem puede llevar una nota que sale en el presupuesto. Si el cliente retira o pone su transporte, prendés "Cobrar flete por su cuenta" ($ 30.000, editable).',
+  },
+  {
+    route: "/catalogo",
+    target: "page",
+    title: "Calculadora por medidas",
+    body: 'En "Calcular cantidad" cargás largo × ancho (una o varias superficies) y el espesor: calcula los m², los kilos (1.500 kg por m³), cuántas bolsas, bolsones o viajes son con su precio, y el fijador a 1 litro por m² con los bidones que convienen.',
+  },
   {
     route: "/catalogo",
     target: "catalogo-nuevo",

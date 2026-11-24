@@ -219,7 +219,7 @@ export function Field({
 }: {
   label: string;
   children: ReactNode;
-  hint?: string | undefined;
+  hint?: ReactNode;
   help?: string | undefined;
   className?: string | undefined;
 }) {

@@ -10,7 +10,15 @@ export type Alert = {
   text: string;
   detail?: string | undefined;
   urgent: boolean;
-  to: "/stock" | "/clientes" | "/caja" | "/presupuestos" | "/gastos" | "/ventas" | "/descargas";
+  to:
+    | "/stock"
+    | "/clientes"
+    | "/caja"
+    | "/presupuestos"
+    | "/gastos"
+    | "/ventas"
+    | "/descargas"
+    | "/cuentas";
   date?: string | undefined;
 };
 
@@ -130,10 +138,10 @@ export function buildAlerts(db: DB): Alert[] {
       out.push({
         id: "pv" + a.kind + a.party,
         kind: "proveedor",
-        text: `Pagar a ${a.party}: saldo ${ars(a.saldo)}`,
-        detail: `${a.kind === "cantera" ? "Cantera" : "Transporte"} · ${d < 0 ? `había que pagar el ${fmtDate(a.remind)}` : d === 0 ? "hay que pagar hoy" : `hay que pagar en ${d} d`}`,
+        text: `Pagar a ${a.party}: ${ars(a.remindAmount ?? a.saldo)}`,
+        detail: `${a.kind === "cantera" ? "Cantera" : "Transporte"} · saldo total ${ars(a.saldo)} · ${d < 0 ? `había que pagar el ${fmtDate(a.remind)}` : d === 0 ? "hay que pagar hoy" : `hay que pagar en ${d} d`}`,
         urgent: d <= 0,
-        to: "/descargas",
+        to: "/cuentas",
         date: a.remind,
       });
   }
@@ -201,14 +209,16 @@ export function buildAgenda(db: DB, days = 30): AgendaItem[] {
         to: "/caja",
       });
   for (const a of supplierAccounts(db))
-    if (a.remind && a.saldo > 0 && a.remind <= end)
-      items.push({
-        date: a.remind,
-        kind: "proveedor",
-        text: `Pagar saldo a ${a.party} (${a.kind})`,
-        amount: a.saldo,
-        to: "/descargas",
-      });
+    if (a.saldo > 0)
+      for (const x of a.pending)
+        if (x.due <= end)
+          items.push({
+            date: x.due,
+            kind: "proveedor",
+            text: `Pagar a ${a.party} (${a.kind})`,
+            amount: x.amount,
+            to: "/cuentas",
+          });
   const [y, mo] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
   for (const f of db.settings.fixedExpenses)
     for (const k of [0, 1]) {

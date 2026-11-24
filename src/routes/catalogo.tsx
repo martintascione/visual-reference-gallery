@@ -15,7 +15,9 @@ import {
   simplePrice,
   stoneCalc,
   stoneGroup,
-  stoneKgForArea,
+  bigBagKg,
+  saleUnitsFor,
+  tripKgOf,
 } from "@/lib/pricing";
 import {
   Badge,
@@ -147,9 +149,11 @@ function Catalogo() {
                         ? "Construcción"
                         : stoneGroup(p) === "grava"
                           ? "Grava"
-                          : "Piedra decorativa"
+                          : stoneGroup(p) === "revestimiento"
+                            ? "Revestimiento · por tonelada"
+                            : "Piedra decorativa"
                       : p.category === "laja"
-                        ? "Laja"
+                        ? "Revestimiento"
                         : p.category === "liquido"
                           ? "Líquido"
                           : "Unitario"}
@@ -290,7 +294,7 @@ function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
             <Select value={cat} onChange={(e) => setCat(e.target.value as CatFilter)}>
               <option value="todos">Todas</option>
               <option value="piedra">Piedras</option>
-              <option value="laja">Lajas</option>
+              <option value="laja">Revestimientos</option>
               <option value="liquido">Líquidos</option>
               <option value="unitario">Unitarios</option>
             </Select>
@@ -316,73 +320,237 @@ function BulkUpdate({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-/** Calculadora de mostrador: cuánta piedra y fijador necesita el cliente. */
+/** Calculadora de mostrador: con las medidas del lugar, cuánta piedra y fijador necesita el cliente. */
 function QtyCalculator({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { db } = useStore();
-  const stones = db.products.filter((p) => p.active && p.category === "piedra");
+  const { db, updateSettings } = useStore();
+  const s = db.settings;
+  const stones = db.products
+    .filter((p) => p.active && p.category === "piedra")
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const liquids = db.products
+    .filter((p) => p.active && p.category === "liquido" && (p.liters ?? 0) > 0)
+    .sort((a, b) => (b.liters ?? 0) - (a.liters ?? 0));
   const [pid, setPid] = useState(stones[0]?.id ?? "");
-  const [m2, setM2] = useState(10);
+  const blankArea = () => ({ id: Math.random().toString(36).slice(2), l: 0, a: 0 });
+  const [areas, setAreas] = useState([{ ...blankArea(), l: 2, a: 2 }]);
   const [cm, setCm] = useState(5);
+  const density = s.stoneDensity ?? 1500;
+  const lpm2 = s.fixerLitersPerM2 ?? 1;
   const p = stones.find((x) => x.id === pid) ?? stones[0];
-  const kg = stoneKgForArea(m2, cm);
-  const bags = p ? Math.ceil(kg / (p.bagKg ?? 25)) : 0;
-  const liters = round(m2 * 0.5, 1); // referencia: ~0,5 L de fijador por m²
-  const fix10 = db.products.find((x) => x.active && x.category === "liquido" && x.liters === 10);
-  const fix5 = db.products.find((x) => x.active && x.category === "liquido" && x.liters === 5);
+
+  const m2 = round(
+    areas.reduce((t, x) => t + x.l * x.a, 0),
+    2,
+  );
+  const m3 = round((m2 * cm) / 100, 3);
+  const kg = round(m3 * density, 0);
+  const tons = kg / 1000;
+
+  // Formas de venderlo, con la cantidad que alcanza y el precio.
+  const options: { label: string; qty: string; price: number }[] = [];
+  if (p && kg > 0) {
+    const units = saleUnitsFor(p);
+    const bag = p.bagKg ?? 25;
+    const n = Math.ceil(kg / bag);
+    options.push({
+      label: `Bolsas de ${num(bag)} kg`,
+      qty: `${n} bolsas`,
+      price: n * listPrice(p, "bolson"),
+    });
+    if (units.includes("bigbag")) {
+      const n2 = Math.ceil(kg / bigBagKg(p));
+      options.push({
+        label: `Bolsón de ${num(bigBagKg(p))} kg`,
+        qty: `${n2} ${n2 === 1 ? "bolsón" : "bolsones"}`,
+        price: n2 * listPrice(p, "bigbag"),
+      });
+    }
+    if (units.includes("bigbag2")) {
+      const k2 = p.stoneCost?.bigBag2Kg ?? 1200;
+      const n3 = Math.ceil(kg / k2);
+      options.push({
+        label: `Bolsón de ${num(k2)} kg`,
+        qty: `${n3} ${n3 === 1 ? "bolsón" : "bolsones"}`,
+        price: n3 * listPrice(p, "bigbag2"),
+      });
+    }
+    options.push({
+      label: "Por tonelada",
+      qty: `${num(round(tons, 2), 2)} t`,
+      price: round(tons * listPrice(p, "t"), 0),
+    });
+    if (units.includes("viaje")) {
+      const v = Math.ceil(kg / tripKgOf(p));
+      options.push({
+        label: `Por viaje (${num(tripKgOf(p))} kg)`,
+        qty: `${v} ${v === 1 ? "viaje" : "viajes"}`,
+        price: v * listPrice(p, "viaje"),
+      });
+    }
+    if ((p.stoneCost?.kgFixedPrice ?? 0) > 0)
+      options.push({
+        label: "Por kg (precio fijo)",
+        qty: `${num(kg)} kg`,
+        price: kg * listPrice(p, "kg"),
+      });
+  }
+
+  // Fijador: litros por m² y la combinación de bidones que alcanza.
+  const liters = round(m2 * lpm2, 1);
+  // La combinación de bidones más barata que cubre los litros (ej. 4 L: un bidón de 5 L si sale menos que cuatro de 1 L).
+  const combo: { p: Product; n: number }[] = [];
+  if (liters > 0 && liquids.length) {
+    const T = Math.ceil(liters);
+    const sizes = liquids.map((l) => Math.max(1, Math.round(l.liters ?? 1)));
+    const max = T + Math.max(...sizes);
+    const cost: number[] = Array.from({ length: max + 1 }, () => Infinity);
+    const pick: number[] = Array.from({ length: max + 1 }, () => -1);
+    cost[0] = 0;
+    for (let x = 1; x <= max; x++)
+      sizes.forEach((sz, k) => {
+        if (sz <= x && cost[x - sz]! + liquids[k]!.price < cost[x]!) {
+          cost[x] = cost[x - sz]! + liquids[k]!.price;
+          pick[x] = k;
+        }
+      });
+    let best = T;
+    for (let x = T; x <= max; x++) if (cost[x]! < cost[best]!) best = x;
+    for (let x = best; x > 0 && pick[x]! >= 0; x -= sizes[pick[x]!]!) {
+      const l = liquids[pick[x]!]!;
+      const ex = combo.find((c) => c.p.id === l.id);
+      if (ex) ex.n += 1;
+      else combo.push({ p: l, n: 1 });
+    }
+    combo.sort((a, b) => (b.p.liters ?? 0) - (a.p.liters ?? 0));
+  }
+  const comboPrice = combo.reduce((t, c) => t + c.n * c.p.price, 0);
+  const comboLiters = combo.reduce((t, c) => t + c.n * (c.p.liters ?? 0), 0);
+
+  const upd = (id: string, patch: Partial<{ l: number; a: number }>) =>
+    setAreas((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   return (
-    <Modal open={open} onClose={onClose} title="Calcular cantidad para el cliente">
+    <Modal open={open} onClose={onClose} title="Calcular cantidad para el cliente" wide>
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Piedra" className="col-span-3">
-            <Select value={pid} onChange={(e) => setPid(e.target.value)}>
-              {stones.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Superficie (m²)">
-            <NumberInput value={m2} onChange={setM2} suffix="m²" />
-          </Field>
-          <Field label="Espesor (cm)">
-            <NumberInput value={cm} onChange={setCm} suffix="cm" />
-          </Field>
+        <Field label="Producto">
+          <Select value={pid} onChange={(e) => setPid(e.target.value)}>
+            {stones.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <div className="on-surface rounded-3xl bg-surface p-4">
+          <p className="mb-3 text-xs font-semibold">Medidas del lugar (en metros)</p>
+          <div className="flex flex-col gap-2">
+            {areas.map((x, k) => (
+              <div key={x.id} className="flex flex-wrap items-end gap-2">
+                <Field label={k === 0 ? "Largo" : ""} className="w-28">
+                  <NumberInput value={x.l} onChange={(v) => upd(x.id, { l: v })} suffix="m" />
+                </Field>
+                <span className="pb-2.5 text-muted-foreground">×</span>
+                <Field label={k === 0 ? "Ancho" : ""} className="w-28">
+                  <NumberInput value={x.a} onChange={(v) => upd(x.id, { a: v })} suffix="m" />
+                </Field>
+                <span className="pb-2.5 text-sm tabular-nums">
+                  = <b>{num(round(x.l * x.a, 2), 2)} m²</b>
+                </span>
+                {areas.length > 1 && (
+                  <button
+                    type="button"
+                    className={`${btn.icon} mb-1`}
+                    aria-label="Quitar"
+                    onClick={() => setAreas((xs) => xs.filter((y) => y.id !== x.id))}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`${btn.ghost} mt-2`}
+            onClick={() => setAreas((xs) => [...xs, blankArea()])}
+          >
+            <Plus className="h-3.5 w-3.5" /> Otra superficie
+          </button>
+          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-3">
+            <Field label="Espesor">
+              <NumberInput value={cm} onChange={setCm} suffix="cm" />
+            </Field>
+            <Field
+              label="Peso por m³"
+              help="Cuántos kilos pesa un metro cúbico de piedra. Por defecto 1.500 kg. Se guarda para la próxima vez."
+            >
+              <NumberInput
+                value={density}
+                onChange={(v) => updateSettings({ stoneDensity: v || 1500 })}
+                suffix="kg"
+              />
+            </Field>
+            <Field
+              label="Fijador por m²"
+              help="Litros de fijador que lleva cada metro cuadrado. Por defecto 1 litro. Se guarda para la próxima vez."
+            >
+              <NumberInput
+                value={lpm2}
+                onChange={(v) => updateSettings({ fixerLitersPerM2: v || 1 })}
+                suffix="L"
+              />
+            </Field>
+          </div>
         </div>
-        {p && (
+
+        {p && kg > 0 && (
           <div className="rounded-3xl bg-primary p-4 text-sm text-primary-foreground">
-            <p className="flex justify-between">
+            <p className="text-[11px] opacity-70">
+              {num(m2, 2)} m² × {num(cm / 100, 2)} m de espesor = {num(m3, 3)} m³ × {num(density)}{" "}
+              kg
+            </p>
+            <p className="mt-1 flex items-baseline justify-between">
               <span className="opacity-70">Piedra necesaria</span>
-              <span className="font-semibold">
-                {num(kg)} kg · {round(kg / 1000, 2)} t
+              <span className="text-lg font-bold">
+                {num(kg)} kg · {num(round(tons, 2), 2)} t
               </span>
             </p>
-            <p className="mt-1 flex justify-between">
-              <span className="opacity-70">En bolsones de {p.bagKg ?? 25} kg</span>
-              <span className="font-semibold">
-                {bags} bolsas · {ars(bags * listPrice(p, "bolson"))}
-              </span>
-            </p>
-            <p className="mt-1 flex justify-between">
-              <span className="opacity-70">A granel</span>
-              <span className="font-semibold">{ars(kg * p.price)}</span>
-            </p>
-            <p className="mt-3 flex justify-between border-t border-primary-foreground/20 pt-3">
-              <span className="opacity-70">Fijador aprox.</span>
-              <span className="font-semibold">
-                {liters} L{fix10 && ` · ${Math.ceil(liters / 10)} × 10 L`}
-                {fix5 &&
-                  liters % 10 > 0 &&
-                  liters % 10 <= 5 &&
-                  ` o ${Math.floor(liters / 10)} × 10 L + 1 × 5 L`}
-              </span>
-            </p>
+            <div className="mt-3 flex flex-col gap-1 border-t border-primary-foreground/20 pt-3">
+              {options.map((o) => (
+                <p key={o.label} className="flex justify-between gap-3">
+                  <span className="opacity-70">{o.label}</span>
+                  <span className="font-semibold tabular-nums">
+                    {o.qty} · {ars(o.price)}
+                  </span>
+                </p>
+              ))}
+            </div>
+            {liters > 0 && (
+              <div className="mt-3 border-t border-primary-foreground/20 pt-3">
+                <p className="flex justify-between gap-3">
+                  <span className="opacity-70">Fijador ({num(lpm2, 1)} L por m²)</span>
+                  <span className="font-semibold">{num(liters, 1)} L</span>
+                </p>
+                {combo.length > 0 ? (
+                  <p className="mt-1 flex justify-between gap-3">
+                    <span className="opacity-70">
+                      {combo.map((c) => `${c.n} × ${num(c.p.liters ?? 0)} L`).join(" + ")}
+                      {comboLiters > liters ? ` (${num(comboLiters)} L)` : ""}
+                    </span>
+                    <span className="font-semibold tabular-nums">{ars(comboPrice)}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] opacity-70">
+                    No hay fijador cargado en el catálogo.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
         <p className="text-[11px] text-muted-foreground">
-          Referencias: densidad 1,6 t/m³ y 0,5 L de fijador por m². Conviene confirmar con el
-          proveedor del fijador y ajustar en Configuración si hace falta.
+          Precios de lista sin IVA. El peso por m³ y los litros por m² se cambian acá mismo.
         </p>
         <div className="flex justify-end">
           <button className={btn.primary} onClick={onClose}>

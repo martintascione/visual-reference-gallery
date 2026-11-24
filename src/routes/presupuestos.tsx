@@ -78,7 +78,11 @@ function Presupuestos() {
     return encodeURIComponent(
       [
         `Hola ${q.clientName}, te paso el presupuesto #${q.number} de ${db.settings.businessName}:`,
-        ...q.items.map((i) => `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal * k)}`),
+        ...q.items.map(
+          (i) =>
+            `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal * k)}${i.note ? ` (${i.note})` : ""}`,
+        ),
+        q.install ? `• Servicio de colocación: ${ars(q.install.amount * k)}` : "",
         q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price * k)}` : "",
         q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice * k)}` : "",
         !q.delivery && q.pickupFee ? `• Flete por su cuenta: ${ars(q.pickupFee * k)}` : "",
@@ -162,6 +166,7 @@ function Presupuestos() {
                   <li key={k} className="flex justify-between">
                     <span>
                       {qtyUnit(i.qty, i.unit)} {i.name}
+                      {i.note && <span className="block text-[11px] opacity-80">{i.note}</span>}
                     </span>
                     <span className="tabular-nums">{ars(i.subtotal)}</span>
                   </li>
@@ -176,6 +181,12 @@ function Presupuestos() {
                   <li className="flex justify-between">
                     <span>Descarga</span>
                     <span className="tabular-nums">{ars(q.delivery.unloadPrice)}</span>
+                  </li>
+                )}
+                {!!q.install && (
+                  <li className="flex justify-between">
+                    <span>Servicio de colocación</span>
+                    <span className="tabular-nums">{ars(q.install.amount)}</span>
                   </li>
                 )}
                 {!q.delivery && !!q.pickupFee && (

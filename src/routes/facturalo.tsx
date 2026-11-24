@@ -202,6 +202,17 @@ function Facturalo() {
         ...ls,
         { id: uid(), desc: "Descarga", qty: 1, unit: "u", price: sale.delivery?.unloadPrice ?? 0 },
       ]);
+    if (sale.install?.amount)
+      setLines((ls) => [
+        ...ls,
+        {
+          id: uid(),
+          desc: "Servicio de colocación",
+          qty: 1,
+          unit: "u",
+          price: sale.install?.amount ?? 0,
+        },
+      ]);
     if (!sale.delivery && sale.pickupFee)
       setLines((ls) => [
         ...ls,

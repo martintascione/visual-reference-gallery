@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AcopiosRouteImport } from './routes/acopios'
 import { Route as CajaRouteImport } from './routes/caja'
 import { Route as CalendarioRouteImport } from './routes/calendario'
 import { Route as CatalogoRouteImport } from './routes/catalogo'
@@ -18,6 +19,7 @@ import { Route as CierreRouteImport } from './routes/cierre'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as CorreoRouteImport } from './routes/correo'
+import { Route as CuentasRouteImport } from './routes/cuentas'
 import { Route as DescargasRouteImport } from './routes/descargas'
 import { Route as FacturaloRouteImport } from './routes/facturalo'
 import { Route as GastosRouteImport } from './routes/gastos'
@@ -32,6 +34,11 @@ import { Route as VentasRouteImport } from './routes/ventas'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AcopiosRoute = AcopiosRouteImport.update({
+  id: '/acopios',
+  path: '/acopios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CajaRoute = CajaRouteImport.update({
@@ -72,6 +79,11 @@ const ConfiguracionRoute = ConfiguracionRouteImport.update({
 const CorreoRoute = CorreoRouteImport.update({
   id: '/correo',
   path: '/correo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CuentasRoute = CuentasRouteImport.update({
+  id: '/cuentas',
+  path: '/cuentas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DescargasRoute = DescargasRouteImport.update({
@@ -127,6 +139,7 @@ const VentasRoute = VentasRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/acopios': typeof AcopiosRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
@@ -135,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/cuentas': typeof CuentasRoute
   '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
@@ -148,6 +162,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/acopios': typeof AcopiosRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
@@ -156,6 +171,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/cuentas': typeof CuentasRoute
   '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
@@ -170,6 +186,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/acopios': typeof AcopiosRoute
   '/caja': typeof CajaRoute
   '/calendario': typeof CalendarioRoute
   '/catalogo': typeof CatalogoRoute
@@ -178,6 +195,7 @@ export interface FileRoutesById {
   '/clientes': typeof ClientesRoute
   '/configuracion': typeof ConfiguracionRoute
   '/correo': typeof CorreoRoute
+  '/cuentas': typeof CuentasRoute
   '/descargas': typeof DescargasRoute
   '/facturalo': typeof FacturaloRoute
   '/gastos': typeof GastosRoute
@@ -193,6 +211,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/acopios'
     | '/caja'
     | '/calendario'
     | '/catalogo'
@@ -201,6 +220,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/cuentas'
     | '/descargas'
     | '/facturalo'
     | '/gastos'
@@ -214,6 +234,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/acopios'
     | '/caja'
     | '/calendario'
     | '/catalogo'
@@ -222,6 +243,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/cuentas'
     | '/descargas'
     | '/facturalo'
     | '/gastos'
@@ -235,6 +257,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/acopios'
     | '/caja'
     | '/calendario'
     | '/catalogo'
@@ -243,6 +266,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/configuracion'
     | '/correo'
+    | '/cuentas'
     | '/descargas'
     | '/facturalo'
     | '/gastos'
@@ -257,6 +281,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AcopiosRoute: typeof AcopiosRoute
   CajaRoute: typeof CajaRoute
   CalendarioRoute: typeof CalendarioRoute
   CatalogoRoute: typeof CatalogoRoute
@@ -265,6 +290,7 @@ export interface RootRouteChildren {
   ClientesRoute: typeof ClientesRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   CorreoRoute: typeof CorreoRoute
+  CuentasRoute: typeof CuentasRoute
   DescargasRoute: typeof DescargasRoute
   FacturaloRoute: typeof FacturaloRoute
   GastosRoute: typeof GastosRoute
@@ -284,6 +310,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/acopios': {
+      id: '/acopios'
+      path: '/acopios'
+      fullPath: '/acopios'
+      preLoaderRoute: typeof AcopiosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/caja': {
@@ -340,6 +373,13 @@ declare module '@tanstack/react-router' {
       path: '/correo'
       fullPath: '/correo'
       preLoaderRoute: typeof CorreoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cuentas': {
+      id: '/cuentas'
+      path: '/cuentas'
+      fullPath: '/cuentas'
+      preLoaderRoute: typeof CuentasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/descargas': {
@@ -417,6 +457,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AcopiosRoute: AcopiosRoute,
   CajaRoute: CajaRoute,
   CalendarioRoute: CalendarioRoute,
   CatalogoRoute: CatalogoRoute,
@@ -425,6 +466,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesRoute: ClientesRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   CorreoRoute: CorreoRoute,
+  CuentasRoute: CuentasRoute,
   DescargasRoute: DescargasRoute,
   FacturaloRoute: FacturaloRoute,
   GastosRoute: GastosRoute,

@@ -4,9 +4,10 @@ export type Bank = "Caja" | "BBVA" | "Provincia";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
 /** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */
-export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "bigbag2" | "viaje" | "m2" | "u";
+/** l = litro suelto, fraccionado de un bidón (precio por regla de 3 + envase). */
+export type SaleUnit = "kg" | "t" | "bolson" | "bigbag" | "bigbag2" | "viaje" | "m2" | "u" | "l";
 /** Grupo dentro de las piedras: decorativas, gravas (bolsón de 1.200 kg) o construcción (por viaje). */
-export type StoneGroup = "decorativa" | "grava" | "construccion";
+export type StoneGroup = "decorativa" | "grava" | "construccion" | "revestimiento";
 
 export type QtyDiscount = { minQty: number; unit: SaleUnit; pct: number };
 
@@ -15,6 +16,11 @@ export type StoneCost = {
   purchasePerTon: number;
   freightPerTon: number;
   unloadPerTon: number;
+  /** Formas en que se vende (si se eligieron a mano). Vacío = las de su grupo. "viaje" solo si se marca. */
+  units?: SaleUnit[] | undefined;
+  /** Para calcular la descarga por tonelada: total pagado al camión o palero y toneladas que bajó. */
+  unloadTotal?: number | undefined;
+  unloadTons?: number | undefined;
   laborPerTon: number;
   extrasPerTon: number;
   packagingPerBag: number;
@@ -57,6 +63,13 @@ export type Product = {
   liters?: number | undefined;
   /** Lajas, líquidos y unitarios: flete por unidad, ya incluido en cost. */
   freight?: number | undefined;
+  /** Líquidos: costo del envase de 1 L cuando se vende suelto (se suma al litro). */
+  bottleCost?: number | undefined;
+  /**
+   * Flete del envío para calcular el flete por unidad solo: lajas (camión + zampi ÷ m²)
+   * y líquidos (despacho ÷ litros, por los litros del bidón). qty = m² o litros del envío.
+   */
+  truck?: { freight: number; zampi: number; qty: number } | undefined;
   stock: number;
   minStock: number;
   ivaPct: number;
@@ -77,6 +90,16 @@ export type SaleItem = {
   cost: number;
   /** Cantidad descontada del stock, en unidad base. */
   baseQty: number;
+  /** Anotación del ítem (sale en el presupuesto y el comprobante). */
+  note?: string | undefined;
+};
+
+/** Servicio de colocación que se le cobra al cliente: un % queda para la empresa y el resto es del colocador. */
+export type InstallService = {
+  amount: number;
+  /** % que queda para la empresa (habitual 20 a 30). */
+  feePct: number;
+  installer?: string | undefined;
 };
 
 export type PaymentMethod =
@@ -126,6 +149,7 @@ export type Sale = {
   discountPct?: number | undefined;
   /** Flete por su cuenta (retira el cliente). */
   pickupFee?: number | undefined;
+  install?: InstallService | undefined;
 };
 
 export type QuoteStatus =
@@ -153,6 +177,7 @@ export type Quote = {
   discountPct?: number | undefined;
   /** Cliente que retira o pone su transporte: flete por su cuenta que se le cobra aparte. */
   pickupFee?: number | undefined;
+  install?: InstallService | undefined;
 };
 
 export type Client = {
@@ -338,6 +363,11 @@ export type Settings = {
   unloadChargeBags?: number | undefined;
   /** Flete por su cuenta que se sugiere cuando el cliente retira o pone su transporte. */
   pickupFee?: number | undefined;
+  /** % de la colocación que queda para la empresa. */
+  installFeePct?: number | undefined;
+  /** Calculadora de cantidad: kilos por m³ de piedra y litros de fijador por m². */
+  stoneDensity?: number | undefined;
+  fixerLitersPerM2?: number | undefined;
   unloadChargeBigBag?: number | undefined;
   /** Mail diario (lunes a viernes a la mañana) con los presupuestos para seguir. */
   followUpEmail?: { on: boolean; to: string } | undefined;
@@ -424,6 +454,46 @@ export type SupplierPayment = {
   chequeId?: string | undefined;
 };
 
+/** Pago a cuenta de un acopio. */
+export type StockpilePayment = {
+  id: string;
+  date: string;
+  amount: number;
+  method: "efectivo" | "transferencia";
+  account: Bank;
+  detail?: string | undefined;
+  movementId?: string | undefined;
+};
+
+/** Retiro de mercadería contra un acopio. */
+export type StockpileWithdrawal = {
+  id: string;
+  date: string;
+  /** Dónde lo retira o se entrega (corralón, obra, dirección). */
+  place: string;
+  productId: string;
+  name: string;
+  qty: number;
+  unit: SaleUnit;
+  unitPrice: number;
+  total: number;
+  /** Cantidad descontada del stock, en unidad base. */
+  baseQty: number;
+  note?: string | undefined;
+};
+
+/** Acopio: el cliente paga a cuenta y va retirando mercadería contra ese saldo. */
+export type Stockpile = {
+  id: string;
+  clientId?: string | undefined;
+  clientName: string;
+  date: string;
+  note?: string | undefined;
+  payments: StockpilePayment[];
+  withdrawals: StockpileWithdrawal[];
+  closed?: boolean | undefined;
+};
+
 export type DB = {
   version: number;
   products: Product[];
@@ -438,6 +508,7 @@ export type DB = {
   closures: Closure[];
   purchases: Purchase[];
   supplierPayments: SupplierPayment[];
+  stockpiles: Stockpile[];
   settings: Settings;
   counters: { sale: number; quote: number };
 };

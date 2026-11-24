@@ -92,28 +92,41 @@ export const catFilters: { value: CatFilter; label: string }[] = [
   { value: "piedra", label: "Decorativas" },
   { value: "grava", label: "Gravas" },
   { value: "construccion", label: "Construcción" },
-  { value: "laja", label: "Laja" },
+  { value: "laja", label: "Revestimiento" },
   { value: "liquido", label: "Líquido" },
   { value: "unitario", label: "Unitario" },
 ];
 export function matchCat(p: Product, f: CatFilter) {
   if (f === "todos") return true;
   if (p.category !== "piedra") return p.category === f;
+  // Piedras que se venden por tonelada pero van con los revestimientos (ex lajas), ej. voladura.
+  if (stoneGroup(p) === "revestimiento") return f === "laja";
   return f === (stoneGroup(p) === "decorativa" ? "piedra" : stoneGroup(p));
 }
 
 /** Unidades en las que se puede vender cada producto. */
+/** Todas las formas en que se puede vender una piedra, en el orden de su grupo (viaje primero). */
+export function stoneUnitOptions(p: Product): SaleUnit[] {
+  // El bolsón de 1.000 kg es lo mismo que la tonelada: solo se ofrece si pesa distinto (ej. 1.200 kg).
+  const units: SaleUnit[] =
+    stoneGroup(p) === "construccion" || stoneGroup(p) === "revestimiento"
+      ? ["t", "bolson", "kg"]
+      : ["kg", "bolson"];
+  if (bigBagKg(p) !== 1000) units.push("bigbag");
+  if ((p.stoneCost?.bigBag2Kg ?? 0) > 0) units.push("bigbag2");
+  if (!units.includes("t")) units.push("t");
+  return ["viaje", ...units];
+}
+
 export function saleUnitsFor(p: Product): SaleUnit[] {
   if (p.category === "piedra") {
-    // El bolsón de 1.000 kg es lo mismo que la tonelada: solo se ofrece si pesa distinto (ej. 1.200 kg).
-    const units: SaleUnit[] =
-      stoneGroup(p) === "construccion" ? ["viaje", "t", "bolson", "kg"] : ["kg", "bolson"];
-    if (bigBagKg(p) !== 1000) units.push("bigbag");
-    if ((p.stoneCost?.bigBag2Kg ?? 0) > 0) units.push("bigbag2");
-    if (!units.includes("t")) units.push("t");
-    return units;
+    const all = stoneUnitOptions(p);
+    const chosen = p.stoneCost?.units?.filter((u) => all.includes(u)) ?? [];
+    // Sin elegir: todas menos el viaje (el viaje de chasis se marca solo en los que corresponde, ej. tierra).
+    return chosen.length ? all.filter((u) => chosen.includes(u)) : all.filter((u) => u !== "viaje");
   }
   if (p.category === "laja") return ["m2"];
+  if (p.category === "liquido" && (p.liters ?? 0) > 1) return ["u", "l"];
   return ["u"];
 }
 
@@ -126,6 +139,7 @@ export const unitLabel: Record<SaleUnit, string> = {
   viaje: "viaje",
   m2: "m²",
   u: "unidad",
+  l: "litro",
 };
 
 const unitPlural: Record<SaleUnit, string> = {
@@ -137,6 +151,7 @@ const unitPlural: Record<SaleUnit, string> = {
   viaje: "viajes",
   m2: "m²",
   u: "unidades",
+  l: "litros",
 };
 
 /** "12 bolsones", "1 tonelada", "2,5 t" según cantidad. */
@@ -146,7 +161,13 @@ export function qtyUnit(qty: number, unit: SaleUnit) {
 }
 
 /** Cantidad en unidad base (kg, m2, l, u) para descontar stock. */
+/** Litro suelto: precio del bidón ÷ sus litros (regla de 3) + envase, redondeado al peso. */
+export const literPrice = (p: Product) =>
+  round(p.price / Math.max(1, p.liters ?? 1) + (p.bottleCost ?? 0), 0);
+
 export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
+  // El stock de líquidos es en bidones: un litro suelto descuenta la parte de un bidón.
+  if (unit === "l") return qty / Math.max(1, p.liters ?? 1);
   if (unit === "t") return qty * 1000;
   if (unit === "bolson") return qty * (p.bagKg ?? 25);
   if (unit === "viaje") return qty * tripKgOf(p);
@@ -157,6 +178,7 @@ export function toBaseQty(p: Product, qty: number, unit: SaleUnit) {
 
 /** Precio unitario de lista según la unidad elegida. */
 export function listPrice(p: Product, unit: SaleUnit) {
+  if (unit === "l") return literPrice(p);
   if (unit === "kg" && (p.stoneCost?.kgFixedPrice ?? 0) > 0) return p.stoneCost?.kgFixedPrice ?? 0;
   if (unit === "t") return round(p.price * 1000, 0);
   if (unit === "bolson")
@@ -178,6 +200,7 @@ export function listPrice(p: Product, unit: SaleUnit) {
 
 /** Costo unitario según la unidad elegida. */
 export function unitCost(p: Product, unit: SaleUnit) {
+  if (unit === "l") return p.cost / Math.max(1, p.liters ?? 1) + (p.bottleCost ?? 0);
   if (unit === "t") return p.cost * 1000;
   if (unit === "bolson") return p.cost * (p.bagKg ?? 25) + (p.stoneCost?.packagingPerBag ?? 0);
   if (unit === "viaje") return p.cost * tripKgOf(p);
@@ -217,6 +240,8 @@ export function stoneKgForArea(m2: number, thicknessCm: number, density = 1600) 
 export function unitLabelFor(p: Product, unit: SaleUnit) {
   const kg = (n: number) => `${n.toLocaleString("es-AR")} kg`;
   if (unit === "viaje") return `viaje ${kg(tripKgOf(p))}`;
+  if (unit === "l") return "litro suelto";
+  if (unit === "u" && p.category === "liquido" && p.liters) return `bidón ${p.liters} L`;
   if (unit === "bolson") return `bolsa ${kg(p.bagKg ?? 25)}`;
   if (unit === "bigbag") return `bolsón ${kg(bigBagKg(p))}`;
   if (unit === "bigbag2") return `bolsón ${kg(p.stoneCost?.bigBag2Kg ?? 1200)}`;
@@ -233,25 +258,33 @@ export function productPrices(p: Product): { label: string; value: number; fixed
         : p.category === "liquido"
           ? `Bidón ${p.liters ?? ""} L`
           : "Unidad";
+    if (p.category === "liquido" && (p.liters ?? 0) > 1)
+      return [
+        { label, value: p.price },
+        { label: "Litro suelto", value: literPrice(p) },
+      ];
     return [{ label, value: p.price }];
   }
-  const out: { label: string; value: number; fixed?: boolean }[] = [];
+  const out: { label: string; value: number; fixed?: boolean; unit: SaleUnit }[] = [];
   if ((p.stoneCost?.kgFixedPrice ?? 0) > 0)
-    out.push({ label: "Por kg", value: listPrice(p, "kg"), fixed: true });
+    out.push({ label: "Por kg", value: listPrice(p, "kg"), fixed: true, unit: "kg" });
   out.push({
     label: `Bolsa ${kg(p.bagKg ?? 25)}`,
     value: listPrice(p, "bolson"),
     fixed: (p.stoneCost?.bagFixedPrice ?? 0) > 0,
+    unit: "bolson",
   });
   if (bigBagKg(p) !== 1000)
-    out.push({ label: `Bolsón ${kg(bigBagKg(p))}`, value: listPrice(p, "bigbag") });
+    out.push({ label: `Bolsón ${kg(bigBagKg(p))}`, value: listPrice(p, "bigbag"), unit: "bigbag" });
   if ((p.stoneCost?.bigBag2Kg ?? 0) > 0)
     out.push({
       label: `Bolsón ${kg(p.stoneCost?.bigBag2Kg ?? 0)}`,
       value: listPrice(p, "bigbag2"),
+      unit: "bigbag2",
     });
-  out.push({ label: "Tonelada", value: listPrice(p, "t") });
-  if (stoneGroup(p) === "construccion")
-    out.push({ label: `Viaje ${kg(tripKgOf(p))}`, value: listPrice(p, "viaje") });
-  return out;
+  out.push({ label: "Tonelada", value: listPrice(p, "t"), unit: "t" });
+  out.push({ label: `Viaje ${kg(tripKgOf(p))}`, value: listPrice(p, "viaje"), unit: "viaje" });
+  // Solo las formas en que se vende ese producto.
+  const ok = saleUnitsFor(p);
+  return out.filter((x) => ok.includes(x.unit)).map(({ unit: _u, ...x }) => x);
 }

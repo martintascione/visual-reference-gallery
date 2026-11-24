@@ -10,8 +10,11 @@ import {
   simplePrice,
   stoneCalc,
   unitLabel,
+  literPrice,
+  stoneUnitOptions,
+  unitLabelFor,
 } from "@/lib/pricing";
-import { ars, ars2, pctAr, uid } from "@/lib/format";
+import { ars, ars2, num, pctAr, uid } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import {
   Badge,
@@ -29,7 +32,7 @@ import {
 
 const categories: { value: Category; label: string }[] = [
   { value: "piedra", label: "Piedra / árido" },
-  { value: "laja", label: "Laja (m²)" },
+  { value: "laja", label: "Revestimiento (m²)" },
   { value: "liquido", label: "Líquido (bidón)" },
   { value: "unitario", label: "Unitario" },
 ];
@@ -94,6 +97,7 @@ export function ProductEditor({
 }) {
   const { db, upsertProduct, removeProduct } = useStore();
   const [confirmDel, setConfirmDel] = useState(false);
+  const [unloadCalc, setUnloadCalc] = useState(false);
   const s = db.settings;
   const [p, setP] = useState<Product>(() => product ?? blankProduct("piedra", s));
   const [margin, setMargin] = useState(s.defaultMarginPct ?? 40);
@@ -102,6 +106,7 @@ export function ProductEditor({
   useEffect(() => {
     if (!open) return;
     setConfirmDel(false);
+    setUnloadCalc(!!(product ?? prefill)?.stoneCost?.unloadTons);
     const next = product ?? prefill ?? blankProduct("piedra", s);
     setP(structuredClone(next));
     setMargin(
@@ -246,7 +251,14 @@ export function ProductEditor({
                       // Gravas: bolsón de 1.200 kg. Construcción: se vende por viaje de 7.000 kg.
                       bigBagKg: g === "grava" ? 1200 : 1000,
                       bigBag2Kg: undefined,
-                      ...(product ? {} : { bagFixedPrice: s.bagFixedDefaults?.[g] || undefined }),
+                      ...(product
+                        ? {}
+                        : {
+                            bagFixedPrice:
+                              g === "revestimiento"
+                                ? undefined
+                                : s.bagFixedDefaults?.[g] || undefined,
+                          }),
                       tripKg: g === "construccion" ? (p.stoneCost?.tripKg ?? 7000) : undefined,
                     })
                   }
@@ -254,8 +266,42 @@ export function ProductEditor({
                     { value: "decorativa", label: "Decorativa" },
                     { value: "grava", label: "Grava" },
                     { value: "construccion", label: "Construcción" },
+                    { value: "revestimiento", label: "Revestimiento" },
                   ]}
                 />
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-[11px] font-medium text-muted-foreground">
+                    Se vende por
+                  </span>
+                  {stoneUnitOptions(p).map((u) => {
+                    const on = saleUnitsFor(p).includes(u);
+                    return (
+                      <button
+                        key={u}
+                        type="button"
+                        className={on ? btn.soft : btn.ghost}
+                        onClick={() => {
+                          const cur = saleUnitsFor(p);
+                          const next = on ? cur.filter((x) => x !== u) : [...cur, u];
+                          if (next.length === 0) return;
+                          setSC({
+                            units: next,
+                            ...(u === "viaje" && !on
+                              ? { tripKg: p.stoneCost?.tripKg ?? 7000 }
+                              : {}),
+                          });
+                        }}
+                      >
+                        {on ? "✓ " : ""}
+                        {u === "viaje"
+                          ? `Viaje ${num(p.stoneCost?.tripKg ?? 7000)} kg`
+                          : u === "t"
+                            ? "Tonelada"
+                            : unitLabelFor(p, u)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-4">
                 {/* Gravas: el precio se carga por bolsón de 1.200 kg o por tonelada; el otro se completa solo. */}
@@ -307,14 +353,63 @@ export function ProductEditor({
                     suffix="/ t"
                   />
                 </Field>
-                <Field label="Descarga">
+                <Field
+                  label="Descarga"
+                  hint={
+                    unloadCalc ? undefined : (
+                      <button
+                        type="button"
+                        className="font-medium underline"
+                        onClick={() => setUnloadCalc(true)}
+                      >
+                        Calcular con el total pagado
+                      </button>
+                    )
+                  }
+                >
                   <NumberInput
                     value={p.stoneCost.unloadPerTon ?? 0}
-                    onChange={(v) => setSC({ unloadPerTon: v })}
+                    onChange={(v) =>
+                      setSC({ unloadPerTon: v, unloadTotal: undefined, unloadTons: undefined })
+                    }
                     prefix="$"
                     suffix="/ t"
                   />
                 </Field>
+                {unloadCalc && (
+                  <div className="col-span-full flex flex-wrap items-end gap-2 rounded-2xl bg-surface p-3">
+                    <Field label="Total pagado al camión o palero" className="w-48">
+                      <NumberInput
+                        value={p.stoneCost.unloadTotal ?? 0}
+                        onChange={(v) => {
+                          const t = p.stoneCost?.unloadTons ?? 0;
+                          setSC({
+                            unloadTotal: v,
+                            ...(t > 0 ? { unloadPerTon: Math.round(v / t) } : {}),
+                          });
+                        }}
+                        prefix="$"
+                      />
+                    </Field>
+                    <span className="pb-2.5 text-muted-foreground">÷</span>
+                    <Field label="Toneladas que bajó" className="w-36">
+                      <NumberInput
+                        value={p.stoneCost.unloadTons ?? 0}
+                        onChange={(v) => {
+                          const tot = p.stoneCost?.unloadTotal ?? 0;
+                          setSC({
+                            unloadTons: v,
+                            ...(v > 0 ? { unloadPerTon: Math.round(tot / v) } : {}),
+                          });
+                        }}
+                        suffix="t"
+                      />
+                    </Field>
+                    <p className="pb-2.5 text-sm">
+                      = <b>{ars(p.stoneCost.unloadPerTon ?? 0)} por tonelada</b>
+                    </p>
+                  </div>
+                )}
                 <Field label="Base de gastos">
                   <NumberInput
                     value={p.stoneCost.basePerTon ?? 0}
@@ -422,7 +517,7 @@ export function ProductEditor({
                       prefix="$"
                     />
                   </Field>
-                  {p.stoneCost.group === "construccion" && (
+                  {saleUnitsFor(p).includes("viaje") && (
                     <Field label="Kg por viaje" hint="Chasis completo">
                       <NumberInput
                         value={p.stoneCost.tripKg ?? 7000}
@@ -470,7 +565,7 @@ export function ProductEditor({
                     l: `Bolsa de ${(p.bagKg ?? s.bagKg).toLocaleString("es-AR")} kg${calc.bagFixed ? " · precio fijo" : ""}`,
                     c: ars(calc.costBag),
                     v: ars(calc.priceBag),
-                    big: p.stoneCost?.group !== "construccion",
+                    big: !saleUnitsFor(p).includes("viaje"),
                   },
                   ...(calc.bigKg !== 1000
                     ? [
@@ -495,7 +590,7 @@ export function ProductEditor({
                     c: ars(calc.costTon),
                     v: ars(calc.priceTon),
                   },
-                  ...(p.stoneCost?.group === "construccion"
+                  ...(saleUnitsFor(p).includes("viaje")
                     ? [
                         {
                           l: `Por viaje · chasis de ${calc.tripKg.toLocaleString("es-AR")} kg`,
@@ -547,12 +642,24 @@ export function ProductEditor({
                 <Field label="Litros por bidón">
                   <NumberInput
                     value={p.liters ?? 0}
-                    onChange={(v) => set({ liters: v })}
+                    onChange={(v) => {
+                      // Si el flete sale del despacho, se recalcula para el nuevo tamaño de bidón.
+                      const t = p.truck;
+                      if (!t?.qty) return set({ liters: v });
+                      const per = Math.round((t.freight / t.qty) * (v || 1));
+                      const cost = p.cost - (p.freight ?? 0) + per;
+                      set({
+                        liters: v,
+                        freight: per || undefined,
+                        cost,
+                        price: simplePrice(cost, margin),
+                      });
+                    }}
                     suffix="L"
                   />
                 </Field>
               )}
-              <Field label="Costo">
+              <Field label={p.category === "laja" ? "Costo del proveedor" : "Costo"}>
                 <NumberInput
                   value={p.cost - (p.freight ?? 0)}
                   onChange={(v) => {
@@ -562,7 +669,16 @@ export function ProductEditor({
                   prefix="$"
                 />
               </Field>
-              <Field label="Flete por unidad" hint="Se suma al costo">
+              <Field
+                label={
+                  p.category === "laja"
+                    ? "Flete + zampi por m²"
+                    : p.category === "liquido"
+                      ? "Flete por bidón"
+                      : "Flete por unidad"
+                }
+                hint={p.truck?.qty ? "Calculado con el envío" : "Se suma al costo"}
+              >
                 <NumberInput
                   value={p.freight ?? 0}
                   onChange={(v) => {
@@ -594,6 +710,105 @@ export function ProductEditor({
                 />
               </Field>
             </div>
+            {p.category === "liquido" && (p.liters ?? 0) > 1 && (
+              <div className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl bg-surface p-3">
+                <div className="w-full text-xs font-semibold">Litro suelto (fraccionado)</div>
+                <Field
+                  label="Envase de 1 L"
+                  className="w-40"
+                  help="Lo que cuesta la botella vacía de 1 litro. Se suma al precio y al costo de cada litro suelto. Si no se usa envase, dejalo en 0."
+                >
+                  <NumberInput
+                    value={p.bottleCost ?? 0}
+                    onChange={(v) => set({ bottleCost: v || undefined })}
+                    prefix="$"
+                  />
+                </Field>
+                <p className="pb-2 text-xs">
+                  <span className="text-muted-foreground">
+                    {ars(p.price)} ÷ {num(p.liters ?? 0)} L = {ars2(p.price / (p.liters || 1))} por
+                    litro
+                    {p.bottleCost ? ` + envase ${ars(p.bottleCost)}` : ""}
+                  </span>{" "}
+                  <b>= {ars(literPrice(p))} el litro suelto</b>
+                </p>
+              </div>
+            )}
+            {(p.category === "laja" || p.category === "liquido") && (
+              <div className="mt-4 rounded-2xl bg-surface p-3">
+                <p className="mb-2 text-xs font-semibold">
+                  {p.category === "laja" ? "Flete y zampi del camión" : "Flete del despacho"}
+                </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
+                  {(p.category === "laja"
+                    ? ([
+                        ["freight", "Total que cobra el camión", "$", ""],
+                        ["zampi", "Zampi para bajar (total)", "$", ""],
+                        ["qty", "m² que trae el camión", "", "m²"],
+                      ] as const)
+                    : ([
+                        ["freight", "Total del flete del despacho", "$", ""],
+                        ["qty", "Litros que trae el despacho", "", "L"],
+                      ] as const)
+                  ).map(([k, label, pre, suf]) => (
+                    <Field key={k} label={label}>
+                      <NumberInput
+                        value={p.truck?.[k] ?? 0}
+                        onChange={(v) => {
+                          const truck = { freight: 0, zampi: 0, qty: 0, ...p.truck, [k]: v };
+                          // Lajas: por m². Líquidos: por litro × litros del bidón.
+                          const perUnit =
+                            truck.qty > 0
+                              ? ((truck.freight + (p.category === "laja" ? truck.zampi : 0)) /
+                                  truck.qty) *
+                                (p.category === "liquido" ? (p.liters ?? 1) : 1)
+                              : (p.freight ?? 0);
+                          const per = Math.round(perUnit);
+                          const cost = p.cost - (p.freight ?? 0) + per;
+                          set({
+                            truck,
+                            freight: per || undefined,
+                            cost,
+                            price: simplePrice(cost, margin),
+                          });
+                        }}
+                        prefix={pre || undefined}
+                        suffix={suf || undefined}
+                      />
+                    </Field>
+                  ))}
+                  <div className="col-span-2 flex flex-col justify-end pb-1 text-xs sm:col-span-1">
+                    {p.truck?.qty ? (
+                      p.category === "laja" ? (
+                        <>
+                          <span className="text-muted-foreground">
+                            ({ars(p.truck.freight)} + {ars(p.truck.zampi)}) ÷ {num(p.truck.qty, 2)}{" "}
+                            m²
+                          </span>
+                          <span className="text-sm font-bold">= {ars(p.freight ?? 0)} por m²</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground">
+                            {ars(p.truck.freight)} ÷ {num(p.truck.qty, 2)} L ={" "}
+                            {ars2(p.truck.freight / p.truck.qty)} por litro
+                          </span>
+                          <span className="text-sm font-bold">
+                            = {ars(p.freight ?? 0)} por bidón de {num(p.liters ?? 0)} L
+                          </span>
+                        </>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {p.category === "laja"
+                          ? "Cargá el total del camión, la zampi y los m²: el flete por m² se calcula solo."
+                          : "Cargá el total del flete y los litros: el flete por litro y por bidón se calcula solo."}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
               <span>
                 Ganás <b className="text-foreground">{ars(p.price - p.cost)}</b> por{" "}

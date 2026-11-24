@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Trash2,
   Truck,
+  Hammer,
 } from "lucide-react";
 import type {
   Cheque,
@@ -26,7 +27,15 @@ import { lineTotals, listPrice, saleUnitsFor, unitLabel, unitLabelFor } from "@/
 import { addDays, ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { Badge, Card, Field, Input, NumberInput, Segmented, Select, Toggle, btn } from "./ui-bits";
 
-type Line = { productId: string; qty: number; unit: SaleUnit; price?: number | undefined };
+type Line = {
+  productId: string;
+  qty: number;
+  unit: SaleUnit;
+  price?: number | undefined;
+  note?: string | undefined;
+  /** Bonificación % del ítem cargada a mano (manda sobre el descuento por cantidad). */
+  disc?: number | undefined;
+};
 type PayDraft = { methodId: string; amount: number; installments: number; dues: number };
 type ChequeDraft = {
   number: string;
@@ -78,6 +87,11 @@ export function SaleForm({
   // Cliente que lo busca en el corralón o pone su transporte: flete por su cuenta, editable.
   const [pickupOn, setPickupOn] = useState(false);
   const [pickupAmt, setPickupAmt] = useState(db.settings.pickupFee ?? 30000);
+  // Servicio de colocación: se le cobra al cliente; un % queda para la empresa y el resto es del colocador.
+  const [installOn, setInstallOn] = useState(false);
+  const [installAmt, setInstallAmt] = useState(0);
+  const [installPct, setInstallPct] = useState(db.settings.installFeePct ?? 20);
+  const [installer, setInstaller] = useState("");
   const [delivery, setDelivery] = useState<Delivery>({
     address: "",
     zone: s.zones[0]?.name ?? "",
@@ -143,6 +157,8 @@ export function SaleForm({
         qty: i.qty,
         unit: i.unit,
         price: i.unitPrice,
+        note: i.note,
+        disc: i.discountPct,
       })),
     );
     setClientId(src.clientId ?? "");
@@ -152,6 +168,12 @@ export function SaleForm({
     setNote(src.note ?? "");
     setDiscountPct(src.discountPct ?? 0);
     setPickupOn(!!src.pickupFee);
+    setInstallOn(!!src.install);
+    if (src.install) {
+      setInstallAmt(src.install.amount);
+      setInstallPct(src.install.feePct);
+      setInstaller(src.install.installer ?? "");
+    }
     if (src.pickupFee) setPickupAmt(src.pickupFee);
     if (src.delivery) {
       setDeliveryOn(true);
@@ -176,8 +198,17 @@ export function SaleForm({
       lines.flatMap((l) => {
         const p = db.products.find((x) => x.id === l.productId);
         if (!p) return [];
-        const t = lineTotals(p, l.qty, l.unit, l.price);
-        return [{ productId: p.id, name: p.name, qty: l.qty, unit: l.unit, ...t }];
+        const t = lineTotals(p, l.qty, l.unit, l.price, l.disc);
+        return [
+          {
+            productId: p.id,
+            name: p.name,
+            qty: l.qty,
+            unit: l.unit,
+            ...t,
+            note: l.note?.trim() || undefined,
+          },
+        ];
       }),
     [lines, db.products],
   );
@@ -186,10 +217,16 @@ export function SaleForm({
   const discount = Math.round((itemsTotal * (discountPct || 0)) / 100);
   const unload = deliveryOn ? (delivery.unloadPrice ?? 0) : 0;
   const pickup = !deliveryOn && pickupOn ? Math.max(0, pickupAmt) : 0;
-  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload + pickup;
+  const install = installOn ? Math.max(0, installAmt) : 0;
+  const installFee = Math.round((install * installPct) / 100);
+  const subtotal =
+    itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload + pickup + install;
   const iva = withIva ? Math.round(subtotal * (s.ivaPct / 100)) : 0;
   const total = subtotal + iva;
-  const cost = items.reduce((a, i) => a + i.cost, 0) + (deliveryOn ? delivery.cost : 0);
+  const cost =
+    items.reduce((a, i) => a + i.cost, 0) +
+    (deliveryOn ? delivery.cost : 0) +
+    (install - installFee);
   const paid = pays.reduce((a, p) => a + (p.amount || 0), 0);
   const remaining = total - paid;
 
@@ -219,6 +256,8 @@ export function SaleForm({
         qty: i.qty,
         unit: i.unit,
         price: i.unitPrice,
+        note: i.note,
+        disc: i.discountPct,
       })),
     );
     setClientId(editSale.clientId ?? "");
@@ -228,6 +267,12 @@ export function SaleForm({
     setNote(editSale.note ?? "");
     setDiscountPct(editSale.discountPct ?? 0);
     setPickupOn(!!editSale.pickupFee);
+    setInstallOn(!!editSale.install);
+    if (editSale.install) {
+      setInstallAmt(editSale.install.amount);
+      setInstallPct(editSale.install.feePct);
+      setInstaller(editSale.install.installer ?? "");
+    }
     if (editSale.pickupFee) setPickupAmt(editSale.pickupFee);
     setInvoicePending(!!editSale.invoicePending);
     if (editSale.delivery) {
@@ -270,7 +315,7 @@ export function SaleForm({
     // Construcción arranca por viaje; el resto de las piedras, por bolsa.
     const us = saleUnitsFor(p);
     const unit: SaleUnit =
-      (us[0] === "viaje" ? "viaje" : us[p.category === "piedra" ? 1 : 0]) ?? "u";
+      (us[0] === "viaje" || us[0] === "t" ? us[0] : us[p.category === "piedra" ? 1 : 0]) ?? "u";
     setLines((ls) => {
       const i = ls.findIndex((l) => l.productId === p.id && l.unit === unit);
       if (i >= 0) return ls.map((l, j) => (j === i ? { ...l, qty: l.qty + 1 } : l));
@@ -411,7 +456,11 @@ export function SaleForm({
           note: note || undefined,
           invoicePending: invoicePending || undefined,
           discountPct: discountPct || undefined,
-        pickupFee: pickup || undefined,
+          pickupFee: pickup || undefined,
+          install:
+            install > 0
+              ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+              : undefined,
         },
         chequeDraft,
       );
@@ -438,6 +487,10 @@ export function SaleForm({
         invoicePending: invoicePending || undefined,
         discountPct: discountPct || undefined,
         pickupFee: pickup || undefined,
+        install:
+          install > 0
+            ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+            : undefined,
       },
       chequeDraft,
     );
@@ -470,6 +523,10 @@ export function SaleForm({
         note: note || undefined,
         discountPct: discountPct || undefined,
         pickupFee: pickup || undefined,
+        install:
+          install > 0
+            ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+            : undefined,
       });
       setEditQuote(undefined);
       setSaved("Presupuesto actualizado");
@@ -492,7 +549,11 @@ export function SaleForm({
       status: "enviado",
       note: note || undefined,
       discountPct: discountPct || undefined,
-        pickupFee: pickup || undefined,
+      pickupFee: pickup || undefined,
+      install:
+        install > 0
+          ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+          : undefined,
     });
     setSaved("Presupuesto guardado");
     setTimeout(() => nav({ to: "/presupuestos" }), 900);
@@ -553,13 +614,14 @@ export function SaleForm({
               return (
                 <div
                   key={i}
-                  className="grid grid-cols-2 items-end gap-2 rounded-2xl bg-surface p-3 sm:grid-cols-[minmax(0,1.6fr)_90px_120px_130px_auto_auto]"
+                  className="grid grid-cols-2 items-end gap-2 rounded-2xl bg-surface p-3 sm:grid-cols-[minmax(0,1.6fr)_90px_120px_130px_84px_auto_auto]"
                 >
                   <div className="col-span-2 sm:col-span-1">
                     <p className="text-sm font-semibold">{p.name}</p>
                     <p className="text-[11px] text-muted-foreground">
                       Stock {num(p.stock)} {p.unit === "m2" ? "m²" : p.unit}
-                      {it.discountPct > 0 && ` · ${num(it.discountPct, 1)} % desc. por cantidad`}
+                      {it.discountPct > 0 &&
+                        ` · ${num(it.discountPct, 1)} % ${l.disc !== undefined ? "bonif." : "desc. por cantidad"}`}
                     </p>
                   </div>
                   <Field label="Cantidad">
@@ -589,6 +651,16 @@ export function SaleForm({
                       prefix="$"
                     />
                   </Field>
+                  <Field
+                    label="Bonif."
+                    help="Bonificación de este ítem solo. Si el producto tiene descuento por cantidad, aparece solo y se puede cambiar. La bonificación del total sigue estando abajo, al lado del IVA."
+                  >
+                    <NumberInput
+                      value={l.disc ?? it.discountPct}
+                      onChange={(v) => updLine(i, { disc: Math.min(100, Math.max(0, v)) })}
+                      suffix="%"
+                    />
+                  </Field>
                   <div className="text-right">
                     <p className="text-[11px] text-muted-foreground">Subtotal</p>
                     <p className="text-sm font-bold tabular-nums">{ars(it.subtotal)}</p>
@@ -603,6 +675,26 @@ export function SaleForm({
                     <button className={btn.icon} onClick={() => delLine(i)} aria-label="Quitar">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
+                  </div>
+                  <div className="col-span-2 sm:col-span-7">
+                    {l.note === undefined ? (
+                      <button
+                        type="button"
+                        className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                        onClick={() => updLine(i, { note: "" })}
+                      >
+                        + Agregar nota a este ítem
+                      </button>
+                    ) : (
+                      <Input
+                        value={l.note}
+                        onChange={(e) => updLine(i, { note: e.target.value })}
+                        onBlur={() => !l.note?.trim() && updLine(i, { note: undefined })}
+                        placeholder="Nota del ítem: medidas, color, aclaración… (sale en el presupuesto)"
+                        className="h-9 text-xs"
+                        autoFocus={!l.note}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -700,6 +792,71 @@ export function SaleForm({
                 />
               </Field>
             </div>
+          )}
+        </Card>
+
+        <Card
+          title="Servicio de colocación"
+          icon={Hammer}
+          action={
+            <Toggle
+              checked={installOn}
+              onChange={setInstallOn}
+              label={installOn ? "Con colocación" : "Sin colocación"}
+            />
+          }
+        >
+          {installOn ? (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Field
+                  label="Importe de la colocación"
+                  help="Lo que se le cobra al cliente por colocar. Se suma al total."
+                >
+                  <NumberInput value={installAmt} onChange={setInstallAmt} prefix="$" />
+                </Field>
+                <Field
+                  label="Queda para la empresa"
+                  help="El % de la colocación que queda para el corralón (habitual 20 a 30 %). El resto es del colocador."
+                >
+                  <NumberInput
+                    value={installPct}
+                    onChange={(v) => setInstallPct(Math.min(100, Math.max(0, v)))}
+                    suffix="%"
+                  />
+                </Field>
+                <Field label="Colocador (opcional)" className="col-span-2">
+                  <Input
+                    value={installer}
+                    onChange={(e) => setInstaller(e.target.value)}
+                    placeholder="Nombre del colocador"
+                  />
+                </Field>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {[20, 25, 30].map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    className={installPct === x ? btn.soft : btn.ghost}
+                    onClick={() => setInstallPct(x)}
+                  >
+                    {x} %
+                  </button>
+                ))}
+                {install > 0 && (
+                  <span className="ml-auto text-muted-foreground">
+                    Empresa <b className="text-foreground">{ars(installFee)}</b> · Colocador{" "}
+                    <b className="text-foreground">{ars(install - installFee)}</b>
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Prendelo para sumar la colocación como servicio adicional: el cliente ve un solo
+              importe y acá se reparte entre la empresa y el colocador.
+            </p>
           )}
         </Card>
       </div>
@@ -805,6 +962,12 @@ export function SaleForm({
               <p className="flex justify-between text-muted-foreground">
                 <span>Flete por su cuenta</span>
                 <span className="tabular-nums">{ars(pickup)}</span>
+              </p>
+            )}
+            {install > 0 && (
+              <p className="flex justify-between text-muted-foreground">
+                <span>Servicio de colocación</span>
+                <span className="tabular-nums">{ars(install)}</span>
               </p>
             )}
             {withIva && (

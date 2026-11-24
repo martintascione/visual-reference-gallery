@@ -29,6 +29,9 @@ import type {
   Settings,
   StockMove,
   SupplierCheque,
+  Stockpile,
+  StockpilePayment,
+  StockpileWithdrawal,
 } from "./types";
 import { emptyDB } from "./seed";
 import { demoDB } from "./demo-seed";
@@ -66,6 +69,12 @@ type Actions = {
   /** Presupuesto que se está editando en Nueva venta. */
   setEditQuote: (id?: string) => void;
   upsertClient: (c: Client) => void;
+  /** Deuda de un cliente con cronograma propio: cada pago con su importe y fecha. */
+  addDebtSchedule: (
+    clientId: string,
+    rows: { amount: number; date: string }[],
+    concept?: string,
+  ) => void;
   /** Carga una deuda en cuenta corriente sin venta (saldo anterior, fiado, etc.). */
   addDebt: (
     clientId: string,
@@ -96,6 +105,14 @@ type Actions = {
   setSupplierReminder: (kind: "cantera" | "transporte", party: string, date?: string) => void;
   removeSupplierPayment: (id: string) => void;
   addIncome: (date: string, concept: string, amount: number, account: Bank) => void;
+  /** Acopios: el cliente paga a cuenta y retira mercadería contra ese saldo. */
+  addStockpile: (s: Omit<Stockpile, "id" | "payments" | "withdrawals">) => string;
+  updateStockpile: (id: string, patch: Partial<Pick<Stockpile, "note" | "closed">>) => void;
+  removeStockpile: (id: string) => void;
+  addStockpilePayment: (id: string, pay: Omit<StockpilePayment, "id" | "movementId">) => void;
+  removeStockpilePayment: (id: string, payId: string) => void;
+  addStockpileWithdrawal: (id: string, w: Omit<StockpileWithdrawal, "id">) => void;
+  removeStockpileWithdrawal: (id: string, wId: string) => void;
   settleMovement: (id: string, settled: boolean) => void;
   closeDay: (cashCounted: number, note?: string) => Closure;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -129,7 +146,8 @@ type Collection =
   | "stockMoves"
   | "closures"
   | "purchases"
-  | "supplierPayments";
+  | "supplierPayments"
+  | "stockpiles";
 const collections: { key: Collection; table: string }[] = [
   { key: "products", table: "products" },
   { key: "clients", table: "clients" },
@@ -143,6 +161,7 @@ const collections: { key: Collection; table: string }[] = [
   { key: "closures", table: "closures" },
   { key: "purchases", table: "purchases" },
   { key: "supplierPayments", table: "supplier_payments" },
+  { key: "stockpiles", table: "stockpiles" },
 ];
 
 async function loadAll(): Promise<DB> {
@@ -167,6 +186,7 @@ async function loadAll(): Promise<DB> {
   db.closures.sort((a, b) => b.date.localeCompare(a.date));
   db.purchases.sort((a, b) => b.date.localeCompare(a.date));
   db.supplierPayments.sort((a, b) => b.date.localeCompare(a.date));
+  db.stockpiles.sort((a, b) => b.date.localeCompare(a.date));
   const st = await supabase.from("settings").select("*").eq("id", "main").maybeSingle();
   if (st.error) throw st.error;
   if (st.data) {
@@ -179,6 +199,28 @@ async function loadAll(): Promise<DB> {
     if (ins.error) throw ins.error;
   }
   return db;
+}
+
+/** Mueve el stock por un retiro de acopio (sign -1 sale, 1 vuelve). */
+function stockpileStock(d: DB, s: Stockpile, w: StockpileWithdrawal, sign: 1 | -1, why: string) {
+  const p = d.products.find((x) => x.id === w.productId);
+  if (!p) return;
+  p.stock += sign * w.baseQty;
+  d.stockMoves.unshift({
+    id: uid(),
+    date: sign < 0 ? w.date : new Date().toISOString(),
+    productId: p.id,
+    qty: sign * w.baseQty,
+    reason: sign < 0 ? "venta" : "ajuste",
+    note: `${why} · ${s.clientName}${w.place ? " · " + w.place : ""}`,
+  });
+}
+
+/** Pagado, retirado y saldo a favor de un acopio. */
+export function stockpileBalance(s: Stockpile) {
+  const paid = s.payments.reduce((a, p) => a + p.amount, 0);
+  const taken = s.withdrawals.reduce((a, w) => a + w.total, 0);
+  return { paid, taken, saldo: paid - taken };
 }
 
 /** Suma (sign 1) o saca (sign -1) del stock lo que trajo una descarga. */
@@ -594,6 +636,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
           return d;
         }),
+      addDebtSchedule: (clientId, rows, concept) =>
+        mutate((d) => {
+          const list = rows.filter((r) => r.amount > 0);
+          const group = "cc" + uid();
+          list.forEach((r, k) =>
+            d.dues.push({
+              id: uid(),
+              clientId,
+              saleId: group,
+              n: k + 1,
+              of: list.length,
+              dueDate: r.date,
+              amount: Math.round(r.amount),
+              paid: 0,
+              concept: concept || undefined,
+            }),
+          );
+          return d;
+        }),
       upsertClient: (c) =>
         mutate((d) => {
           const i = d.clients.findIndex((x) => x.id === c.id);
@@ -873,6 +934,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (pay) undoSupplierPayment(d, pay);
           return d;
         }),
+      addStockpile: (draft) => {
+        const id = uid();
+        mutate((d) => {
+          d.stockpiles = [{ ...draft, id, payments: [], withdrawals: [] }, ...(d.stockpiles ?? [])];
+          return d;
+        });
+        return id;
+      },
+      updateStockpile: (id, patch) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          if (s) Object.assign(s, patch);
+          return d;
+        }),
+      removeStockpile: (id) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          if (!s) return d;
+          for (const p of s.payments)
+            d.movements = d.movements.filter((m) => m.id !== p.movementId);
+          for (const w of s.withdrawals) stockpileStock(d, s, w, 1, "Acopio eliminado");
+          d.stockpiles = d.stockpiles.filter((x) => x.id !== id);
+          return d;
+        }),
+      addStockpilePayment: (id, pay) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          if (!s) return d;
+          const mid = uid();
+          d.movements.unshift({
+            id: mid,
+            date: pay.date,
+            kind: "cobro",
+            account: pay.method === "efectivo" ? "Caja" : pay.account,
+            amount: pay.amount,
+            concept: `Acopio · ${s.clientName}${pay.detail ? " · " + pay.detail : ""}`,
+            method: pay.method,
+            settled: true,
+            refId: s.id,
+          });
+          s.payments.push({ ...pay, id: uid(), movementId: mid });
+          return d;
+        }),
+      removeStockpilePayment: (id, payId) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          const pay = s?.payments.find((x) => x.id === payId);
+          if (!s || !pay) return d;
+          d.movements = d.movements.filter((m) => m.id !== pay.movementId);
+          s.payments = s.payments.filter((x) => x.id !== payId);
+          return d;
+        }),
+      addStockpileWithdrawal: (id, w) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          if (!s) return d;
+          const item = { ...w, id: uid() };
+          s.withdrawals.push(item);
+          stockpileStock(d, s, item, -1, "Retiro de acopio");
+          return d;
+        }),
+      removeStockpileWithdrawal: (id, wId) =>
+        mutate((d) => {
+          const s = (d.stockpiles ?? []).find((x) => x.id === id);
+          const w = s?.withdrawals.find((x) => x.id === wId);
+          if (!s || !w) return d;
+          stockpileStock(d, s, w, 1, "Retiro de acopio borrado");
+          s.withdrawals = s.withdrawals.filter((x) => x.id !== wId);
+          return d;
+        }),
       addIncome: (date, concept, amount, account) =>
         mutate((d) => {
           d.movements.unshift({
@@ -1092,48 +1223,70 @@ const sameName = (a: string | undefined, b: string | undefined) =>
 
 /** Cuentas con canteras y transportes: lo comprado, lo pagado y el saldo de cada uno. */
 export function supplierAccounts(db: DB) {
-  const map = new Map<
-    string,
-    {
-      party: string;
-      kind: "cantera" | "transporte";
-      debe: number;
-      haber: number;
-      last: string;
-      /** Día del aviso para pagar el saldo (el más próximo, si hay varios). */
-      remind?: string | undefined;
-    }
-  >();
-  const sooner = (a: string | undefined, b: string | undefined) =>
-    a && b ? (a < b ? a : b) : a || b;
+  type Entry = { date: string; due?: string | undefined; amount: number };
+  type Acc = {
+    party: string;
+    kind: "cantera" | "transporte";
+    debe: number;
+    haber: number;
+    last: string;
+    entries: Entry[];
+    /** Próximo vencimiento sin pagar (los pagos cubren primero lo que vence antes). */
+    remind?: string | undefined;
+    /** Lo que queda por pagar de ese vencimiento. */
+    remindAmount?: number | undefined;
+    /** Vencimientos con saldo pendiente, en orden. */
+    pending: { due: string; amount: number }[];
+  };
+  const map = new Map<string, Acc>();
   const get = (party: string, kind: "cantera" | "transporte") => {
     const key = kind + "|" + party.trim().toLowerCase();
     let a = map.get(key);
-    if (!a) map.set(key, (a = { party: party.trim(), kind, debe: 0, haber: 0, last: "" }));
+    if (!a)
+      map.set(
+        key,
+        (a = { party: party.trim(), kind, debe: 0, haber: 0, last: "", entries: [], pending: [] }),
+      );
     return a;
   };
+  const add = (a: Acc, date: string, amount: number, due: string | undefined) => {
+    a.debe += amount;
+    if (date > a.last) a.last = date;
+    a.entries.push({ date: date.slice(0, 10), due, amount });
+  };
   for (const p of db.purchases) {
-    if (p.debtOnly !== "transporte") {
-      const a = get(p.supplier, "cantera");
-      a.debe += p.items.reduce((x, i) => x + i.total, 0);
-      if (p.date > a.last) a.last = p.date;
-      a.remind = sooner(a.remind, p.payDue);
-    }
-    if (p.carrier && p.freightTotal > 0) {
-      const c = get(p.carrier, "transporte");
-      c.debe += p.freightTotal;
-      if (p.date > c.last) c.last = p.date;
-      c.remind = sooner(c.remind, p.freightDue);
-    }
+    if (p.debtOnly !== "transporte")
+      add(
+        get(p.supplier, "cantera"),
+        p.date,
+        p.items.reduce((x, i) => x + i.total, 0),
+        p.payDue,
+      );
+    if (p.carrier && p.freightTotal > 0)
+      add(get(p.carrier, "transporte"), p.date, p.freightTotal, p.freightDue);
     // La descarga, si la cobra alguien de afuera, va a la cuenta de esa persona o transporte.
-    if (p.unloadBy && p.unloadCost > 0) {
-      const u = get(p.unloadBy, "transporte");
-      u.debe += p.unloadCost;
-      if (p.date > u.last) u.last = p.date;
-      u.remind = sooner(u.remind, sameName(p.unloadBy, p.carrier) ? p.freightDue : p.unloadDue);
-    }
+    if (p.unloadBy && p.unloadCost > 0)
+      add(
+        get(p.unloadBy, "transporte"),
+        p.date,
+        p.unloadCost,
+        sameName(p.unloadBy, p.carrier) ? p.freightDue : p.unloadDue,
+      );
   }
   for (const pay of db.supplierPayments) get(pay.party, pay.kind).haber += pay.amount;
+  for (const a of map.values()) {
+    let left = a.haber;
+    const ordered = [...a.entries].sort((x, y) => (x.due ?? x.date).localeCompare(y.due ?? y.date));
+    for (const e of ordered) {
+      const cover = Math.min(left, e.amount);
+      left -= cover;
+      const rest = e.amount - cover;
+      if (rest > 0.5 && e.due) a.pending.push({ due: e.due, amount: rest });
+    }
+    a.pending.sort((x, y) => x.due.localeCompare(y.due));
+    a.remind = a.pending[0]?.due;
+    a.remindAmount = a.pending[0]?.amount;
+  }
   return [...map.values()]
     .map((a) => ({ ...a, saldo: a.debe - a.haber }))
     .sort((a, b) => b.saldo - a.saldo);
