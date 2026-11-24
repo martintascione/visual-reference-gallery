@@ -1113,10 +1113,12 @@ export function supplierAccounts(db: DB) {
     return a;
   };
   for (const p of db.purchases) {
-    const a = get(p.supplier, "cantera");
-    a.debe += p.items.reduce((x, i) => x + i.total, 0);
-    if (p.date > a.last) a.last = p.date;
-    a.remind = sooner(a.remind, p.payDue);
+    if (p.debtOnly !== "transporte") {
+      const a = get(p.supplier, "cantera");
+      a.debe += p.items.reduce((x, i) => x + i.total, 0);
+      if (p.date > a.last) a.last = p.date;
+      a.remind = sooner(a.remind, p.payDue);
+    }
     if (p.carrier && p.freightTotal > 0) {
       const c = get(p.carrier, "transporte");
       c.debe += p.freightTotal;

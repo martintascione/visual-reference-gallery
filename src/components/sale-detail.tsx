@@ -99,6 +99,12 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
             <span className="tabular-nums">{ars(sale.delivery.unloadPrice)}</span>
           </p>
         )}
+        {!sale.delivery && !!sale.pickupFee && (
+          <p className="flex justify-between gap-3">
+            <span>Flete por su cuenta</span>
+            <span className="tabular-nums">{ars(sale.pickupFee)}</span>
+          </p>
+        )}
         {!!sale.discountPct && (
           <p className="flex justify-between text-muted-foreground">
             <span>Bonificación {num(sale.discountPct ?? 0, 1)} %</span>

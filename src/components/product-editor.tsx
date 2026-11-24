@@ -92,7 +92,8 @@ export function ProductEditor({
   product: Product | null;
   prefill?: Product | null | undefined;
 }) {
-  const { db, upsertProduct } = useStore();
+  const { db, upsertProduct, removeProduct } = useStore();
+  const [confirmDel, setConfirmDel] = useState(false);
   const s = db.settings;
   const [p, setP] = useState<Product>(() => product ?? blankProduct("piedra", s));
   const [margin, setMargin] = useState(s.defaultMarginPct ?? 40);
@@ -100,6 +101,7 @@ export function ProductEditor({
 
   useEffect(() => {
     if (!open) return;
+    setConfirmDel(false);
     const next = product ?? prefill ?? blankProduct("piedra", s);
     setP(structuredClone(next));
     setMargin(
@@ -163,14 +165,43 @@ export function ProductEditor({
       }
       wide
       footer={
-        <>
-          <button className={btn.soft} onClick={onClose}>
-            Cancelar
-          </button>
-          <button className={btn.primary} disabled={!canSave} onClick={save}>
-            {product ? "Guardar cambios" : "Guardar producto"}
-          </button>
-        </>
+        confirmDel && product ? (
+          <>
+            <p className="mr-auto text-xs text-muted-foreground">
+              Se saca del catálogo, de la lista de precios y de Nueva venta. Las ventas,
+              presupuestos y descargas que ya lo usaron quedan como estaban.
+            </p>
+            <button className={btn.soft} onClick={() => setConfirmDel(false)}>
+              No, volver
+            </button>
+            <button
+              className={`${btn.danger} h-10 px-5 text-sm`}
+              onClick={() => {
+                removeProduct(product.id);
+                onClose();
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Sí, eliminar
+            </button>
+          </>
+        ) : (
+          <>
+            {product && (
+              <button
+                className={`${btn.ghost} mr-auto text-danger-soft-foreground`}
+                onClick={() => setConfirmDel(true)}
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.6} /> Eliminar producto
+              </button>
+            )}
+            <button className={btn.soft} onClick={onClose}>
+              Cancelar
+            </button>
+            <button className={btn.primary} disabled={!canSave} onClick={save}>
+              {product ? "Guardar cambios" : "Guardar producto"}
+            </button>
+          </>
+        )
       }
     >
       <div className="flex flex-col gap-5">

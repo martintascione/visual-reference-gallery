@@ -314,6 +314,16 @@ function Configuracion() {
                 prefix="$"
               />
             </Field>
+            <Field
+              label="Flete por su cuenta"
+              hint="Cuando el cliente lo busca o pone su transporte; editable en cada venta"
+            >
+              <NumberInput
+                value={s.pickupFee ?? 30000}
+                onChange={(v) => updateSettings({ pickupFee: v })}
+                prefix="$"
+              />
+            </Field>
             <Field label="Descarga bolsón grande" hint="Por pedido; editable en cada venta">
               <NumberInput
                 value={s.unloadChargeBigBag ?? 70000}

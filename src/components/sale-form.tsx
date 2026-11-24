@@ -75,6 +75,9 @@ export function SaleForm({
   const [withIva, setWithIva] = useState(false);
   const [note, setNote] = useState("");
   const [deliveryOn, setDeliveryOn] = useState(false);
+  // Cliente que lo busca en el corralón o pone su transporte: flete por su cuenta, editable.
+  const [pickupOn, setPickupOn] = useState(false);
+  const [pickupAmt, setPickupAmt] = useState(db.settings.pickupFee ?? 30000);
   const [delivery, setDelivery] = useState<Delivery>({
     address: "",
     zone: s.zones[0]?.name ?? "",
@@ -148,6 +151,8 @@ export function SaleForm({
     setWithIva(src.withIva);
     setNote(src.note ?? "");
     setDiscountPct(src.discountPct ?? 0);
+    setPickupOn(!!src.pickupFee);
+    if (src.pickupFee) setPickupAmt(src.pickupFee);
     if (src.delivery) {
       setDeliveryOn(true);
       setDelivery(
@@ -180,7 +185,8 @@ export function SaleForm({
   const itemsTotal = items.reduce((a, i) => a + i.subtotal, 0);
   const discount = Math.round((itemsTotal * (discountPct || 0)) / 100);
   const unload = deliveryOn ? (delivery.unloadPrice ?? 0) : 0;
-  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload;
+  const pickup = !deliveryOn && pickupOn ? Math.max(0, pickupAmt) : 0;
+  const subtotal = itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload + pickup;
   const iva = withIva ? Math.round(subtotal * (s.ivaPct / 100)) : 0;
   const total = subtotal + iva;
   const cost = items.reduce((a, i) => a + i.cost, 0) + (deliveryOn ? delivery.cost : 0);
@@ -221,6 +227,8 @@ export function SaleForm({
     setWithIva(editSale.withIva);
     setNote(editSale.note ?? "");
     setDiscountPct(editSale.discountPct ?? 0);
+    setPickupOn(!!editSale.pickupFee);
+    if (editSale.pickupFee) setPickupAmt(editSale.pickupFee);
     setInvoicePending(!!editSale.invoicePending);
     if (editSale.delivery) {
       setDeliveryOn(true);
@@ -283,7 +291,39 @@ export function SaleForm({
     setDelivery((d) => ({ ...d, zone: name, price: z?.price ?? d.price, cost: z?.cost ?? d.cost }));
   };
 
+  // Cliente nuevo escrito a mano: se guarda solo en Clientes al salir del campo del nombre,
+  // así ya queda elegido para cuenta corriente, cheques y próximas ventas.
+  const [autoId, setAutoId] = useState("");
+  const isRealName = (n: string) =>
+    n.trim().length > 1 && n.trim().toLowerCase() !== "consumidor final";
+  const autoSaveClient = (name = clientName, tel = phone) => {
+    const n = name.trim();
+    if (!isRealName(n)) return undefined;
+    if (clientId && clientId !== autoId) return clientId;
+    const same = db.clients.find(
+      (c) => c.id !== autoId && c.name.trim().toLowerCase() === n.toLowerCase(),
+    );
+    if (same && !autoId) {
+      setClientId(same.id);
+      setClientName(same.name);
+      if (!tel) setPhone(same.phone ?? "");
+      return same.id;
+    }
+    const prev = db.clients.find((c) => c.id === autoId);
+    const id = prev?.id ?? "c" + Date.now().toString(36);
+    upsertClient({
+      ...(prev ?? { creditLimit: 0 }),
+      id,
+      name: n,
+      phone: tel.trim() || prev?.phone,
+    });
+    setAutoId(id);
+    setClientId(id);
+    return id;
+  };
+
   const pickClient = (id: string) => {
+    setAutoId("");
     setClientId(id);
     const c = db.clients.find((x) => x.id === id);
     if (c) {
@@ -311,7 +351,7 @@ export function SaleForm({
     !!client &&
     client.creditLimit > 0 &&
     (balance?.balance ?? 0) + ctaPay.amount > client.creditLimit;
-  const ctaWithoutClient = !!ctaPay && !clientId;
+  const ctaWithoutClient = !!ctaPay && !clientId && !isRealName(clientName);
   const chequeIncomplete = !!chequePay && (!cheque.number || !cheque.bank || !cheque.dueDate);
 
   const canSaveSale =
@@ -323,17 +363,8 @@ export function SaleForm({
   const canSaveQuote = items.length > 0 && clientName.trim().length > 0;
 
   const ensureClient = () => {
-    if (clientId) return clientId;
-    if (
-      clientName.trim() &&
-      clientName.trim().toLowerCase() !== "consumidor final" &&
-      (phone || mode === "presupuesto")
-    ) {
-      const id = "c" + Date.now().toString(36);
-      upsertClient({ id, name: clientName.trim(), phone: phone || undefined, creditLimit: 0 });
-      return id;
-    }
-    return undefined;
+    if (clientId && clientId !== autoId) return clientId;
+    return autoSaveClient() ?? (clientId || undefined);
   };
 
   const saveSale = () => {
@@ -380,6 +411,7 @@ export function SaleForm({
           note: note || undefined,
           invoicePending: invoicePending || undefined,
           discountPct: discountPct || undefined,
+        pickupFee: pickup || undefined,
         },
         chequeDraft,
       );
@@ -405,6 +437,7 @@ export function SaleForm({
         fromQuoteId: fromQuote?.id,
         invoicePending: invoicePending || undefined,
         discountPct: discountPct || undefined,
+        pickupFee: pickup || undefined,
       },
       chequeDraft,
     );
@@ -436,6 +469,7 @@ export function SaleForm({
         lostReason: editQuote.status === "perdido" ? undefined : editQuote.lostReason,
         note: note || undefined,
         discountPct: discountPct || undefined,
+        pickupFee: pickup || undefined,
       });
       setEditQuote(undefined);
       setSaved("Presupuesto actualizado");
@@ -458,6 +492,7 @@ export function SaleForm({
       status: "enviado",
       note: note || undefined,
       discountPct: discountPct || undefined,
+        pickupFee: pickup || undefined,
     });
     setSaved("Presupuesto guardado");
     setTimeout(() => nav({ to: "/presupuestos" }), 900);
@@ -592,6 +627,20 @@ export function SaleForm({
             />
           }
         >
+          {!deliveryOn && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Toggle
+                checked={pickupOn}
+                onChange={setPickupOn}
+                label="Cobrar flete por su cuenta (lo busca o pone su transporte)"
+              />
+              {pickupOn && (
+                <span className="w-40">
+                  <NumberInput value={pickupAmt} onChange={setPickupAmt} prefix="$" />
+                </span>
+              )}
+            </div>
+          )}
           {deliveryOn && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Dirección" className="col-span-2">
@@ -667,19 +716,29 @@ export function SaleForm({
                 </option>
               ))}
             </Select>
-            {!clientId && (
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Nombre"
-                />
-                <Input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Teléfono (opcional)"
-                />
-              </div>
+            {(!clientId || clientId === autoId) && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => autoSaveClient()}
+                    placeholder="Nombre del cliente"
+                  />
+                  <Input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    onBlur={() => autoId && autoSaveClient()}
+                    placeholder="Teléfono (opcional)"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {clientId === autoId && autoId
+                    ? "Cliente nuevo guardado en Clientes. Ya podés cobrarle a cuenta corriente."
+                    : "Escribí el nombre y se guarda solo como cliente nuevo. Si lo dejás en Consumidor final no se guarda nada."}
+                </p>
+              </>
             )}
             {balance && balance.balance > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -740,6 +799,12 @@ export function SaleForm({
               <p className="flex justify-between text-muted-foreground">
                 <span>Descarga</span>
                 <span className="tabular-nums">{ars(unload)}</span>
+              </p>
+            )}
+            {pickup > 0 && (
+              <p className="flex justify-between text-muted-foreground">
+                <span>Flete por su cuenta</span>
+                <span className="tabular-nums">{ars(pickup)}</span>
               </p>
             )}
             {withIva && (
@@ -935,7 +1000,8 @@ export function SaleForm({
               </div>
               {ctaWithoutClient && (
                 <p className="text-xs text-danger-soft-foreground">
-                  Para vender a cuenta corriente hay que elegir un cliente cargado.
+                  Para vender a cuenta corriente escribí el nombre del cliente (se guarda solo) o
+                  elegí uno de la lista.
                 </p>
               )}
               {overLimit && (

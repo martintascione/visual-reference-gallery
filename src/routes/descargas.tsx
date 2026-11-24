@@ -49,8 +49,11 @@ function Descargas() {
   const [ledger, setLedger] = useState<string | null>(null);
   const [del, setDel] = useState<Purchase | null>(null);
   const [edit, setEdit] = useState<Purchase | null>(null);
+  const [debt, setDebt] = useState<{ open: boolean; edit?: Purchase | undefined }>({
+    open: false,
+  });
   const accounts = useMemo(() => supplierAccounts(db), [db]);
-  const debt = (k: "cantera" | "transporte") =>
+  const debtOf = (k: "cantera" | "transporte") =>
     accounts.filter((a) => a.kind === k && a.saldo > 0).reduce((x, a) => x + a.saldo, 0);
   const open = accounts.find((a) => key(a.kind, a.party) === ledger) ?? null;
   const saldoOf = (kind: "cantera" | "transporte", party: string) =>
@@ -68,6 +71,9 @@ function Descargas() {
         >
           <CircleHelp className="h-4 w-4" strokeWidth={1.6} /> Cómo funciona
         </button>
+        <button data-tour="desc-deuda" className={btn.soft} onClick={() => setDebt({ open: true })}>
+          <Wallet className="h-4 w-4" strokeWidth={1.6} /> Cargar deuda
+        </button>
         <button data-tour="desc-nueva" className={btn.primary} onClick={() => setAdding(true)}>
           <Plus className="h-4 w-4" /> Nueva descarga
         </button>
@@ -76,15 +82,18 @@ function Descargas() {
       <div data-tour="desc-stats" className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         <Stat
           label="Debo a canteras"
-          value={ars(debt("cantera"))}
-          tone={debt("cantera") > 0 ? "danger" : undefined}
+          value={ars(debtOf("cantera"))}
+          tone={debtOf("cantera") > 0 ? "danger" : undefined}
         />
         <Stat
           label="Debo a transportes"
-          value={ars(debt("transporte"))}
-          tone={debt("transporte") > 0 ? "danger" : undefined}
+          value={ars(debtOf("transporte"))}
+          tone={debtOf("transporte") > 0 ? "danger" : undefined}
         />
-        <Stat label="Descargas cargadas" value={String(db.purchases.length)} />
+        <Stat
+          label="Descargas cargadas"
+          value={String(db.purchases.filter((p) => !p.debtOnly).length)}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -103,6 +112,86 @@ function Descargas() {
             >
               {db.purchases.map((p) => {
                 const merch = p.items.reduce((a, i) => a + i.total, 0);
+                if (p.debtOnly) {
+                  const kind = p.debtOnly;
+                  const party = kind === "cantera" ? p.supplier : (p.carrier ?? "");
+                  const amount = kind === "cantera" ? merch : p.freightTotal;
+                  const badge = (
+                    <Badge tone={saldoOf(kind, party) > 0 ? "danger" : "ok"}>
+                      {saldoOf(kind, party) > 0 ? "Se debe" : "Al día"}
+                    </Badge>
+                  );
+                  return (
+                    <tr key={p.id} className={tr}>
+                      <td className="whitespace-nowrap align-top">{fmtDate(p.date)}</td>
+                      <td className="align-top">
+                        {kind === "cantera" ? (
+                          <button
+                            className="text-left font-medium hover:underline"
+                            onClick={() => setLedger(key(kind, party))}
+                          >
+                            {party}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        <p className="text-[11px] text-muted-foreground">
+                          Deuda cargada a mano{p.note ? ` · ${p.note}` : ""}
+                        </p>
+                      </td>
+                      <td className="text-right align-top tabular-nums">
+                        {kind === "cantera" ? (
+                          <>
+                            <p className="font-semibold">{ars(amount)}</p>
+                            {badge}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="align-top">
+                        {kind === "transporte" ? (
+                          <button
+                            className="text-left hover:underline"
+                            onClick={() => setLedger(key(kind, party))}
+                          >
+                            {party}
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="text-right align-top tabular-nums">
+                        {kind === "transporte" ? (
+                          <>
+                            <p className="font-semibold">{ars(amount)}</p>
+                            {badge}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap text-right align-top">
+                        <button
+                          className={btn.icon}
+                          onClick={() => setDebt({ open: true, edit: p })}
+                          aria-label="Editar deuda"
+                          title="Editar esta deuda"
+                        >
+                          <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                        </button>
+                        <button
+                          className={btn.icon}
+                          onClick={() => setDel(p)}
+                          aria-label="Eliminar deuda"
+                          title="Eliminar esta deuda"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={p.id} className={tr}>
                     <td className="whitespace-nowrap align-top">{fmtDate(p.date)}</td>
@@ -243,12 +332,18 @@ function Descargas() {
 
       <NewPurchase open={adding} onClose={() => setAdding(false)} />
       <NewPurchase open={!!edit} onClose={() => setEdit(null)} edit={edit} />
+      <DebtForm open={debt.open} edit={debt.edit} onClose={() => setDebt({ open: false })} />
       <Ledger account={open} onClose={() => setLedger(null)} />
-      <Modal open={!!del} onClose={() => setDel(null)} title="Eliminar descarga">
+      <Modal
+        open={!!del}
+        onClose={() => setDel(null)}
+        title={del?.debtOnly ? "Eliminar deuda" : "Eliminar descarga"}
+      >
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            Se borra la descarga de {del?.supplier} del {del ? fmtDate(del.date) : ""} y se
-            descuenta del stock lo que había sumado.{" "}
+            {del?.debtOnly
+              ? `Se borra la deuda cargada a mano con ${del.debtOnly === "cantera" ? del.supplier : del.carrier} del ${fmtDate(del.date)}. `
+              : `Se borra la descarga de ${del?.supplier ?? ""} del ${del ? fmtDate(del.date) : ""} y se descuenta del stock lo que había sumado. `}
             {del && db.supplierPayments.some((x) => x.purchaseId === del.id)
               ? `También se anulan los ${db.supplierPayments.filter((x) => x.purchaseId === del.id).length} pagos cargados en ese asiento (vuelven a caja o banco, y los cheques de clientes vuelven a la cartera). `
               : ""}
@@ -1213,11 +1308,13 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
         payId: "",
       });
       if (account.kind === "cantera")
-        return mine(p.supplier)
+        return mine(p.supplier) && p.debtOnly !== "transporte"
           ? [
               row(
                 p.id,
-                `${p.items.map((i) => `${i.name} ${num(i.tons, 2)}`).join(", ")}${p.remito ? ` · Rto ${p.remito}` : ""}`,
+                p.debtOnly
+                  ? `Deuda cargada a mano${p.note ? ` · ${p.note}` : ""}`
+                  : `${p.items.map((i) => `${i.name} ${num(i.tons, 2)}`).join(", ")}${p.remito ? ` · Rto ${p.remito}` : ""}`,
                 p.items.reduce((a, i) => a + i.total, 0),
               ),
             ]
@@ -1227,7 +1324,9 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
           ? [
               row(
                 p.id,
-                `Flete ${p.supplier}${p.freightTons ? ` · ${num(p.freightTons, 2)} t` : ""}`,
+                p.debtOnly
+                  ? `Deuda cargada a mano${p.note ? ` · ${p.note}` : ""}`
+                  : `Flete ${p.supplier}${p.freightTons ? ` · ${num(p.freightTons, 2)} t` : ""}`,
                 p.freightTotal,
               ),
             ]
@@ -1399,6 +1498,202 @@ function Ledger({ account, onClose }: { account: Account | null; onClose: () => 
             </p>
           )}
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Deuda con un proveedor sin cargar mercadería: saldos anteriores, facturas viejas, etc. */
+function DebtForm({
+  open,
+  onClose,
+  edit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  edit?: Purchase | undefined;
+}) {
+  const { db, addPurchase, updatePurchase } = useStore();
+  const [kind, setKind] = useState<"cantera" | "transporte">("cantera");
+  const [party, setParty] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
+  const [due, setDue] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    const k = edit?.debtOnly ?? "cantera";
+    setKind(k);
+    setParty(edit ? (k === "cantera" ? edit.supplier : (edit.carrier ?? "")) : "");
+    setAmount(
+      edit
+        ? k === "cantera"
+          ? edit.items.reduce((a, i) => a + i.total, 0)
+          : edit.freightTotal
+        : 0,
+    );
+    setDate(edit ? edit.date.slice(0, 10) : todayISO());
+    setNote(edit?.note ?? "");
+    setDue(edit ? ((k === "cantera" ? edit.payDue : edit.freightDue) ?? "") : "");
+  }, [open, edit]);
+
+  const accounts = supplierAccounts(db);
+  const names = [
+    ...new Set(
+      (kind === "cantera"
+        ? db.purchases.filter((p) => p.debtOnly !== "transporte").map((p) => p.supplier)
+        : db.purchases.flatMap((p) => [p.carrier ?? "", p.unloadBy ?? ""])
+      ).filter((x) => x.trim()),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+  const current = accounts.find(
+    (a) => a.kind === kind && key(a.kind, a.party) === key(kind, party),
+  );
+  // Si se está editando, el saldo de hoy ya incluye esta misma deuda.
+  const before =
+    (current?.saldo ?? 0) -
+    (edit &&
+    key(kind, party) ===
+      key(edit.debtOnly ?? "", (edit.debtOnly === "cantera" ? edit.supplier : edit.carrier) ?? "")
+      ? edit.debtOnly === "cantera"
+        ? edit.items.reduce((a, i) => a + i.total, 0)
+        : edit.freightTotal
+      : 0);
+  const ok = party.trim().length > 1 && amount > 0;
+
+  const save = () => {
+    const name = party.trim();
+    const iso = edit && date === edit.date.slice(0, 10) ? edit.date : date + "T12:00:00.000Z";
+    const detail = note.trim() || "Deuda anterior";
+    const draft =
+      kind === "cantera"
+        ? {
+            date: iso,
+            supplier: name,
+            items: [{ name: detail, tons: 0, pricePerTon: 0, total: Math.round(amount) }],
+            freightTons: 0,
+            freightRate: 0,
+            freightTotal: 0,
+            unloadCost: 0,
+            note: note.trim() || undefined,
+            payDue: due || undefined,
+            debtOnly: "cantera" as const,
+          }
+        : {
+            date: iso,
+            supplier: "",
+            items: [],
+            carrier: name,
+            freightTons: 0,
+            freightRate: 0,
+            freightTotal: Math.round(amount),
+            unloadCost: 0,
+            note: note.trim() || undefined,
+            freightDue: due || undefined,
+            debtOnly: "transporte" as const,
+          };
+    if (edit) updatePurchase(edit.id, draft, false);
+    else addPurchase(draft, false);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={edit ? "Editar deuda" : "Cargar deuda con un proveedor"}
+      subtitle="Para deudas que vienen de antes o que no son de una descarga. No toca el stock ni los costos."
+      footer={
+        <>
+          <button className={btn.soft} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className={btn.primary} disabled={!ok} onClick={save}>
+            {edit ? "Guardar cambios" : `Cargar deuda${amount > 0 ? " " + ars(amount) : ""}`}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+        <div className="col-span-2">
+          <Segmented
+            value={kind}
+            onChange={(k) => {
+              setKind(k);
+              setParty("");
+            }}
+            options={[
+              { value: "cantera", label: "Cantera / proveedor" },
+              { value: "transporte", label: "Transporte" },
+            ]}
+          />
+        </div>
+        <Field
+          label={kind === "cantera" ? "Cantera o proveedor" : "Transporte"}
+          className="col-span-2"
+          help="Elegí uno que ya tengas en la lista o escribí el nombre de uno nuevo: queda creado con su cuenta."
+        >
+          <Input
+            list="deuda-proveedores"
+            value={party}
+            onChange={(e) => setParty(e.target.value)}
+            placeholder={kind === "cantera" ? "Ej: La Helena" : "Ej: Cucumelo"}
+            autoFocus
+          />
+          <datalist id="deuda-proveedores">
+            {names.map((x) => (
+              <option key={x} value={x} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Importe que se le debe">
+          <NumberInput value={amount} onChange={setAmount} prefix="$" />
+        </Field>
+        <Field label="Fecha de la deuda" help="El día de la factura o del saldo, aunque sea viejo.">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Detalle (opcional)" className="col-span-2">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Ej: saldo anterior, factura 0001-00000234, remito 552"
+          />
+        </Field>
+        <Field
+          label="Avisarme para pagarla (opcional)"
+          className="col-span-2"
+          help="Ese día aparece en Inicio, Notificaciones y Calendario, mientras quede saldo."
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="w-40">
+              <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+            </span>
+            {[7, 15, 30, 60].map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={btn.ghost}
+                onClick={() => setDue(addDays(todayISO(), d))}
+              >
+                {d} d
+              </button>
+            ))}
+            {due && (
+              <button type="button" className={btn.ghost} onClick={() => setDue("")}>
+                Sin aviso
+              </button>
+            )}
+          </div>
+        </Field>
+        {party.trim().length > 1 && (
+          <p className="col-span-2 rounded-2xl bg-surface p-3 text-xs">
+            {current || before > 0
+              ? `Hoy se le debe ${ars(Math.max(0, before))}. Con esta deuda queda en `
+              : "Es un proveedor nuevo: queda creado con una deuda de "}
+            <b className="text-danger-soft-foreground">{ars(Math.max(0, before) + amount)}</b>. Los
+            pagos se cargan desde su cuenta, total o en partes.
+          </p>
+        )}
       </div>
     </Modal>
   );

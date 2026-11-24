@@ -124,6 +124,8 @@ export type Sale = {
   /** Marca "factura: HACER" de la planilla. */
   invoicePending?: boolean | undefined;
   discountPct?: number | undefined;
+  /** Flete por su cuenta (retira el cliente). */
+  pickupFee?: number | undefined;
 };
 
 export type QuoteStatus =
@@ -149,6 +151,8 @@ export type Quote = {
   lostReason?: string | undefined;
   /** Bonificación % sobre el subtotal. */
   discountPct?: number | undefined;
+  /** Cliente que retira o pone su transporte: flete por su cuenta que se le cobra aparte. */
+  pickupFee?: number | undefined;
 };
 
 export type Client = {
@@ -332,6 +336,8 @@ export type Settings = {
   bigBagPackaging?: number | undefined;
   /** Descarga que se cobra al cliente por pedido (valor sugerido, editable en cada venta). */
   unloadChargeBags?: number | undefined;
+  /** Flete por su cuenta que se sugiere cuando el cliente retira o pone su transporte. */
+  pickupFee?: number | undefined;
   unloadChargeBigBag?: number | undefined;
   /** Mail diario (lunes a viernes a la mañana) con los presupuestos para seguir. */
   followUpEmail?: { on: boolean; to: string } | undefined;
@@ -387,6 +393,8 @@ export type Purchase = {
   payDue?: string | undefined;
   /** Día en que hay que avisar para pagarle el saldo al transporte (AAAA-MM-DD). */
   freightDue?: string | undefined;
+  /** Deuda cargada a mano, sin mercadería (saldo anterior, factura vieja…): a una cantera o a un transporte. */
+  debtOnly?: "cantera" | "transporte" | undefined;
   /** Quién cobra la descarga (vacío = personal propio, no queda deuda). */
   unloadBy?: string | undefined;
   /** Aviso para pagarle el saldo a quien descargó, cuando no es el mismo transporte. */

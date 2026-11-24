@@ -81,6 +81,7 @@ function Presupuestos() {
         ...q.items.map((i) => `• ${qtyUnit(i.qty, i.unit)} ${i.name}: ${ars(i.subtotal * k)}`),
         q.delivery ? `• Flete ${q.delivery.zone}: ${ars(q.delivery.price * k)}` : "",
         q.delivery?.unloadPrice ? `• Descarga: ${ars(q.delivery.unloadPrice * k)}` : "",
+        !q.delivery && q.pickupFee ? `• Flete por su cuenta: ${ars(q.pickupFee * k)}` : "",
         incl ? "Precios con IVA incluido." : q.withIva ? `IVA: ${ars(q.iva)}` : "",
         `*Total: ${ars(q.total)}*`,
         `Válido hasta el ${fmtDate(q.validUntil)}.`,
@@ -175,6 +176,12 @@ function Presupuestos() {
                   <li className="flex justify-between">
                     <span>Descarga</span>
                     <span className="tabular-nums">{ars(q.delivery.unloadPrice)}</span>
+                  </li>
+                )}
+                {!q.delivery && !!q.pickupFee && (
+                  <li className="flex justify-between">
+                    <span>Flete por su cuenta</span>
+                    <span className="tabular-nums">{ars(q.pickupFee)}</span>
                   </li>
                 )}
               </ul>

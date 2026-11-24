@@ -202,6 +202,11 @@ function Facturalo() {
         ...ls,
         { id: uid(), desc: "Descarga", qty: 1, unit: "u", price: sale.delivery?.unloadPrice ?? 0 },
       ]);
+    if (!sale.delivery && sale.pickupFee)
+      setLines((ls) => [
+        ...ls,
+        { id: uid(), desc: "Flete por su cuenta", qty: 1, unit: "u", price: sale.pickupFee ?? 0 },
+      ]);
     setNote(`Venta #${sale.number}`);
     setManualTotal(0);
   };
