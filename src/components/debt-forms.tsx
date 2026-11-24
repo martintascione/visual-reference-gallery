@@ -283,18 +283,23 @@ export function SupplierDebtForm({
     if (edit)
       updatePurchase(edit.id, one(Math.round(amount), due || undefined, note.trim()), false);
     else
-      rows.forEach((r, k) =>
-        addPurchase(
-          one(
-            Math.round(r.amount),
-            r.date,
-            rows.length > 1
-              ? `Cuota ${k + 1}/${rows.length}${note.trim() ? " · " + note.trim() : ""}`
-              : note.trim(),
+      // Todas las cuotas de esta deuda van juntas: se ven separadas de otras deudas del mismo proveedor.
+      ((group) =>
+        rows.forEach((r, k) =>
+          addPurchase(
+            {
+              ...one(
+                Math.round(r.amount),
+                r.date,
+                rows.length > 1
+                  ? `Cuota ${k + 1}/${rows.length}${note.trim() ? " · " + note.trim() : ""}`
+                  : note.trim(),
+              ),
+              debtGroup: group,
+            },
+            false,
           ),
-          false,
-        ),
-      );
+        ))(uid());
     onClose();
   };
 

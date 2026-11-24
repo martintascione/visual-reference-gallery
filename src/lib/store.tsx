@@ -1223,7 +1223,20 @@ const sameName = (a: string | undefined, b: string | undefined) =>
 
 /** Cuentas con canteras y transportes: lo comprado, lo pagado y el saldo de cada uno. */
 export function supplierAccounts(db: DB) {
-  type Entry = { date: string; due?: string | undefined; amount: number };
+  type Entry = {
+    /** Id del renglón: la descarga (o "id-d" para su descarga) o la cuota de una deuda. */
+    id: string;
+    purchaseId: string;
+    date: string;
+    due?: string | undefined;
+    amount: number;
+    /** Deuda cargada a mano a la que pertenece (sus cuotas comparten grupo). */
+    group?: string | undefined;
+    note?: string | undefined;
+    /** Lo pagado de este renglón y lo que falta (después de repartir los pagos). */
+    paid: number;
+    rest: number;
+  };
   type Acc = {
     party: string;
     kind: "cantera" | "transporte";
@@ -1249,39 +1262,71 @@ export function supplierAccounts(db: DB) {
       );
     return a;
   };
-  const add = (a: Acc, date: string, amount: number, due: string | undefined) => {
-    a.debe += amount;
-    if (date > a.last) a.last = date;
-    a.entries.push({ date: date.slice(0, 10), due, amount });
+  const add = (a: Acc, e: Omit<Entry, "paid" | "rest">) => {
+    a.debe += e.amount;
+    if (e.date > a.last) a.last = e.date;
+    a.entries.push({ ...e, date: e.date.slice(0, 10), paid: 0, rest: e.amount });
   };
   for (const p of db.purchases) {
+    const group = p.debtOnly ? (p.debtGroup ?? p.id) : undefined;
     if (p.debtOnly !== "transporte")
-      add(
-        get(p.supplier, "cantera"),
-        p.date,
-        p.items.reduce((x, i) => x + i.total, 0),
-        p.payDue,
-      );
+      add(get(p.supplier, "cantera"), {
+        id: p.id,
+        purchaseId: p.id,
+        date: p.date,
+        amount: p.items.reduce((x, i) => x + i.total, 0),
+        due: p.payDue,
+        group,
+        note: p.note,
+      });
     if (p.carrier && p.freightTotal > 0)
-      add(get(p.carrier, "transporte"), p.date, p.freightTotal, p.freightDue);
+      add(get(p.carrier, "transporte"), {
+        id: p.id,
+        purchaseId: p.id,
+        date: p.date,
+        amount: p.freightTotal,
+        due: p.freightDue,
+        group: p.debtOnly === "transporte" ? group : undefined,
+        note: p.note,
+      });
     // La descarga, si la cobra alguien de afuera, va a la cuenta de esa persona o transporte.
     if (p.unloadBy && p.unloadCost > 0)
-      add(
-        get(p.unloadBy, "transporte"),
-        p.date,
-        p.unloadCost,
-        sameName(p.unloadBy, p.carrier) ? p.freightDue : p.unloadDue,
-      );
+      add(get(p.unloadBy, "transporte"), {
+        id: p.id + "-d",
+        purchaseId: p.id,
+        date: p.date,
+        amount: p.unloadCost,
+        due: sameName(p.unloadBy, p.carrier) ? p.freightDue : p.unloadDue,
+      });
   }
-  for (const pay of db.supplierPayments) get(pay.party, pay.kind).haber += pay.amount;
+  const general = new Map<Acc, number>();
+  for (const pay of db.supplierPayments) {
+    const a = get(pay.party, pay.kind);
+    a.haber += pay.amount;
+    // Un pago hecho a una cuota (o al asentar una descarga) cubre primero ese renglón.
+    let left = pay.amount;
+    const target = pay.purchaseId
+      ? (a.entries.find((e) => e.id === pay.purchaseId && e.rest > 0) ??
+        a.entries.find((e) => e.purchaseId === pay.purchaseId && e.rest > 0))
+      : undefined;
+    if (target) {
+      const c = Math.min(left, target.rest);
+      target.paid += c;
+      target.rest -= c;
+      left -= c;
+    }
+    general.set(a, (general.get(a) ?? 0) + left);
+  }
   for (const a of map.values()) {
-    let left = a.haber;
+    // El resto de los pagos cubre lo que vence antes.
+    let left = general.get(a) ?? 0;
     const ordered = [...a.entries].sort((x, y) => (x.due ?? x.date).localeCompare(y.due ?? y.date));
     for (const e of ordered) {
-      const cover = Math.min(left, e.amount);
-      left -= cover;
-      const rest = e.amount - cover;
-      if (rest > 0.5 && e.due) a.pending.push({ due: e.due, amount: rest });
+      const c = Math.min(left, e.rest);
+      e.paid += c;
+      e.rest -= c;
+      left -= c;
+      if (e.rest > 0.5 && e.due) a.pending.push({ due: e.due, amount: e.rest });
     }
     a.pending.sort((x, y) => x.due.localeCompare(y.due));
     a.remind = a.pending[0]?.due;

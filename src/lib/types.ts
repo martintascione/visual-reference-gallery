@@ -425,6 +425,8 @@ export type Purchase = {
   freightDue?: string | undefined;
   /** Deuda cargada a mano, sin mercadería (saldo anterior, factura vieja…): a una cantera o a un transporte. */
   debtOnly?: "cantera" | "transporte" | undefined;
+  /** Cuotas de una misma deuda cargada a mano comparten este grupo. */
+  debtGroup?: string | undefined;
   /** Quién cobra la descarga (vacío = personal propio, no queda deuda). */
   unloadBy?: string | undefined;
   /** Aviso para pagarle el saldo a quien descargó, cuando no es el mismo transporte. */
