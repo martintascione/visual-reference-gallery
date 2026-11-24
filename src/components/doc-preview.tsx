@@ -3,7 +3,7 @@ import { Check, FileDown, Loader2, Mail, MessageCircle } from "lucide-react";
 import type { Quote, Sale } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { documentHtml, openDocumentPdf, pdfFromHtml } from "@/lib/quote-pdf";
-import { shareDocWhatsApp } from "@/lib/doc-share";
+import { canShareFile, shareDocWhatsApp } from "@/lib/doc-share";
 import { mailSend } from "@/lib/correo";
 import { ars } from "@/lib/format";
 import { Input, Modal, btn } from "@/components/ui-bits";
@@ -40,7 +40,9 @@ export function DocPreview({
     [doc?.id, kind, db.settings, client],
   );
   // El PDF se arma apenas se abre la vista previa: así WhatsApp y el mail salen al toque.
-  const [pdf, setPdf] = useState<{ blob: Blob; base64: string } | null>(null);
+  const [pdf, setPdf] = useState<{ blob: Blob; base64: string; cover?: Blob | undefined } | null>(
+    null,
+  );
   useEffect(() => {
     setPdf(null);
     if (!built) return;
@@ -54,17 +56,18 @@ export function DocPreview({
   }, [built]);
   if (!doc || !built) return null;
   const label = kind === "presupuesto" ? "presupuesto" : "comprobante";
+  const fileShare = canShareFile();
 
-  const sendWa = async () => {
+  const sendWa = async (how: "archivo" | "link") => {
     setWa(true);
     try {
-      const r = await shareDocWhatsApp(db, doc, kind, pdf?.blob);
+      const r = await shareDocWhatsApp(db, doc, kind, pdf?.blob, how, pdf?.cover);
       setState({
         s: "ok",
         msg:
           r === "link"
-            ? "Este navegador no deja adjuntar archivos: se abrió WhatsApp con el mensaje y un link corto al PDF."
-            : "PDF compartido: elegí WhatsApp y el chat, y se manda como archivo.",
+            ? "Se abrió el chat de WhatsApp con el mensaje y el link al PDF, listo para enviar."
+            : "PDF compartido como archivo.",
       });
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError"))
@@ -131,8 +134,14 @@ export function DocPreview({
           <button
             className={btn.soft}
             disabled={wa || !pdf}
-            onClick={() => void sendWa()}
-            title={pdf ? "Enviar el PDF por WhatsApp" : "Preparando el PDF…"}
+            onClick={() => void sendWa(fileShare ? "archivo" : "link")}
+            title={
+              pdf
+                ? fileShare
+                  ? "Abre el menú Compartir con el PDF adjunto"
+                  : "Abre el chat de WhatsApp con el link al PDF"
+                : "Preparando el PDF…"
+            }
           >
             {wa || !pdf ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -141,6 +150,16 @@ export function DocPreview({
             )}
             WhatsApp
           </button>
+          {fileShare && (
+            <button
+              className={btn.ghost}
+              disabled={wa || !pdf}
+              onClick={() => void sendWa("link")}
+              title="Abre el chat del cliente en WhatsApp con el mensaje y el link al PDF"
+            >
+              Chat con link
+            </button>
+          )}
           <span className="w-56">
             <Input
               type="email"
@@ -173,6 +192,13 @@ export function DocPreview({
             className={`rounded-2xl px-4 py-2 text-xs ${state.s === "error" ? "bg-danger-soft text-danger-soft-foreground" : "bg-surface text-muted-foreground"}`}
           >
             {state.msg}
+          </p>
+        )}
+        {fileShare && !/Android|iPhone|iPad/i.test(navigator.userAgent) && (
+          <p className="text-[11px] text-muted-foreground">
+            WhatsApp: si en el menú Compartir no aparece WhatsApp, tocá "Editar extensiones…" y
+            activalo (tiene que estar instalada la app de WhatsApp en la compu). O usá "Chat con
+            link", que abre el chat del cliente con el mensaje listo.
           </p>
         )}
         {!client?.email && !email && (

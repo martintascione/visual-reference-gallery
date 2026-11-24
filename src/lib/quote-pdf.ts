@@ -246,7 +246,17 @@ export async function pdfFromHtml(html: string) {
     }
     const blob = pdf.output("blob");
     const base64 = pdf.output("datauristring").split(",")[1] ?? "";
-    return { blob, base64 };
+    // Imagen para la vista previa del link en WhatsApp (1200 × 630): la parte de arriba del documento.
+    const cover = document.createElement("canvas");
+    cover.width = 1200;
+    cover.height = 630;
+    const cx = cover.getContext("2d")!;
+    cx.fillStyle = "#ffffff";
+    cx.fillRect(0, 0, 1200, 630);
+    const scale = 1200 / canvas.width;
+    cx.drawImage(canvas, 0, 0, canvas.width, 630 / scale, 0, 0, 1200, 630);
+    const coverBlob = await new Promise<Blob | null>((r) => cover.toBlob(r, "image/jpeg", 0.85));
+    return { blob, base64, cover: coverBlob ?? undefined };
   } finally {
     frame.remove();
   }

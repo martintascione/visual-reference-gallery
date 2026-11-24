@@ -7,38 +7,55 @@ import { ars } from "./format";
 
 const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 
-/** Sube el PDF y devuelve un link público para abrirlo sin descargar nada. */
-export async function uploadDocPdf(blob: Blob, fileName: string) {
-  if (DEMO) return `https://ejemplo.com/${encodeURIComponent(fileName)}.pdf`;
-  const safe = fileName
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  // Nombre corto para que el link no quede largo.
-  const id = Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6);
-  const path = `${id}-${(safe || "doc").slice(0, 24)}.pdf`;
-  const { error } = await supabase.storage
-    .from("documentos")
-    .upload(path, blob, { contentType: "application/pdf", upsert: false });
+/**
+ * Sube el PDF (más la imagen y el título para la vista previa en WhatsApp)
+ * y devuelve un link corto del propio sitio (ej. aridospetreos.com/p/k3f9a2x).
+ */
+export async function uploadDocPdf(
+  blob: Blob,
+  _fileName: string,
+  preview?: { cover?: Blob | undefined; title: string; description: string },
+) {
+  const bytes = crypto.getRandomValues(new Uint8Array(7));
+  const id = [...bytes].map((b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+  const host = window.location.host.replace(/^www\./, "");
+  if (DEMO) return `${host}/p/${id}`;
+  const up = (path: string, body: Blob, type: string) =>
+    supabase.storage.from("documentos").upload(path, body, { contentType: type, upsert: false });
+  const { error } = await up(`d/${id}.pdf`, blob, "application/pdf");
   if (error) throw new Error(error.message);
-  return supabase.storage.from("documentos").getPublicUrl(path).data.publicUrl;
+  // La vista previa es un extra: si falla, el link igual funciona.
+  if (preview) {
+    await Promise.all([
+      preview.cover ? up(`d/${id}.jpg`, preview.cover, "image/jpeg") : null,
+      up(
+        `d/${id}.json`,
+        new Blob([JSON.stringify({ t: preview.title, d: preview.description })], {
+          type: "application/json",
+        }),
+        "application/json",
+      ),
+    ]).catch(() => null);
+  }
+  return `${host}/p/${id}`;
 }
 
-/** Texto corto y prolijo para mandar por WhatsApp. */
+/** Mensaje corto y simple para WhatsApp. */
 export function waCopy(db: DB, doc: Quote | Sale, kind: "presupuesto" | "venta", link: string) {
   const n = String(doc.number).padStart(4, "0");
-  const name =
+  const first =
     doc.clientName && doc.clientName.toLowerCase() !== "consumidor final"
-      ? ` ${doc.clientName.split(" ")[0]}`
+      ? ` ${doc.clientName
+          .trim()
+          .split(" ")[0]!
+          .replace(/^./, (c) => c.toUpperCase())}`
       : "";
-  const what =
-    kind === "presupuesto" ? `el presupuesto N° ${n}` : `el comprobante de tu compra N° ${n}`;
+  const what = kind === "presupuesto" ? `el presupuesto N° ${n}` : `el comprobante N° ${n}`;
   const valid =
     "validUntil" in doc
-      ? ` Es válido hasta el ${doc.validUntil.slice(8, 10)}/${doc.validUntil.slice(5, 7)}.`
+      ? `, válido hasta el ${doc.validUntil.slice(8, 10)}/${doc.validUntil.slice(5, 7)}`
       : "";
-  return `Hola${name}! Te paso ${what} de ${db.settings.businessName} por ${ars(doc.total)}.${valid}\n\nLo podés ver acá: ${link}\n\nCualquier consulta, avisame.`;
+  return `Hola${first}! Te paso ${what} por ${ars(doc.total)}${valid}.${link ? `\n${link}` : ""}\n\n${db.settings.businessName}`;
 }
 
 /** Número para wa.me: 54 + característica sin el 0 y sin el 15. */
@@ -74,23 +91,32 @@ export async function shareDocWhatsApp(
   doc: Quote | Sale,
   kind: "presupuesto" | "venta",
   ready?: Blob,
+  /** "archivo": menú de compartir con el PDF adjunto. "link": abre el chat de WhatsApp con un link al PDF. */
+  how: "archivo" | "link" = "archivo",
+  cover?: Blob,
 ) {
   const { html, fileName } = documentHtml(db, doc, kind, false);
   const phone = waPhone(
     ("phone" in doc ? doc.phone : undefined) ??
       db.clients.find((c) => c.id === doc.clientId)?.phone,
   );
-  if (ready && canShareFile()) {
+  if (how === "archivo" && ready && canShareFile()) {
     const file = new File([ready], `${fileName}.pdf`, { type: "application/pdf" });
-    const text = waCopy(db, doc, kind, "").replace(/\n\nLo podés ver acá: \n/, "\n");
+    const text = waCopy(db, doc, kind, "");
     await navigator.share({ files: [file], title: fileName, text });
     return "compartido";
   }
   // La ventana se abre antes de subir el PDF para que el navegador no la bloquee.
   const win = window.open("about:blank", "_blank");
   try {
-    const blob = ready ?? (await pdfFromHtml(html)).blob;
-    const link = await uploadDocPdf(blob, fileName);
+    const made = ready ? null : await pdfFromHtml(html);
+    const blob = ready ?? made!.blob;
+    const n = String(doc.number).padStart(4, "0");
+    const link = await uploadDocPdf(blob, fileName, {
+      cover: cover ?? made?.cover,
+      title: `${kind === "presupuesto" ? "Presupuesto" : "Comprobante"} N° ${n} · ${db.settings.businessName}`,
+      description: `${doc.clientName && doc.clientName.toLowerCase() !== "consumidor final" ? doc.clientName + " · " : ""}Total ${ars(doc.total)}. Tocá para ver el PDF.`,
+    });
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(waCopy(db, doc, kind, link))}`;
     if (win) win.location.href = url;
     else window.location.href = url;

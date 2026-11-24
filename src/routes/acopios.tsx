@@ -34,6 +34,18 @@ export const Route = createFileRoute("/acopios")({
   component: Acopios,
 });
 
+const unitShort: Record<SaleUnit, string> = {
+  kg: "kg",
+  t: "t",
+  bolson: "bolsas",
+  bigbag: "bolsones",
+  bigbag2: "bolsones",
+  viaje: "viajes",
+  m2: "m²",
+  u: "u",
+  l: "L",
+};
+
 const isoOf = (d: string) => (d === todayISO() ? new Date().toISOString() : d + "T12:00:00.000Z");
 
 function Acopios() {
@@ -397,6 +409,9 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
   const [unit, setUnit] = useState<SaleUnit>("t");
   const [qty, setQty] = useState(0);
   const [price, setPrice] = useState<number | undefined>(undefined);
+  // Retiro de lo presupuestado: cantidad que se lleva hoy de cada producto.
+  const [takes, setTakes] = useState<Record<string, number>>({});
+  const [showOther, setShowOther] = useState(false);
   // Pago
   const [payOpen, setPayOpen] = useState(false);
   const [amount, setAmount] = useState(0);
@@ -408,6 +423,8 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
     setPid("");
     setQty(0);
     setPrice(undefined);
+    setTakes({});
+    setShowOther(false);
     setPayOpen(false);
     setConfirm(null);
   }, [s?.id]);
@@ -421,8 +438,19 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
   const ivaK = s.withIva ? 1 + db.settings.ivaPct / 100 : 1;
   // Precio del presupuesto si ese producto estaba presupuestado; si no, lista de hoy (con IVA si el acopio va con IVA).
   const unitPrice = price ?? quoted?.unitPrice ?? (p ? Math.round(listPrice(p, u) * ivaK) : 0);
-  const total = Math.round(unitPrice * qty);
+  const otherTotal = p && qty > 0 ? Math.round(unitPrice * qty) : 0;
+  const keyOf = (it: { productId: string; unit: SaleUnit }) => it.productId + "|" + it.unit;
+  const quotedRows = (s.items ?? []).map((it) => {
+    const took = s.withdrawals
+      .filter((w) => w.productId === it.productId && w.unit === it.unit)
+      .reduce((a, w) => a + w.qty, 0);
+    const now = takes[keyOf(it)] ?? 0;
+    return { it, took, left: Math.max(0, it.qty - took), now, sub: Math.round(it.unitPrice * now) };
+  });
+  const quotedTotal = quotedRows.reduce((a, r) => a + r.sub, 0);
+  const total = quotedTotal + (showOther || !s.items?.length ? otherTotal : 0);
   const after = b.saldo - total;
+  const hasOther = (showOther || !s.items?.length) && !!p && qty > 0;
   const client = db.clients.find((c) => c.id === s.clientId);
   const places = [
     "Retira en el corralón",
@@ -431,20 +459,40 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
   ];
 
   const addW = () => {
-    if (!p || qty <= 0) return;
-    addStockpileWithdrawal(s.id, {
-      date: isoOf(wDate),
-      place: place.trim() || "Retira en el corralón",
-      productId: p.id,
-      name: p.name,
-      qty,
-      unit: u,
-      unitPrice,
-      total,
-      baseQty: toBaseQty(p, qty, u),
-    });
+    const where = place.trim() || "Retira en el corralón";
+    const when = isoOf(wDate);
+    for (const r of quotedRows) {
+      if (r.now <= 0) continue;
+      const prod = db.products.find((x) => x.id === r.it.productId);
+      addStockpileWithdrawal(s.id, {
+        date: when,
+        place: where,
+        productId: r.it.productId,
+        name: r.it.name,
+        qty: r.now,
+        unit: r.it.unit,
+        unitPrice: r.it.unitPrice,
+        total: r.sub,
+        baseQty: prod ? toBaseQty(prod, r.now, r.it.unit) : r.now,
+      });
+    }
+    if (hasOther && p)
+      addStockpileWithdrawal(s.id, {
+        date: when,
+        place: where,
+        productId: p.id,
+        name: p.name,
+        qty,
+        unit: u,
+        unitPrice,
+        total: otherTotal,
+        baseQty: toBaseQty(p, qty, u),
+      });
+    setTakes({});
     setQty(0);
+    setPid("");
     setPrice(undefined);
+    setShowOther(false);
   };
   const addP = () => {
     if (amount <= 0) return;
@@ -488,100 +536,11 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
       subtitle={`Pagó ${ars(b.paid)} · retiró ${ars(b.taken)} · ${b.saldo >= 0 ? `le quedan ${ars(b.saldo)}` : `debe ${ars(-b.saldo)}`}`}
     >
       <div className="flex flex-col gap-4">
-        {!!s.items?.length && (
-          <div className="rounded-3xl bg-surface p-4">
-            <p className="mb-2 text-xs font-semibold">
-              Lo presupuestado{s.withIva ? " (precios con IVA)" : ""}
-            </p>
-            <div className="flex flex-col gap-1 text-xs">
-              {s.items.map((it) => {
-                const took = s.withdrawals
-                  .filter((w) => w.productId === it.productId && w.unit === it.unit)
-                  .reduce((a, w) => a + w.qty, 0);
-                const left = Math.max(0, it.qty - took);
-                return (
-                  <button
-                    key={it.productId + it.unit}
-                    type="button"
-                    className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-card"
-                    title="Cargar un retiro de este producto"
-                    onClick={() => {
-                      setPid(it.productId);
-                      setUnit(it.unit);
-                      setPrice(undefined);
-                      setQty(left || 0);
-                    }}
-                  >
-                    <span>
-                      {qtyUnit(it.qty, it.unit)} {it.name} · {ars(it.unitPrice)} c/u
-                    </span>
-                    <span className={left > 0 ? "font-semibold" : "text-success-foreground"}>
-                      {left > 0 ? `faltan retirar ${qtyUnit(left, it.unit)}` : "retirado todo"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="on-surface rounded-3xl bg-surface p-4">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold">
             <Truck className="h-4 w-4" strokeWidth={1.6} /> Registrar un retiro
           </p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
-            <Field label="Producto" className="col-span-2">
-              <Select
-                value={pid}
-                onChange={(e) => {
-                  setPid(e.target.value);
-                  setPrice(undefined);
-                  const np = products.find((x) => x.id === e.target.value);
-                  if (np) {
-                    // Igual que en la venta: viaje o tonelada si van primero; si no, bolsa en piedras.
-                    const us = saleUnitsFor(np);
-                    setUnit(
-                      (us[0] === "viaje" || us[0] === "t"
-                        ? us[0]
-                        : us[np.category === "piedra" ? 1 : 0]) ?? "u",
-                    );
-                  }
-                }}
-              >
-                <option value="">Elegir producto…</option>
-                {products.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Cantidad">
-              <NumberInput value={qty} onChange={setQty} />
-            </Field>
-            <Field label="Unidad">
-              <Select
-                value={u}
-                onChange={(e) => {
-                  setUnit(e.target.value as SaleUnit);
-                  setPrice(undefined);
-                }}
-                disabled={!p}
-              >
-                {p &&
-                  units.map((x) => (
-                    <option key={x} value={x}>
-                      {unitLabelFor(p, x)}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-            <Field
-              label="Precio unitario"
-              hint={quoted && price === undefined ? "Precio del presupuesto" : undefined}
-              help="Si el producto estaba en el presupuesto, sale con ese precio. Si no, con la lista de hoy. Se puede cambiar a mano."
-            >
-              <NumberInput value={unitPrice} onChange={(v) => setPrice(v)} prefix="$" />
-            </Field>
+          <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3">
             <Field label="Fecha del retiro">
               <Input
                 type="date"
@@ -589,7 +548,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
                 onChange={(e) => setWDate(e.target.value || todayISO())}
               />
             </Field>
-            <Field label="Lugar de retiro" className="col-span-2">
+            <Field label="Dónde lo retira o se entrega" className="sm:col-span-2">
               <Input
                 list="acopio-lugares"
                 value={place}
@@ -602,21 +561,160 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
               </datalist>
             </Field>
           </div>
+
+          {quotedRows.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] font-medium text-muted-foreground">
+                Productos del presupuesto{s.withIva ? " (precios con IVA)" : ""}: poné cuánto se
+                lleva hoy
+              </p>
+              {quotedRows.map((r) => (
+                <div
+                  key={keyOf(r.it)}
+                  className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-2 rounded-2xl bg-card p-3 sm:grid-cols-[minmax(0,1fr)_140px_auto_110px]"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{r.it.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {qtyUnit(r.it.qty, r.it.unit)} presupuestado · {ars(r.it.unitPrice)} c/u ·{" "}
+                      {r.left > 0 ? (
+                        <b className="text-foreground">faltan {qtyUnit(r.left, r.it.unit)}</b>
+                      ) : (
+                        <span className="text-success-foreground">retirado todo</span>
+                      )}
+                    </p>
+                  </div>
+                  <NumberInput
+                    value={r.now}
+                    onChange={(v) => setTakes((t) => ({ ...t, [keyOf(r.it)]: Math.max(0, v) }))}
+                    suffix={unitShort[r.it.unit]}
+                  />
+                  <button
+                    type="button"
+                    className={`${btn.ghost} hidden sm:inline-flex`}
+                    disabled={r.left <= 0}
+                    onClick={() => setTakes((t) => ({ ...t, [keyOf(r.it)]: r.left }))}
+                  >
+                    Todo lo que falta
+                  </button>
+                  <p className="hidden text-right text-sm font-semibold tabular-nums sm:block">
+                    {r.sub ? ars(r.sub) : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {quotedRows.length > 0 && !showOther ? (
+            <button
+              type="button"
+              className={`${btn.ghost} mt-2`}
+              onClick={() => setShowOther(true)}
+            >
+              <Plus className="h-3.5 w-3.5" /> Otro producto (fuera del presupuesto)
+            </button>
+          ) : (
+            <div className={quotedRows.length ? "mt-3 rounded-2xl bg-card p-3" : ""}>
+              {quotedRows.length > 0 && (
+                <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                  Otro producto, fuera del presupuesto
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
+                <Field label="Producto" className="col-span-2">
+                  <Select
+                    value={pid}
+                    onChange={(e) => {
+                      setPid(e.target.value);
+                      setPrice(undefined);
+                      const np = products.find((x) => x.id === e.target.value);
+                      if (np) {
+                        // Igual que en la venta: viaje o tonelada si van primero; si no, bolsa en piedras.
+                        const us = saleUnitsFor(np);
+                        setUnit(
+                          (us[0] === "viaje" || us[0] === "t"
+                            ? us[0]
+                            : us[np.category === "piedra" ? 1 : 0]) ?? "u",
+                        );
+                      }
+                    }}
+                  >
+                    <option value="">Elegir producto…</option>
+                    {products.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Cantidad">
+                  <NumberInput value={qty} onChange={setQty} />
+                </Field>
+                <Field label="Unidad">
+                  <Select
+                    value={u}
+                    onChange={(e) => {
+                      setUnit(e.target.value as SaleUnit);
+                      setPrice(undefined);
+                    }}
+                    disabled={!p}
+                  >
+                    {p &&
+                      units.map((x) => (
+                        <option key={x} value={x}>
+                          {unitLabelFor(p, x)}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+                <Field
+                  label="Precio unitario"
+                  hint={quoted && price === undefined ? "Precio del presupuesto" : undefined}
+                  help="Si el producto estaba en el presupuesto, sale con ese precio. Si no, con la lista de hoy. Se puede cambiar a mano."
+                >
+                  <NumberInput value={unitPrice} onChange={(v) => setPrice(v)} prefix="$" />
+                </Field>
+                <p className="col-span-2 self-end pb-2.5 text-sm sm:col-span-3">
+                  {p && qty > 0 ? (
+                    <>
+                      {qtyUnit(qty, u)} × {ars(unitPrice)} = <b>{ars(otherTotal)}</b>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              {quotedRows.length > 0 && (
+                <button
+                  type="button"
+                  className={`${btn.ghost} mt-1`}
+                  onClick={() => {
+                    setShowOther(false);
+                    setPid("");
+                    setQty(0);
+                  }}
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-card p-3 text-sm">
             <span>
-              {p && qty > 0 ? (
+              {total > 0 ? (
                 <>
-                  {qtyUnit(qty, u)} × {ars(unitPrice)} = <b>{ars(total)}</b> · le quedan{" "}
+                  Retiro de hoy <b>{ars(total)}</b> · le quedan{" "}
                   <b className={after < 0 ? "text-danger-soft-foreground" : ""}>{ars(after)}</b>
                   {after < 0 && " (se pasa del saldo)"}
                 </>
               ) : (
                 <span className="text-muted-foreground">
-                  Elegí el producto y la cantidad: el importe y el saldo se calculan solos.
+                  {quotedRows.length
+                    ? "Poné la cantidad que se lleva de cada producto: el importe y el saldo se calculan solos."
+                    : "Elegí el producto y la cantidad: el importe y el saldo se calculan solos."}
                 </span>
               )}
             </span>
-            <button className={btn.primary} disabled={!p || qty <= 0} onClick={addW}>
+            <button className={btn.primary} disabled={total <= 0} onClick={addW}>
               Registrar retiro{total > 0 ? ` · ${ars(total)}` : ""}
             </button>
           </div>

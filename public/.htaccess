@@ -3,6 +3,9 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /
 
+# Links cortos a los PDF de presupuestos y comprobantes: /p/abc1234 → p.php (vista previa en WhatsApp y abre el PDF)
+RewriteRule ^p/([a-z0-9]{5,12})/?$ p.php?id=$1 [L,QSA]
+
 # Si el archivo o la carpeta existen (JS, CSS, imágenes...), servirlos tal cual
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
