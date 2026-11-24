@@ -821,10 +821,18 @@ function NewPurchase({
   const [remito, setRemito] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [carrier, setCarrier] = useState("");
-  const [fMode, setFMode] = useState<"t" | "total">("t");
+  const [fMode, setFMode] = useState<"t" | "total" | "palet">("t");
+  // Descarga: total, por tonelada o por palet (las lajas se cobran por palet).
+  const [uMode, setUModeState] = useState<"total" | "t" | "palet">("total");
+  const [uTouched, setUTouched] = useState(false);
+  const setUMode = (m: "total" | "t" | "palet") => {
+    setUTouched(true);
+    setUModeState(m);
+  };
+  const [pallets, setPallets] = useState(0);
   const [fTons, setFTons] = useState(0);
   const [fValue, setFValue] = useState(0);
-  const [unload, setUnload] = useState(0);
+  const [uValue, setUValue] = useState(0);
   const [unloadBy, setUnloadBy] = useState("");
   const [payU, setPayU] = useState<PayBox>(boxBlank);
   const [updateCosts, setUpdateCosts] = useState(true);
@@ -923,7 +931,8 @@ function NewPurchase({
     setFMode(perTon ? "t" : "total");
     setFTons(edit.freightTons);
     setFValue(perTon ? edit.freightRate : edit.freightTotal);
-    setUnload(edit.unloadCost);
+    setUModeState("total");
+    setUValue(edit.unloadCost);
     setUnloadBy(edit.unloadBy ?? "");
     setUpdateCosts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -931,8 +940,29 @@ function NewPurchase({
   const valid = lines.filter((l) => l.productId && l.tons > 0);
   const tons = valid.reduce((a, l) => a + l.tons * kOf(l.productId), 0);
   const merch = valid.reduce((a, l) => a + l.tons * l.price, 0);
+  // Si el camión trae solo lajas, la descarga arranca por palet.
+  useEffect(() => {
+    if (uTouched || edit) return;
+    const ls = lines.filter((l) => l.productId);
+    const onlyLajas =
+      ls.length > 0 &&
+      ls.every((l) => products.find((x) => x.id === l.productId)?.category === "laja");
+    setUModeState(onlyLajas ? "palet" : "total");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, uTouched]);
   const freightTons = fTons || tons;
-  const freightTotal = fMode === "t" ? Math.round(freightTons * fValue) : fValue;
+  const freightTotal =
+    fMode === "t"
+      ? Math.round(freightTons * fValue)
+      : fMode === "palet"
+        ? Math.round(pallets * fValue)
+        : fValue;
+  const unload =
+    uMode === "total"
+      ? uValue
+      : uMode === "t"
+        ? Math.round(tons * uValue)
+        : Math.round(pallets * uValue);
   // La descarga puede cobrarla el mismo transporte (se paga junto con el flete) u otra persona.
   const unloader = unload > 0 ? unloadBy.trim() : "";
   const sameUnloader = !!unloader && unloader.toLowerCase() === carrier.trim().toLowerCase();
@@ -961,7 +991,10 @@ function NewPurchase({
       setCarrier("");
       setFTons(0);
       setFValue(0);
-      setUnload(0);
+      setUValue(0);
+      setPallets(0);
+      setUModeState("total");
+      setUTouched(false);
       setUnloadBy("");
       setPayU(boxBlank());
       setPayS(boxBlank());
@@ -1219,7 +1252,12 @@ function NewPurchase({
               <Plus className="h-3.5 w-3.5" /> Producto nuevo
             </button>
             <p className="text-xs text-muted-foreground">
-              {num(tons, 2)} t en total · mercadería <b className="text-foreground">{ars(merch)}</b>
+              {num(tons, 2)}{" "}
+              {valid.length > 0 &&
+              valid.every((l) => products.find((x) => x.id === l.productId)?.category === "laja")
+                ? "m²"
+                : "t"}{" "}
+              en total · mercadería <b className="text-foreground">{ars(merch)}</b>
             </p>
           </div>
           {edit ? (
@@ -1262,21 +1300,41 @@ function NewPurchase({
               </datalist>
             </Field>
             <Field
-              label={fMode === "t" ? "Tarifa por tonelada" : "Flete total"}
-              hint={fMode === "t" && freightTotal > 0 ? `Total ${ars(freightTotal)}` : undefined}
+              label={
+                fMode === "t"
+                  ? "Tarifa por tonelada"
+                  : fMode === "palet"
+                    ? "Tarifa por palet"
+                    : "Flete total"
+              }
+              hint={
+                fMode !== "total" && freightTotal > 0 ? `Total ${ars(freightTotal)}` : undefined
+              }
             >
               <NumberInput value={fValue} onChange={setFValue} prefix="$" />
             </Field>
             <Field
-              label="Total pagado por la descarga"
-              hint={
-                unload > 0 && tons > 0
-                  ? `= ${ars(Math.round(unload / tons))} por tonelada`
-                  : "Camión o palero, el total"
+              label={
+                uMode === "total"
+                  ? "Total pagado por la descarga"
+                  : uMode === "t"
+                    ? "Descarga por tonelada"
+                    : "Descarga por palet"
               }
-              help="El total que se pagó por bajar la carga (camión, máquina o palero). El sistema lo divide por las toneladas y lo suma al costo de cada producto. Si lo cobra alguien de afuera, abajo ponés quién y queda en su cuenta."
+              hint={
+                uMode !== "total"
+                  ? unload > 0
+                    ? `Total ${ars(unload)}`
+                    : uMode === "palet"
+                      ? "Cargá la cantidad de palets abajo"
+                      : undefined
+                  : unload > 0 && tons > 0
+                    ? `= ${ars(Math.round(unload / tons))} por tonelada`
+                    : "Camión o palero, el total"
+              }
+              help="Lo que se pagó por bajar la carga (camión, máquina o palero): el total, por tonelada o por palet (las lajas se cobran por palet). Se suma al costo de cada producto. Si lo cobra alguien de afuera, abajo ponés quién y queda en su cuenta."
             >
-              <NumberInput value={unload} onChange={setUnload} prefix="$" />
+              <NumberInput value={uValue} onChange={setUValue} prefix="$" />
             </Field>
             {unload > 0 && (
               <Field
@@ -1323,14 +1381,35 @@ function NewPurchase({
               </Field>
             )}
             <div className="col-span-full flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span>Flete</span>
               <Segmented
                 value={fMode}
                 onChange={setFMode}
                 options={[
                   { value: "t", label: "Por tonelada" },
                   { value: "total", label: "Total del viaje" },
+                  { value: "palet", label: "Por palet" },
                 ]}
               />
+              <span className="mx-2 h-5 w-px bg-border" />
+              <span>Descarga</span>
+              <Segmented
+                value={uMode}
+                onChange={setUMode}
+                options={[
+                  { value: "total", label: "Total" },
+                  { value: "t", label: "Por tonelada" },
+                  { value: "palet", label: "Por palet" },
+                ]}
+              />
+              {(fMode === "palet" || uMode === "palet") && (
+                <span className="flex items-center gap-2">
+                  Cantidad de palets
+                  <span className="w-28">
+                    <NumberInput value={pallets} onChange={setPallets} suffix="palets" />
+                  </span>
+                </span>
+              )}
               {fMode === "t" && (
                 <span className="flex items-center gap-2">
                   Toneladas del flete
