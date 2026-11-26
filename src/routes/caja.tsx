@@ -148,6 +148,7 @@ function Caja() {
   const teclaPending = pendingByBank(SEPARATE_BANK);
   const chequesTotal = cheques.reduce((a, c) => a + c.amount, 0);
 
+  const [felixOpen, setFelixOpen] = useState(false);
   const felixMoves = db.movements
     .filter((m) => m.account === FELIX_BANK || m.account === "El Tecla")
     .slice(0, 80);
@@ -310,94 +311,113 @@ function Caja() {
         icon={Wallet}
         className="mb-4"
         action={
-          <span className="text-[11px] text-muted-foreground">
-            No se suma a la caja del negocio
-          </span>
+          <button className={btn.soft} onClick={() => setFelixOpen((x) => !x)}>
+            {felixOpen ? "Ocultar" : "Ver movimientos"}
+          </button>
         }
       >
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs text-muted-foreground">
+        {!felixOpen ? (
+          <button
+            type="button"
+            onClick={() => setFelixOpen(true)}
+            className="flex w-full flex-wrap items-baseline justify-between gap-2 text-left"
+          >
+            <span className="text-xs text-muted-foreground">
               {felixBal >= 0
                 ? "Felix (El Tecla) le debe a Áridos"
-                : "Áridos le debe a Felix (El Tecla)"}
+                : "Áridos le debe a Felix (El Tecla)"}{" "}
+              · no se suma a la caja del negocio
+            </span>
+            <span className="text-xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</span>
+          </button>
+        ) : (
+          <>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  {felixBal >= 0
+                    ? "Felix (El Tecla) le debe a Áridos"
+                    : "Áridos le debe a Felix (El Tecla)"}
+                </p>
+                <p className="mt-1 text-2xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {felixOut > 0 ? `Ya pagó ${ars(felixOut)}` : "Todavía no pagó nada"}
+                  {teclaPending ? ` · + ${ars(teclaPending)} por acreditar` : ""}
+                  {teclaCheques.length
+                    ? ` · ${teclaCheques.length} cheques · ${ars(teclaCheques.reduce((a, c) => a + c.amount, 0))}`
+                    : ""}
+                </p>
+                {felixIn.length > 0 && (
+                  <p className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                    <span className="text-muted-foreground">Cobrado por Felix:</span>
+                    {felixIn.map(([how, v]) => (
+                      <Badge key={how}>
+                        {how}: {ars(v.amount)} ({v.n})
+                      </Badge>
+                    ))}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className={btn.primary} onClick={() => setFelixPay(true)}>
+                  <Banknote className="h-4 w-4" /> Cargar retiro / pago de Felix
+                </button>
+                <button className={btn.soft} onClick={() => setTeclaCheque(true)}>
+                  <FileCheck2 className="h-4 w-4" strokeWidth={1.6} /> Cheque en su cuenta
+                </button>
+                <button className={btn.soft} onClick={() => setTeclaIncome(true)}>
+                  <Plus className="h-4 w-4" /> Ingreso
+                </button>
+                <button className={btn.soft} onClick={() => setTeclaOut(true)}>
+                  <Minus className="h-4 w-4" /> Egreso
+                </button>
+                <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
+                  <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
+                </button>
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Suma lo que los clientes le pagaron a Felix (cobro "Otra: Felix (El Tecla)"), los
+              cheques de Áridos acreditados en su cuenta y otros ingresos. Baja con cada retiro o
+              pago de Felix.
             </p>
-            <p className="mt-1 text-2xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {felixOut > 0 ? `Ya pagó ${ars(felixOut)}` : "Todavía no pagó nada"}
-              {teclaPending ? ` · + ${ars(teclaPending)} por acreditar` : ""}
-              {teclaCheques.length
-                ? ` · ${teclaCheques.length} cheques · ${ars(teclaCheques.reduce((a, c) => a + c.amount, 0))}`
-                : ""}
-            </p>
-            {felixIn.length > 0 && (
-              <p className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                <span className="text-muted-foreground">Cobrado por Felix:</span>
-                {felixIn.map(([how, v]) => (
-                  <Badge key={how}>
-                    {how}: {ars(v.amount)} ({v.n})
-                  </Badge>
+            {teclaCheques.length > 0 && (
+              <div className="mb-3 grid gap-2 md:grid-cols-2">
+                {teclaCheques.map((c) => (
+                  <ChequeRow
+                    key={c.id}
+                    c={c}
+                    days={daysBetween(today, c.dueDate)}
+                    onStatus={setChequeStatus}
+                  />
                 ))}
+              </div>
+            )}
+            {moveMsg && (
+              <p className="mb-3 rounded-2xl bg-danger-soft px-4 py-2 text-xs text-danger-soft-foreground">
+                {moveMsg.text}
               </p>
             )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={btn.primary} onClick={() => setFelixPay(true)}>
-              <Banknote className="h-4 w-4" /> Cargar retiro / pago de Felix
-            </button>
-            <button className={btn.soft} onClick={() => setTeclaCheque(true)}>
-              <FileCheck2 className="h-4 w-4" strokeWidth={1.6} /> Cheque en su cuenta
-            </button>
-            <button className={btn.soft} onClick={() => setTeclaIncome(true)}>
-              <Plus className="h-4 w-4" /> Ingreso
-            </button>
-            <button className={btn.soft} onClick={() => setTeclaOut(true)}>
-              <Minus className="h-4 w-4" /> Egreso
-            </button>
-            <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
-              <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
-            </button>
-          </div>
-        </div>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Suma lo que los clientes le pagaron a Felix (cobro "Otra: Felix (El Tecla)"), los cheques
-          de Áridos acreditados en su cuenta y otros ingresos. Baja con cada retiro o pago de Felix.
-        </p>
-        {teclaCheques.length > 0 && (
-          <div className="mb-3 grid gap-2 md:grid-cols-2">
-            {teclaCheques.map((c) => (
-              <ChequeRow
-                key={c.id}
-                c={c}
-                days={daysBetween(today, c.dueDate)}
-                onStatus={setChequeStatus}
-              />
-            ))}
-          </div>
-        )}
-        {moveMsg && (
-          <p className="mb-3 rounded-2xl bg-danger-soft px-4 py-2 text-xs text-danger-soft-foreground">
-            {moveMsg.text}
-          </p>
-        )}
-        <Table
-          head={[
-            "Fecha",
-            "Concepto",
-            "Tipo",
-            "Cuenta",
-            "Estado",
-            { label: "Monto", right: true },
-            "",
-          ]}
-          min={720}
-        >
-          {felixMoves.map(renderRow)}
-        </Table>
-        {felixMoves.length === 0 && (
-          <p className="py-3 text-center text-xs text-muted-foreground">
-            Todavía no hay movimientos.
-          </p>
+            <Table
+              head={[
+                "Fecha",
+                "Concepto",
+                "Tipo",
+                "Cuenta",
+                "Estado",
+                { label: "Monto", right: true },
+                "",
+              ]}
+              min={720}
+            >
+              {felixMoves.map(renderRow)}
+            </Table>
+            {felixMoves.length === 0 && (
+              <p className="py-3 text-center text-xs text-muted-foreground">
+                Todavía no hay movimientos.
+              </p>
+            )}
+          </>
         )}
       </Card>
 
