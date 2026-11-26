@@ -349,7 +349,8 @@ function PurchaseModal({ product, onClose }: { product: Product | null; onClose:
             <Field label="Sale de">
               <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
                 <option value="Caja">Caja</option>
-                <option value="BBVA">BBVA</option>
+                <option value="BBVA">BBVA cuenta corriente</option>
+                <option value="BBVA CA">BBVA caja de ahorro</option>
                 <option value="Provincia">Provincia</option>
               </Select>
             </Field>

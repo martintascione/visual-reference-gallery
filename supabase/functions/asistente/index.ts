@@ -16,6 +16,15 @@ const SYSTEM = `Sos el asistente del panel de gestión de un corralón de árido
 
 FORMATO: respondé SIEMPRE llamando a la herramienta "responder" (texto + botones opcionales + mejora opcional). Nunca contestes en texto suelto.
 
+PODÉS HACER CAMBIOS EN EL SISTEMA (campo "operaciones" de "responder"). Cuando el usuario te pide hacer algo (borrar un cheque, editar un cliente, cargarle el CUIT, crear un cliente, unir dos clientes, cobrar una cuota, cobrar/depositar o endosar un cheque, cargar un gasto, un ingreso o egreso, ajustar un saldo, cambiar precio/costo/stock de un producto, borrar una venta o un presupuesto, cargar un pago de Felix), HACELO: mandá la operación en "operaciones" y en "texto" contá en una línea qué hiciste. NUNCA digas que no podés o que lo haga a mano si está en la lista de operaciones. La app ejecuta cada operación y muestra si salió bien; si algo falla, en el próximo mensaje vas a ver "[Resultado en el sistema: ...]" y le explicás al usuario qué pasó.
+Reglas:
+- Buscá el registro en la FOTO DEL NEGOCIO y usá el nombre del cliente, el N° de cheque, venta o presupuesto, o el nombre del producto tal como figuran ahí.
+- Si hay dos o más que coinciden, o falta un dato imprescindible (ej. el monto de un cobro), preguntá antes en una frase corta, sin mandar la operación.
+- Para borrar no hace falta pedir confirmación: si el usuario lo pidió claro, hacelo.
+- Fechas en formato aaaa-mm-dd. Cuentas: Caja, BBVA (cuenta corriente), BBVA caja de ahorro, Provincia o Felix. Montos como número sin puntos (1500000).
+- Precio y costo de producto van por la unidad base del producto, como figura en la FOTO (ej. por kg en piedras).
+- Si lo que pide no está en la lista de operaciones, explicá cómo hacerlo en el sistema con botones, o anotalo como mejora.
+
 Tu trabajo:
 1. Enseñar a usar el sistema paso a paso y, cuando se pueda, ofrecer botones que llevan directo a la herramienta (o la abren ya preparada con los datos que el usuario dijo).
 2. Responder preguntas sobre el negocio con los datos del contexto (ventas, stock, cuentas) cuando los tengas.
@@ -88,6 +97,7 @@ CAJA Y BANCOS
 - Saldo inicial o corregir un saldo: "Saldo inicial / ajuste" → elegir Caja, BBVA o Provincia → "Cargar el saldo que tengo hoy" (pone el saldo real y registra la diferencia) o "Sumar o restar un importe" (para que la caja cierre). Queda como "Saldo inicial" o "Ajuste de saldo", no asociado a ninguna venta (no cuenta como venta ni gasto).
 - Felix y Corralón El Tecla son lo mismo (el corralón de Felix, CUIT responsable inscripto, Factura A): es una sola cuenta, en Caja y bancos → "Felix · Corralón El Tecla", aparte del negocio (no se suma a la caja ni al cierre). El saldo es lo que Felix le debe a Áridos. Suma con los cobros "Otra: Felix (El Tecla)", con "Cheque en su cuenta" (cheques de Áridos que se acreditan en la cuenta de El Tecla: se cargan, se depositan en Felix y al marcar Acreditado suman) y con "Ingreso". Baja con "Cargar retiro / pago de Felix" y con "Egreso". "Saldo inicial / ajuste" para lo que ya debía. Abajo está el historial con lápiz y tacho. En Cheques hay un filtro "El Tecla". También baja cuando Felix le paga una deuda a un proveedor por Áridos: en Cuentas y saldos o Descargas → la cuenta del proveedor → al pagar, en "Cómo se paga" se elige "Cuenta corriente Felix (El Tecla)" (también en "Marcar pagada" de una cuota). Descuenta la deuda con el proveedor y el saldo de Felix, y puede quedar en negativo (entonces Áridos le debe a Felix).
 - Cobro "Otra: Felix (El Tecla)": cuando un cliente le paga a Felix (Corralón El Tecla) en vez de a Áridos, en la venta o en "Cobrar" la cuota se elige ese medio. El cliente queda sin deuda con Áridos y el importe pasa a la "Cuenta corriente con Felix" (en Caja y bancos): ahí se ve cuánto le debe El Tecla a Áridos. Cuando Felix le paga a Áridos (todo o una parte), "Cargar retiro / pago de Felix": importe, cómo pagó (retiro de efectivo de la caja de Felix → entra en Caja; transferencia → BBVA o Provincia; cheque → se cargan N°, banco y vencimiento y queda en la cartera de cheques de Áridos; u otro) y fecha. Cada retiro va descontando el saldo; en el historial (Caja y bancos → Felix) se ve cada pago con su medio. Si se carga mal, se borra con el tacho (el cheque se borra si sigue en cartera). "Saldo inicial / ajuste" para cargar lo que ya debía. No entra en la caja del negocio hasta que Felix paga. Al cobrar con Felix se elige cómo le pagó el cliente (efectivo, transferencia, cheque, e-cheq u otro, con el N°/banco/vencimiento si es cheque): queda en el historial de la cuenta corriente con Felix (Caja y bancos → Felix) y arriba se ve el total por cada medio.
+- El BBVA tiene dos cuentas: cuenta corriente y caja de ahorro. En Caja y bancos la tarjeta del BBVA muestra el total y cada una por separado (tocando cada renglón se filtran sus movimientos). En todos los lugares donde se elige cuenta aparecen las dos.
 - Movimientos de Caja y bancos: en la lista "Movimientos de todas las cuentas", el lápiz edita fecha, concepto, monto y cuenta, y el tacho lo elimina. Se corrige solo donde corresponde: cobro de cuota (vuelve a quedar pendiente o se ajusta lo pagado), gasto o débito (también en Gastos), pago a proveedor (también en su cuenta corriente), pago de acopio, depósito de cheque (el cheque vuelve a la cartera). Los cobros de una venta tienen "Ver venta": se cambian editando o borrando la venta.
 - Cheques (/cheques): cada cheque en cartera tiene "Cobrar / depositar" (pregunta la fecha y la cuenta donde entra: Provincia, BBVA, Caja si se cobró en efectivo, o Felix; y si ya está cobrado o queda depositado esperando acreditación) y "Endosar" (a quién se le da y la fecha). Los depositados tienen "Acreditado". El lápiz edita número, banco, librador, monto, vencimiento y fecha de recibido; el tacho lo elimina. Si el cheque es el cobro de una venta, el monto se cambia o se borra editando la venta; si se usó para pagar a un proveedor, desde ese pago.
 - Venta en acopio (el cliente paga hoy y retira después): Nueva venta → en Entrega prender "Queda en acopio" → elegir en cuánto retira (15 días, 1, 2, 3 o 6 meses, o una fecha). Se cobra normal, el stock no se descuenta y se crea el acopio con los productos y el saldo a favor. En Acopios → el acopio → "Editar productos" se cambian cantidades y precios, se suman productos nuevos o se sacan; si suma, se cobra la diferencia con "Otro pago a cuenta". Cada retiro descuenta el stock.
@@ -175,6 +185,49 @@ const responderTool = {
             nota: { type: "string", description: "Duda puntual de esta fila, si la hay." },
           },
           required: ["nombre"],
+        },
+      },
+      operaciones: {
+        type: "array",
+        maxItems: 20,
+        description: "Cambios que la app ejecuta en el sistema apenas llega la respuesta. Solo cuando el usuario lo pidió.",
+        items: {
+          type: "object",
+          properties: {
+            tipo: {
+              type: "string",
+              enum: [
+                "crear_cliente", "editar_cliente", "eliminar_cliente", "unir_clientes",
+                "cargar_cheque", "editar_cheque", "eliminar_cheque", "cobrar_cheque", "endosar_cheque",
+                "cobrar_cuota", "registrar_gasto", "registrar_ingreso", "registrar_egreso", "ajustar_saldo",
+                "pago_felix", "editar_producto", "eliminar_venta", "eliminar_presupuesto",
+              ],
+            },
+            cliente: { type: "string", description: "Nombre (o CUIT) del cliente como figura. En unir_clientes: el repetido que se borra." },
+            hacia: { type: "string", description: "unir_clientes: el cliente que queda." },
+            nombre: { type: "string", description: "Nombre nuevo (crear o renombrar cliente o producto)." },
+            telefono: { type: "string" }, email: { type: "string" }, cuit: { type: "string" }, dni: { type: "string" },
+            direccion: { type: "string" }, localidad: { type: "string" },
+            iva: { type: "string", enum: ["Consumidor final", "Responsable inscripto", "Monotributo", "Exento"] },
+            limite: { type: "number", description: "Límite de crédito (0 = sin límite)." },
+            nota: { type: "string" },
+            numero: { type: "string", description: "N° de cheque, de venta o de presupuesto." },
+            banco: { type: "string", description: "Banco emisor del cheque." },
+            librador: { type: "string" },
+            vencimiento: { type: "string", description: "Fecha de cobro del cheque aaaa-mm-dd." },
+            monto: { type: "number" },
+            cuenta: { type: "string", enum: ["Caja", "BBVA", "BBVA caja de ahorro", "Provincia", "Felix"], description: "BBVA = cuenta corriente." },
+            fecha: { type: "string", description: "aaaa-mm-dd; vacío = hoy." },
+            acreditado: { type: "boolean", description: "cobrar_cheque: true si ya está la plata, false si quedó depositado." },
+            entregado_a: { type: "string", description: "A quién se le dio el cheque." },
+            concepto: { type: "string" },
+            producto: { type: "string", description: "Nombre del producto como figura." },
+            precio: { type: "number" }, costo: { type: "number" }, stock: { type: "number" }, minimo: { type: "number" },
+            medio: { type: "string", description: "cobrar_cuota: medio de cobro como figura en el sistema (Efectivo, Transferencia BBVA, Otra: Felix (El Tecla)…). pago_felix: efectivo o transferencia." },
+            tipo_gasto: { type: "string", enum: ["fijo", "imprevisto", "debito", "flete", "compra"] },
+            saldo: { type: "number", description: "ajustar_saldo: saldo real que tiene que quedar." },
+          },
+          required: ["tipo"],
         },
       },
       mejoras: {

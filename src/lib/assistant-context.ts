@@ -43,11 +43,11 @@ export function fullContext(db: DB) {
 
   // Clientes
   push(`\nCLIENTES (${db.clients.length}):`);
-  for (const c of db.clients.slice(0, 80)) {
+  for (const c of db.clients.slice(0, 400)) {
     const b = clientBalance(db, c.id);
     const last = db.sales.find((x) => x.clientId === c.id);
     push(
-      `- ${c.name}${c.phone ? " · tel " + c.phone : ""}${c.cuit ? " · CUIT " + c.cuit : ""}${c.address ? " · " + c.address : ""} · límite ${c.creditLimit ? ars(c.creditLimit) : "sin límite"} · debe ${ars(b.balance)}${b.overdue ? ` (VENCIDO ${ars(b.overdue)})` : ""}${last ? ` · última compra ${dayOf(last.date)}` : ""}`,
+      `- ${c.name}${c.phone ? " · tel " + c.phone : ""}${c.email ? " · " + c.email : ""}${c.cuit ? " · CUIT " + c.cuit : " · sin CUIT"}${c.dni ? " · DNI " + c.dni : ""}${c.ivaCategory ? " · " + c.ivaCategory : ""}${c.address ? " · " + c.address : ""}${c.city ? " · " + c.city : ""} · límite ${c.creditLimit ? ars(c.creditLimit) : "sin límite"} · debe ${ars(b.balance)}${b.overdue ? ` (VENCIDO ${ars(b.overdue)})` : ""}${last ? ` · última compra ${dayOf(last.date)}` : ""}`,
     );
   }
   const dues = db.dues
@@ -88,7 +88,7 @@ export function fullContext(db: DB) {
 
   // Caja, bancos, cheques, liquidaciones
   push(
-    `\nCAJA Y BANCOS: Caja ${ars(accountBalance(db, "Caja"))} · BBVA ${ars(accountBalance(db, "BBVA"))} · Provincia ${ars(accountBalance(db, "Provincia"))}. Aparte, cuenta de Felix / Corralón El Tecla (es lo mismo, CUIT responsable inscripto): ${ars(accountBalance(db, "Felix") + accountBalance(db, "El Tecla"))} (positivo = Felix le debe a Áridos; no se suma al negocio).`,
+    `\nCAJA Y BANCOS: Caja ${ars(accountBalance(db, "Caja"))} · BBVA cuenta corriente ${ars(accountBalance(db, "BBVA"))} · BBVA caja de ahorro ${ars(accountBalance(db, "BBVA CA"))} · Provincia ${ars(accountBalance(db, "Provincia"))}. Aparte, cuenta de Felix / Corralón El Tecla (es lo mismo, CUIT responsable inscripto): ${ars(accountBalance(db, "Felix") + accountBalance(db, "El Tecla"))} (positivo = Felix le debe a Áridos; no se suma al negocio).`,
   );
   const pend = db.movements.filter((m) => m.settled === false && m.amount > 0);
   if (pend.length)
@@ -99,6 +99,13 @@ export function fullContext(db: DB) {
   push(
     `Cheques en cartera/depositados (${ch.length}): ${ch.map((c) => `N° ${c.number} ${c.bank} de ${c.clientName} ${ars(c.amount)} cobra ${c.dueDate} (${c.status}${c.echeq ? ", e-cheq" : ""})`).join("; ") || "ninguno"}.`,
   );
+  const otros = db.cheques
+    .filter((c) => c.status !== "cartera" && c.status !== "depositado")
+    .slice(0, 60);
+  if (otros.length)
+    push(
+      `Otros cheques (entregados, cobrados, rechazados, propios): ${otros.map((c) => `N° ${c.number} ${c.bank} ${ars(c.amount)} ${c.status}${c.givenTo ? " a " + c.givenTo : ""}${c.depositBank ? " en " + c.depositBank : ""}`).join("; ")}.`,
+    );
   const moves = db.movements.slice(0, 30);
   push(
     `Últimos movimientos: ${moves.map((m) => `${dayOf(m.date)} ${m.kind} ${m.account} ${m.amount >= 0 ? "+" : "−"}${ars(Math.abs(m.amount))} ${m.concept}`).join("; ")}.`,

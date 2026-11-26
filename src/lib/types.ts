@@ -2,7 +2,8 @@
 
 /** "El Tecla": cuenta de Corralón El Tecla (responsable inscripto), aparte del negocio. */
 /** "Felix": cuenta corriente entre Corralón El Tecla (Felix) y Áridos: lo que los clientes le pagaron a Felix. */
-export type Bank = "Caja" | "BBVA" | "Provincia" | "El Tecla" | "Felix";
+/** "BBVA" = cuenta corriente; "BBVA CA" = caja de ahorro del BBVA. */
+export type Bank = "Caja" | "BBVA" | "BBVA CA" | "Provincia" | "El Tecla" | "Felix";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
 /** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */

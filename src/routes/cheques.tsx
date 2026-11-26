@@ -446,7 +446,8 @@ function ChequeDeposit({ cheque, onClose }: { cheque: Cheque | null; onClose: ()
         <Field label="Cuenta donde entra">
           <Select value={bank} onChange={(e) => setBank(e.target.value as Bank)}>
             <option value="Provincia">Provincia</option>
-            <option value="BBVA">BBVA</option>
+            <option value="BBVA">BBVA cuenta corriente</option>
+            <option value="BBVA CA">BBVA caja de ahorro</option>
             <option value="Caja">Caja (cobrado en efectivo)</option>
             <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
           </Select>

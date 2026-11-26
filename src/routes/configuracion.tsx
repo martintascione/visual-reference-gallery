@@ -51,7 +51,7 @@ export const Route = createFileRoute("/configuracion")({
   component: Configuracion,
 });
 
-const banks: Bank[] = ["Caja", "BBVA", "Provincia"];
+const banks: Bank[] = ["Caja", "BBVA", "BBVA CA", "Provincia"];
 const methodNames: Record<PaymentMethod, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",

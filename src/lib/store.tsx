@@ -192,6 +192,8 @@ type Ctx = {
   session: Session | null;
   ready: boolean;
   syncError: string | null;
+  /** Estado actual al instante (para encadenar varias acciones seguidas, ej. el asistente). */
+  getDb: () => DB;
 } & Actions;
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -1667,6 +1669,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       session,
       ready,
       syncError,
+      getDb: () => dbRef.current,
       ...actions,
     }),
     [

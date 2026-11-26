@@ -7,6 +7,7 @@ import { listPrice } from "./pricing";
 import type { Attachment } from "./attachments";
 import type { ProductoPropuesto } from "./product-import";
 
+import type { Operacion } from "@/lib/assistant-ops";
 const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 
 /** Acciones que el asistente puede disparar en la web (se ejecutan en el navegador). */
@@ -53,6 +54,8 @@ export type AssistantReply = {
   mejoras?: Mejora[] | undefined;
   /** Productos leídos de un archivo, para revisar y guardar con un toque. */
   productos?: ProductoPropuesto[] | undefined;
+  /** Cambios que el asistente hace en el sistema (borrar, editar, cargar, cobrar). */
+  operaciones?: Operacion[] | undefined;
   error?: string | undefined;
 };
 
@@ -66,11 +69,15 @@ export type ChatMessage = {
   productos?: ProductoPropuesto[] | undefined;
   /** Resultado de guardar la importación ("5 creados, 2 actualizados"). */
   importado?: string | undefined;
+  /** Lo que el asistente hizo en el sistema y lo que no pudo. */
+  hechos?: { ok: boolean; texto: string }[] | undefined;
 };
 
 /** Texto que ve la IA de cada mensaje anterior (incluye lo que adjuntó y la tabla que propuso). */
 const historyText = (m: ChatMessage) => {
   let t = m.content;
+  if (m.hechos?.length)
+    t += `\n[Resultado en el sistema: ${m.hechos.map((h) => (h.ok ? "HECHO " : "NO SE PUDO ") + h.texto).join(" | ")}]`;
   if (m.adjuntos?.length) t += `\n[Adjuntó: ${m.adjuntos.map((a) => a.nombre).join(", ")}]`;
   if (m.productos?.length)
     t += `\n[Tabla que propusiste${m.importado ? ` (ya guardada: ${m.importado})` : " (todavía sin guardar)"}: ${JSON.stringify(m.productos)}]`;
@@ -109,7 +116,7 @@ export function businessContext(db: DB) {
     `Productos (${products.length}): ${products.slice(0, 40).join("; ") || "ninguno cargado todavía"}.`,
     `Clientes cargados: ${db.clients.length}. Con deuda: ${debtors.map((x) => `${x.c.name} ${ars(x.b.balance)}${x.b.overdue ? " (vencido " + ars(x.b.overdue) + ")" : ""}`).join("; ") || "ninguno"}.`,
     `Hoy: ventas ${ars(day.salesTotal)} (${day.sales.length} operaciones), ganancia estimada ${ars(day.profit)}. Última semana: ventas ${ars(week.salesTotal)}, ganancia ${ars(week.profit)}.`,
-    `Saldos: Caja ${ars(accountBalance(db, "Caja"))}, BBVA ${ars(accountBalance(db, "BBVA"))}, Provincia ${ars(accountBalance(db, "Provincia"))}. Aparte, cuenta de Felix / Corralón El Tecla (es lo mismo, CUIT responsable inscripto): ${ars(accountBalance(db, "Felix") + accountBalance(db, "El Tecla"))} (positivo = Felix le debe a Áridos; no se suma al negocio).`,
+    `Saldos: Caja ${ars(accountBalance(db, "Caja"))}, BBVA cuenta corriente ${ars(accountBalance(db, "BBVA"))} · BBVA caja de ahorro ${ars(accountBalance(db, "BBVA CA"))}, Provincia ${ars(accountBalance(db, "Provincia"))}. Aparte, cuenta de Felix / Corralón El Tecla (es lo mismo, CUIT responsable inscripto): ${ars(accountBalance(db, "Felix") + accountBalance(db, "El Tecla"))} (positivo = Felix le debe a Áridos; no se suma al negocio).`,
     `Stock bajo: ${low.join(", ") || "ninguno"}.`,
     `Cheques en cartera: ${db.cheques.filter((c) => c.status === "cartera").length}. Presupuestos abiertos: ${db.quotes.filter((q) => q.status === "enviado" || q.status === "seguimiento").length}. Ventas sin cerrar: ${db.sales.filter((s) => !s.closureId).length}.`,
     `Medios de cobro configurados: ${db.settings.methods
@@ -237,7 +244,10 @@ export async function saveMessage(conversationId: string, m: ChatMessage, user?:
     role: m.role,
     content: m.content,
     botones: m.botones ?? null,
-    nota: m.nota ?? null,
+    nota:
+      [m.nota, ...(m.hechos ?? []).map((h) => (h.ok ? "Hecho: " : "No se pudo: ") + h.texto)]
+        .filter(Boolean)
+        .join(" · ") || null,
     user_email: user ?? null,
   });
   return !error;

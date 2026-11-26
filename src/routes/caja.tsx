@@ -175,7 +175,15 @@ function Caja() {
           {m.gateway ? ` · ${m.gateway}` : ""}
         </Badge>
       </td>
-      <td className="text-muted-foreground">{m.account === "El Tecla" ? "Felix" : m.account}</td>
+      <td className="text-muted-foreground">
+        {m.account === "El Tecla"
+          ? "Felix"
+          : m.account === "BBVA"
+            ? "BBVA cta. cte."
+            : m.account === "BBVA CA"
+              ? "BBVA C. ahorro"
+              : m.account}
+      </td>
       <td>
         {m.settled === false ? (
           <Badge tone="dark">Por acreditar</Badge>
@@ -238,30 +246,56 @@ function Caja() {
       </PageHeader>
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {BUSINESS_BANKS.map((b) => (
-          <button
-            key={b}
-            onClick={() => setAcc(acc === b ? "todas" : b)}
-            className={`rounded-3xl p-4 text-left transition-colors ${acc === b ? "bg-primary text-primary-foreground" : "bg-card shadow-soft"}`}
-          >
-            <p
-              className={`flex items-center gap-1.5 text-xs ${acc === b ? "opacity-70" : "text-muted-foreground"}`}
+        {(["Caja", "BBVA", "Provincia"] as Bank[]).map((b) => {
+          // La tarjeta del BBVA junta la cuenta corriente y la caja de ahorro.
+          const subs: Bank[] = b === "BBVA" ? ["BBVA", "BBVA CA"] : [b];
+          const on = subs.includes(acc as Bank);
+          const total = subs.reduce((a, x) => a + accountBalance(db, x), 0);
+          const pend = subs.reduce((a, x) => a + pendingByBank(x), 0);
+          return (
+            <div
+              key={b}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAcc(on ? "todas" : b)}
+              onKeyDown={(e) => e.key === "Enter" && setAcc(on ? "todas" : b)}
+              className={`cursor-pointer rounded-3xl p-4 text-left transition-colors ${on ? "bg-primary text-primary-foreground" : "bg-card shadow-soft"}`}
             >
-              {b === "Caja" ? (
-                <Banknote className="h-3.5 w-3.5" />
-              ) : (
-                <Building2 className="h-3.5 w-3.5" />
+              <p
+                className={`flex items-center gap-1.5 text-xs ${on ? "opacity-70" : "text-muted-foreground"}`}
+              >
+                {b === "Caja" ? (
+                  <Banknote className="h-3.5 w-3.5" />
+                ) : (
+                  <Building2 className="h-3.5 w-3.5" />
+                )}
+                {b}
+              </p>
+              <p className="mt-2 text-lg font-bold tracking-tight md:text-xl">{ars(total)}</p>
+              {subs.length > 1 && (
+                <div className="mt-1.5 flex flex-col gap-0.5 text-[11px]">
+                  {subs.map((x) => (
+                    <button
+                      key={x}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAcc(acc === x ? "todas" : x);
+                      }}
+                      className={`flex justify-between gap-2 rounded-lg px-1.5 py-0.5 text-left ${acc === x ? "bg-primary-foreground/15 font-semibold" : on ? "opacity-80" : "text-muted-foreground hover:bg-surface"}`}
+                    >
+                      <span>{x === "BBVA" ? "Cuenta corriente" : "Caja de ahorro"}</span>
+                      <span className="tabular-nums">{ars(accountBalance(db, x))}</span>
+                    </button>
+                  ))}
+                </div>
               )}
-              {b}
-            </p>
-            <p className="mt-2 text-lg font-bold tracking-tight md:text-xl">
-              {ars(accountBalance(db, b))}
-            </p>
-            <p className={`mt-1 text-[11px] ${acc === b ? "opacity-70" : "text-muted-foreground"}`}>
-              {pendingByBank(b) ? `+ ${ars(pendingByBank(b))} por acreditar` : "nada pendiente"}
-            </p>
-          </button>
-        ))}
+              <p className={`mt-1 text-[11px] ${on ? "opacity-70" : "text-muted-foreground"}`}>
+                {pend ? `+ ${ars(pend)} por acreditar` : "nada pendiente"}
+              </p>
+            </div>
+          );
+        })}
         <div className="rounded-3xl bg-card p-4 shadow-soft">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <FileCheck2 className="h-3.5 w-3.5" /> Cheques en cartera
@@ -455,7 +489,9 @@ function Caja() {
         </Card>
 
         <Card
-          title={acc === "todas" ? "Movimientos de todas las cuentas" : `Movimientos · ${acc}`}
+          title={
+            acc === "todas" ? "Movimientos de todas las cuentas" : `Movimientos · ${bankLabel(acc)}`
+          }
           className="xl:col-span-2"
           action={
             <Segmented
@@ -464,7 +500,8 @@ function Caja() {
               options={[
                 { value: "todas", label: "Todas" },
                 { value: "Caja", label: "Caja" },
-                { value: "BBVA", label: "BBVA" },
+                { value: "BBVA", label: "BBVA cta. cte." },
+                { value: "BBVA CA", label: "BBVA C. ahorro" },
                 { value: "Provincia", label: "Provincia" },
               ]}
             />
@@ -574,7 +611,8 @@ function ChequeRow({
               onChange={(e) => setBank(e.target.value as Bank)}
               className="h-8 w-28 text-xs"
             >
-              <option value="BBVA">BBVA</option>
+              <option value="BBVA">BBVA cuenta corriente</option>
+              <option value="BBVA CA">BBVA caja de ahorro</option>
               <option value="Provincia">Provincia</option>
               <option value={SEPARATE_BANK}>Felix (El Tecla)</option>
             </Select>
@@ -675,7 +713,8 @@ function MoveEdit({
         <Field label="Cuenta">
           <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
             <option value="Caja">Caja</option>
-            <option value="BBVA">BBVA</option>
+            <option value="BBVA">BBVA cuenta corriente</option>
+            <option value="BBVA CA">BBVA caja de ahorro</option>
             <option value="Provincia">Provincia</option>
             <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
           </Select>
@@ -745,7 +784,8 @@ function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => voi
         {(how === "transferencia" || how === "otro") && (
           <Field label="Entra en">
             <Select value={to} onChange={(e) => setTo(e.target.value as Bank)}>
-              <option value="BBVA">BBVA</option>
+              <option value="BBVA">BBVA cuenta corriente</option>
+              <option value="BBVA CA">BBVA caja de ahorro</option>
               <option value="Provincia">Provincia</option>
               <option value="Caja">Caja</option>
             </Select>
@@ -868,7 +908,8 @@ function AdjustBalance({
         <Field label="Cuenta" className={fixedAccount ? "hidden" : ""}>
           <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
             <option value="Caja">Caja</option>
-            <option value="BBVA">BBVA</option>
+            <option value="BBVA">BBVA cuenta corriente</option>
+            <option value="BBVA CA">BBVA caja de ahorro</option>
             <option value="Provincia">Provincia</option>
             <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
           </Select>
@@ -994,7 +1035,8 @@ function NewIncome({
           <Field label={out ? "Sale de" : "Entra en"}>
             <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
               <option value="Caja">Caja</option>
-              <option value="BBVA">BBVA</option>
+              <option value="BBVA">BBVA cuenta corriente</option>
+              <option value="BBVA CA">BBVA caja de ahorro</option>
               <option value="Provincia">Provincia</option>
               <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
             </Select>

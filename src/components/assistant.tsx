@@ -1,3 +1,4 @@
+import { runOperations } from "@/lib/assistant-ops";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { FileText, History, Mic, MicOff, Paperclip, Plus, Send, Sparkles, X } from "lucide-react";
@@ -12,6 +13,7 @@ import {
   type AssistantAction,
   type ChatMessage,
   type Conversation,
+  type AssistantReply,
 } from "@/lib/assistant";
 import { DEMO } from "@/lib/store";
 import { fmtDate } from "@/lib/format";
@@ -58,7 +60,8 @@ const welcome: ChatMessage = {
 };
 
 export function Assistant() {
-  const { db, session, setPendingAction, upsertProducts } = useStore();
+  const store = useStore();
+  const { db, session, setPendingAction, upsertProducts } = store;
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -164,12 +167,18 @@ export function Assistant() {
         },
         session?.user.email,
       );
-    const reply = await askAssistant(
-      next.filter((m) => m !== welcome),
-      fullContext(db),
-      adj,
-    );
+    // Solo en la demo: "/op [...]" prueba las operaciones sin llamar a la IA.
+    const reply: AssistantReply =
+      DEMO && userMsg.content.startsWith("/op ")
+        ? { texto: "Prueba de operaciones", operaciones: JSON.parse(userMsg.content.slice(4)) }
+        : await askAssistant(
+            next.filter((m) => m !== welcome),
+            fullContext(db),
+            adj,
+          );
     let nota: string | undefined;
+    // Lo que el asistente decidió hacer en el sistema se ejecuta acá, con las mismas acciones de siempre.
+    const hechos = reply.operaciones?.length ? runOperations(store, reply.operaciones) : undefined;
     // Puede venir más de un pedido en la misma respuesta: se guardan todos.
     const pedidos = [...(reply.mejoras ?? []), ...(reply.mejora ? [reply.mejora] : [])].filter(
       (m) => m?.titulo,
@@ -195,6 +204,7 @@ export function Assistant() {
           content: reply.texto,
           botones: reply.botones,
           nota,
+          hechos,
           productos: reply.productos?.length ? reply.productos : undefined,
         };
     setMsgs([...next, botMsg]);
@@ -419,6 +429,19 @@ export function Assistant() {
                         >
                           {b.etiqueta}
                         </button>
+                      ))}
+                    </div>
+                  )}
+                  {m.hechos && m.hechos.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {m.hechos.map((h, k) => (
+                        <p
+                          key={k}
+                          className={`rounded-xl px-2.5 py-1.5 text-[11px] font-medium ${h.ok ? "bg-success text-success-foreground" : "bg-danger-soft text-danger-soft-foreground"}`}
+                        >
+                          {h.ok ? "Hecho: " : "No se pudo: "}
+                          {h.texto}
+                        </p>
                       ))}
                     </div>
                   )}

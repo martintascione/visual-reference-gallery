@@ -539,7 +539,8 @@ function PayFields({
             disabled={v.method === "efectivo"}
           >
             {v.method === "efectivo" && <option value="Caja">Caja</option>}
-            <option value="BBVA">BBVA</option>
+            <option value="BBVA">BBVA cuenta corriente</option>
+            <option value="BBVA CA">BBVA caja de ahorro</option>
             <option value="Provincia">Provincia</option>
           </Select>
         </Field>
@@ -1798,7 +1799,11 @@ function DebtCard({
   const [payAmt, setPayAmt] = useState(0);
   const [payDate, setPayDate] = useState(todayISO());
   const [payHow, setPayHow] = useState<
-    "transferencia|BBVA" | "transferencia|Provincia" | "efectivo|Caja" | "felix|Felix"
+    | "transferencia|BBVA"
+    | "transferencia|BBVA CA"
+    | "transferencia|Provincia"
+    | "efectivo|Caja"
+    | "felix|Felix"
   >("transferencia|BBVA");
   const [label, setLabel] = useState(group.label);
   useEffect(() => setLabel(group.label), [group.label]);
@@ -2037,7 +2042,10 @@ function DebtCard({
                         value={payHow}
                         onChange={(e) => setPayHow(e.target.value as typeof payHow)}
                       >
-                        <option value="transferencia|BBVA">Transferencia BBVA</option>
+                        <option value="transferencia|BBVA">Transferencia BBVA cta. cte.</option>
+                        <option value="transferencia|BBVA CA">
+                          Transferencia BBVA caja de ahorro
+                        </option>
                         <option value="transferencia|Provincia">Transferencia Provincia</option>
                         <option value="efectivo|Caja">Efectivo (caja)</option>
                         <option value="felix|Felix">Cuenta corriente Felix</option>

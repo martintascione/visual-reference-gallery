@@ -1,7 +1,7 @@
 import type { Bank, MethodConfig } from "@/lib/types";
 
 /** Cuentas del negocio (las que entran en saldos, cierre y reportes). */
-export const BUSINESS_BANKS: Bank[] = ["Caja", "BBVA", "Provincia"];
+export const BUSINESS_BANKS: Bank[] = ["Caja", "BBVA", "BBVA CA", "Provincia"];
 
 /** Felix y Corralón El Tecla son lo mismo (CUIT responsable inscripto, Factura A): una sola cuenta,
  *  aparte del negocio. Todo lo que entra ahí es plata de Áridos que tiene Felix. */
@@ -23,4 +23,11 @@ export const FELIX_METHOD: MethodConfig = {
   active: true,
 };
 
-export const bankLabel = (b: Bank) => (b === FELIX_BANK || b === "El Tecla" ? FELIX_NAME : b);
+export const bankLabel = (b: Bank) =>
+  b === FELIX_BANK || b === "El Tecla"
+    ? FELIX_NAME
+    : b === "BBVA"
+      ? "BBVA cta. cte."
+      : b === "BBVA CA"
+        ? "BBVA caja de ahorro"
+        : b;
