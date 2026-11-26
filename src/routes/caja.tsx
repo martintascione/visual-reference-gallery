@@ -148,6 +148,82 @@ function Caja() {
   const teclaPending = pendingByBank(SEPARATE_BANK);
   const chequesTotal = cheques.reduce((a, c) => a + c.amount, 0);
 
+  const [felixTab, setFelixTab] = useState<"cc" | "banco">("cc");
+  const felixMoves = db.movements
+    .filter((m) => m.account === (felixTab === "cc" ? FELIX_BANK : SEPARATE_BANK))
+    .slice(0, 60);
+  const renderRow = (m: Movement) => (
+    <tr key={m.id} className={tr}>
+      <td className="whitespace-nowrap text-muted-foreground">
+        {fmtDate(m.date)} {m.date.length > 10 ? fmtTime(m.date) : ""}
+      </td>
+      <td className="font-medium">
+        {m.concept}
+        {m.account === FELIX_BANK && m.kind === "transferencia" && m.via && (
+          <p className="text-[11px] font-normal text-muted-foreground">Felix pagó: {m.via}</p>
+        )}
+        {m.method === "felix" && (
+          <p className="text-[11px] font-normal text-muted-foreground">
+            Le pagó a Felix{m.via ? `: ${m.via}` : ""}
+          </p>
+        )}
+      </td>
+      <td>
+        <Badge tone={m.amount < 0 ? "danger" : "muted"}>
+          {m.account === FELIX_BANK && m.kind === "transferencia" && m.amount < 0
+            ? "Pago de Felix"
+            : (kindLabel[m.kind] ?? m.kind)}
+          {m.gateway ? ` · ${m.gateway}` : ""}
+        </Badge>
+      </td>
+      <td className="text-muted-foreground">{m.account}</td>
+      <td>
+        {m.settled === false ? (
+          <Badge tone="dark">Por acreditar</Badge>
+        ) : (
+          <Badge tone="ok">OK</Badge>
+        )}
+      </td>
+      <td
+        className={`text-right font-semibold tabular-nums ${m.amount < 0 ? "text-danger-soft-foreground" : ""}`}
+      >
+        {m.amount < 0 ? "−" : "+"}
+        {ars(Math.abs(m.amount))}
+      </td>
+      <td className="whitespace-nowrap text-right">
+        {saleOf(m) ? (
+          <Link
+            to="/ventas"
+            search={{ id: m.refId }}
+            className="text-[11px] text-muted-foreground underline"
+            title="Los cobros de una venta se cambian editando la venta"
+          >
+            Ver venta
+          </Link>
+        ) : (
+          <>
+            <button
+              className={btn.icon}
+              aria-label="Editar movimiento"
+              title="Editar movimiento"
+              onClick={() => setEditMove(m)}
+            >
+              <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </button>
+            <button
+              className={btn.icon}
+              aria-label="Eliminar movimiento"
+              title="Eliminar movimiento"
+              onClick={() => delMove(m)}
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </button>
+          </>
+        )}
+      </td>
+    </tr>
+  );
+
   return (
     <>
       <PageHeader title="Caja y bancos" subtitle="Dónde está la plata hoy">
@@ -196,79 +272,78 @@ function Caja() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-3xl border border-dashed border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Building2 className="h-3.5 w-3.5" /> {SEPARATE_NAME} · responsable inscripto (Factura
-              A) · cuenta aparte
+      <Card
+        title={`Felix · ${SEPARATE_NAME}`}
+        icon={Wallet}
+        className="mb-4"
+        action={
+          <span className="text-[11px] text-muted-foreground">
+            No se suma a la caja del negocio
+          </span>
+        }
+      >
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <button
+            onClick={() => setFelixTab("cc")}
+            className={`rounded-3xl p-4 text-left transition-colors ${felixTab === "cc" ? "bg-primary text-primary-foreground" : "bg-surface"}`}
+          >
+            <p className={`text-xs ${felixTab === "cc" ? "opacity-70" : "text-muted-foreground"}`}>
+              Cuenta corriente con Áridos
+            </p>
+            <p className="mt-1 text-xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</p>
+            <p
+              className={`text-[11px] ${felixTab === "cc" ? "opacity-70" : "text-muted-foreground"}`}
+            >
+              {felixBal > 0
+                ? "El Tecla le debe a Áridos"
+                : felixBal < 0
+                  ? "Áridos le debe a El Tecla"
+                  : "Cuenta saldada"}
+              {felixOut > 0 ? ` · ya pagó ${ars(felixOut)}` : ""}
+            </p>
+          </button>
+          <button
+            onClick={() => setFelixTab("banco")}
+            className={`rounded-3xl p-4 text-left transition-colors ${felixTab === "banco" ? "bg-primary text-primary-foreground" : "bg-surface"}`}
+          >
+            <p
+              className={`text-xs ${felixTab === "banco" ? "opacity-70" : "text-muted-foreground"}`}
+            >
+              Cuenta bancaria {SEPARATE_NAME} · responsable inscripto (Factura A)
             </p>
             <p className="mt-1 text-xl font-bold tracking-tight">
               {ars(accountBalance(db, SEPARATE_BANK))}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p
+              className={`text-[11px] ${felixTab === "banco" ? "opacity-70" : "text-muted-foreground"}`}
+            >
               {teclaPending ? `+ ${ars(teclaPending)} por acreditar · ` : ""}
               {teclaCheques.length
                 ? `${teclaCheques.length} cheques · ${ars(teclaCheques.reduce((a, c) => a + c.amount, 0))}`
-                : "sin cheques pendientes"}{" "}
-              · no se suma a la caja del negocio
+                : "sin cheques pendientes"}
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={btn.soft} onClick={() => setTeclaAdjust(true)}>
-              <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial
-            </button>
-            <button className={btn.soft} onClick={() => setTeclaIncome(true)}>
-              <Plus className="h-4 w-4" /> Ingreso
-            </button>
-            <button className={btn.soft} onClick={() => setTeclaOut(true)}>
-              <Minus className="h-4 w-4" /> Egreso
-            </button>
-            <button className={btn.primary} onClick={() => setTeclaCheque(true)}>
-              <FileCheck2 className="h-4 w-4" strokeWidth={1.6} /> Cargar cheque
-            </button>
-            <button className={btn.ghost} onClick={() => setAcc(SEPARATE_BANK)}>
-              Ver movimientos
-            </button>
-          </div>
+          </button>
         </div>
-        {teclaCheques.length > 0 && (
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {teclaCheques.map((c) => (
-              <ChequeRow
-                key={c.id}
-                c={c}
-                days={daysBetween(today, c.dueDate)}
-                onStatus={setChequeStatus}
-              />
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div className="mb-4 rounded-3xl border border-dashed border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wallet className="h-3.5 w-3.5" /> Cuenta corriente con Felix · {SEPARATE_NAME} ↔
-              Áridos
-            </p>
-            <p className="mt-1 text-xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {felixBal > 0
-                ? "El Tecla le debe a Áridos: lo que los clientes le pagaron a Felix"
-                : felixBal < 0
-                  ? "Áridos le debe a El Tecla"
-                  : "Cuenta saldada"}{" "}
-              · se carga cobrando con "Otra: Felix (El Tecla)"
-            </p>
-            {felixOut > 0 && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Felix ya le pagó a Áridos {ars(felixOut)} (retiros, transferencias y cheques)
+        {felixTab === "cc" ? (
+          <>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Suma lo que los clientes le pagaron a Felix (cobro "Otra: Felix (El Tecla)") y baja
+                con cada retiro o pago de Felix.
               </p>
-            )}
+              <div className="flex flex-wrap gap-2">
+                <button className={btn.primary} onClick={() => setFelixPay(true)}>
+                  <Banknote className="h-4 w-4" /> Cargar retiro / pago de Felix
+                </button>
+                <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
+                  <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
+                </button>
+              </div>
+            </div>
             {felixIn.length > 0 && (
-              <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+              <p className="mb-3 flex flex-wrap gap-1.5 text-[11px]">
+                <span className="text-muted-foreground">Cobrado por Felix:</span>
                 {felixIn.map(([how, v]) => (
                   <Badge key={how}>
                     {how}: {ars(v.amount)} ({v.n})
@@ -276,20 +351,62 @@ function Caja() {
                 ))}
               </p>
             )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={btn.primary} onClick={() => setFelixPay(true)}>
-              <Banknote className="h-4 w-4" /> Cargar retiro / pago de Felix
-            </button>
-            <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
-              <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
-            </button>
-            <button className={btn.ghost} onClick={() => setAcc(FELIX_BANK)}>
-              Ver movimientos
-            </button>
-          </div>
-        </div>
-      </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-3 flex flex-wrap justify-end gap-2">
+              <button className={btn.soft} onClick={() => setTeclaAdjust(true)}>
+                <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial
+              </button>
+              <button className={btn.soft} onClick={() => setTeclaIncome(true)}>
+                <Plus className="h-4 w-4" /> Ingreso
+              </button>
+              <button className={btn.soft} onClick={() => setTeclaOut(true)}>
+                <Minus className="h-4 w-4" /> Egreso
+              </button>
+              <button className={btn.primary} onClick={() => setTeclaCheque(true)}>
+                <FileCheck2 className="h-4 w-4" strokeWidth={1.6} /> Cargar cheque
+              </button>
+            </div>
+            {teclaCheques.length > 0 && (
+              <div className="mb-3 grid gap-2 md:grid-cols-2">
+                {teclaCheques.map((c) => (
+                  <ChequeRow
+                    key={c.id}
+                    c={c}
+                    days={daysBetween(today, c.dueDate)}
+                    onStatus={setChequeStatus}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {moveMsg && (
+          <p className="mb-3 rounded-2xl bg-danger-soft px-4 py-2 text-xs text-danger-soft-foreground">
+            {moveMsg.text}
+          </p>
+        )}
+        <Table
+          head={[
+            "Fecha",
+            "Concepto",
+            "Tipo",
+            "Cuenta",
+            "Estado",
+            { label: "Monto", right: true },
+            "",
+          ]}
+          min={720}
+        >
+          {felixMoves.map(renderRow)}
+        </Table>
+        {felixMoves.length === 0 && (
+          <p className="py-3 text-center text-xs text-muted-foreground">
+            Todavía no hay movimientos.
+          </p>
+        )}
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card icon={Clock} title="Liquidaciones pendientes (Payway y depósitos)">
@@ -390,8 +507,6 @@ function Caja() {
                 { value: "Caja", label: "Caja" },
                 { value: "BBVA", label: "BBVA" },
                 { value: "Provincia", label: "Provincia" },
-                { value: SEPARATE_BANK, label: "El Tecla" },
-                { value: FELIX_BANK, label: "Felix" },
               ]}
             />
           }
@@ -413,79 +528,7 @@ function Caja() {
             ]}
             min={720}
           >
-            {moves.map((m) => (
-              <tr key={m.id} className={tr}>
-                <td className="whitespace-nowrap text-muted-foreground">
-                  {fmtDate(m.date)} {m.date.length > 10 ? fmtTime(m.date) : ""}
-                </td>
-                <td className="font-medium">
-                  {m.concept}
-                  {m.account === FELIX_BANK && m.kind === "transferencia" && m.via && (
-                    <p className="text-[11px] font-normal text-muted-foreground">
-                      Felix pagó: {m.via}
-                    </p>
-                  )}
-                  {m.method === "felix" && (
-                    <p className="text-[11px] font-normal text-muted-foreground">
-                      Le pagó a Felix{m.via ? `: ${m.via}` : ""}
-                    </p>
-                  )}
-                </td>
-                <td>
-                  <Badge tone={m.amount < 0 ? "danger" : "muted"}>
-                    {m.account === FELIX_BANK && m.kind === "transferencia" && m.amount < 0
-                      ? "Pago de Felix"
-                      : (kindLabel[m.kind] ?? m.kind)}
-                    {m.gateway ? ` · ${m.gateway}` : ""}
-                  </Badge>
-                </td>
-                <td className="text-muted-foreground">{m.account}</td>
-                <td>
-                  {m.settled === false ? (
-                    <Badge tone="dark">Por acreditar</Badge>
-                  ) : (
-                    <Badge tone="ok">OK</Badge>
-                  )}
-                </td>
-                <td
-                  className={`text-right font-semibold tabular-nums ${m.amount < 0 ? "text-danger-soft-foreground" : ""}`}
-                >
-                  {m.amount < 0 ? "−" : "+"}
-                  {ars(Math.abs(m.amount))}
-                </td>
-                <td className="whitespace-nowrap text-right">
-                  {saleOf(m) ? (
-                    <Link
-                      to="/ventas"
-                      search={{ id: m.refId }}
-                      className="text-[11px] text-muted-foreground underline"
-                      title="Los cobros de una venta se cambian editando la venta"
-                    >
-                      Ver venta
-                    </Link>
-                  ) : (
-                    <>
-                      <button
-                        className={btn.icon}
-                        aria-label="Editar movimiento"
-                        title="Editar movimiento"
-                        onClick={() => setEditMove(m)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
-                      </button>
-                      <button
-                        className={btn.icon}
-                        aria-label="Eliminar movimiento"
-                        title="Eliminar movimiento"
-                        onClick={() => delMove(m)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {moves.map(renderRow)}
           </Table>
         </Card>
       </div>
