@@ -294,6 +294,7 @@ function ChequeEdit({
         echeq: c.echeq,
         amount: c.amount,
         givenTo: c.givenTo?.trim() || undefined,
+        givenDate: c.givenDate || undefined,
       }),
     );
   return (
@@ -339,13 +340,30 @@ function ChequeEdit({
             onChange={(e) => setC({ ...c, receivedDate: e.target.value })}
           />
         </Field>
-        {cheque.status === "endosado" && (
-          <Field label="Entregado a" className="col-span-2">
-            <Input
-              value={c.givenTo ?? ""}
-              onChange={(e) => setC({ ...c, givenTo: e.target.value })}
-            />
-          </Field>
+        {(cheque.status === "cartera" || cheque.status === "endosado" || cheque.own) && (
+          <>
+            <Field
+              label="Entregado a"
+              hint={
+                cheque.status === "cartera"
+                  ? "Si lo pusiste, el cheque pasa a Entregado"
+                  : "Proveedor, transporte o persona"
+              }
+            >
+              <Input
+                value={c.givenTo ?? ""}
+                onChange={(e) => setC({ ...c, givenTo: e.target.value })}
+                placeholder="A quién se lo diste"
+              />
+            </Field>
+            <Field label="Fecha de entrega">
+              <Input
+                type="date"
+                value={c.givenDate ?? ""}
+                onChange={(e) => setC({ ...c, givenDate: e.target.value || undefined })}
+              />
+            </Field>
+          </>
         )}
         <div className="col-span-2">
           <Toggle checked={c.echeq} onChange={(v) => setC({ ...c, echeq: v })} label="Es e-cheq" />

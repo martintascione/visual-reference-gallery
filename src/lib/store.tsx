@@ -113,7 +113,15 @@ type Actions = {
     patch: Partial<
       Pick<
         Cheque,
-        "number" | "bank" | "drawer" | "dueDate" | "receivedDate" | "echeq" | "amount" | "givenTo"
+        | "number"
+        | "bank"
+        | "drawer"
+        | "dueDate"
+        | "receivedDate"
+        | "echeq"
+        | "amount"
+        | "givenTo"
+        | "givenDate"
       >
     >,
   ) => string | null;
@@ -942,6 +950,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               if (due) due.paid = Math.max(0, Math.min(due.amount, due.paid + diff));
               const m = d.movements.find((x) => x.refId === ch.id);
               if (m) m.amount = p.amount;
+            }
+          }
+          // Poner a quién se entregó un cheque de la cartera lo pasa a "Entregado"; borrarlo lo devuelve.
+          if ("givenTo" in p) {
+            const to = p.givenTo?.trim();
+            if (to && ch.status === "cartera" && !ch.own) {
+              ch.status = "endosado";
+              p.givenDate = p.givenDate || todayISO();
+            } else if (
+              !to &&
+              ch.status === "endosado" &&
+              !d.supplierPayments.some((x) => x.chequeId === ch.id)
+            ) {
+              ch.status = "cartera";
+              p.givenDate = undefined;
             }
           }
           Object.assign(ch, p);
