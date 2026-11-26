@@ -109,6 +109,9 @@ function Caja() {
   const [felixPay, setFelixPay] = useState(false);
   const [felixAdjust, setFelixAdjust] = useState(false);
   const felixBal = accountBalance(db, FELIX_BANK);
+  const felixOut = db.movements
+    .filter((m) => m.account === FELIX_BANK && m.kind === "transferencia" && m.amount < 0)
+    .reduce((acc, m) => acc - m.amount, 0);
   // Cobros que entraron por Felix, por cómo le pagó el cliente (efectivo, transferencia, cheque…).
   const felixIn = Object.entries(
     db.movements
@@ -259,6 +262,11 @@ function Caja() {
                   : "Cuenta saldada"}{" "}
               · se carga cobrando con "Otra: Felix (El Tecla)"
             </p>
+            {felixOut > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Felix ya le pagó a Áridos {ars(felixOut)} (retiros, transferencias y cheques)
+              </p>
+            )}
             {felixIn.length > 0 && (
               <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                 {felixIn.map(([how, v]) => (
@@ -270,12 +278,8 @@ function Caja() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              className={btn.primary}
-              disabled={felixBal <= 0}
-              onClick={() => setFelixPay(true)}
-            >
-              <Banknote className="h-4 w-4" /> Felix le pasó la plata a Áridos
+            <button className={btn.primary} onClick={() => setFelixPay(true)}>
+              <Banknote className="h-4 w-4" /> Cargar retiro / pago de Felix
             </button>
             <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
               <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
@@ -416,6 +420,11 @@ function Caja() {
                 </td>
                 <td className="font-medium">
                   {m.concept}
+                  {m.account === FELIX_BANK && m.kind === "transferencia" && m.via && (
+                    <p className="text-[11px] font-normal text-muted-foreground">
+                      Felix pagó: {m.via}
+                    </p>
+                  )}
                   {m.method === "felix" && (
                     <p className="text-[11px] font-normal text-muted-foreground">
                       Le pagó a Felix{m.via ? `: ${m.via}` : ""}
@@ -424,7 +433,9 @@ function Caja() {
                 </td>
                 <td>
                   <Badge tone={m.amount < 0 ? "danger" : "muted"}>
-                    {kindLabel[m.kind] ?? m.kind}
+                    {m.account === FELIX_BANK && m.kind === "transferencia" && m.amount < 0
+                      ? "Pago de Felix"
+                      : (kindLabel[m.kind] ?? m.kind)}
                     {m.gateway ? ` · ${m.gateway}` : ""}
                   </Badge>
                 </td>
@@ -687,13 +698,21 @@ function MoveEdit({
   );
 }
 
-/** Felix le pasa a Áridos lo que cobró: sale de la cuenta corriente y entra en la cuenta elegida. */
+/** Felix le paga a Áridos parte del saldo: retiro de efectivo, transferencia o cheque. Va descontando la deuda. */
 function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => void; max: number }) {
-  const { addTransfer } = useStore();
+  const { settleFelix } = useStore();
   const [amount, setAmount] = useState(0);
+  const [how, setHow] = useState<"efectivo" | "transferencia" | "cheque" | "otro">("efectivo");
   const [to, setTo] = useState<Bank>("BBVA");
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
+  const [chq, setChq] = useState({
+    number: "",
+    bank: "",
+    drawer: "",
+    dueDate: todayISO(),
+    echeq: false,
+  });
   const [last, setLast] = useState(false);
   if (open !== last) {
     setLast(open);
@@ -701,21 +720,36 @@ function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => voi
       setAmount(Math.max(0, max));
       setDate(todayISO());
       setNote("");
+      setHow("efectivo");
+      setChq({ number: "", bank: "", drawer: "", dueDate: todayISO(), echeq: false });
     }
   }
+  const dest: Bank = how === "efectivo" ? "Caja" : to;
+  const ok =
+    amount > 0 && (how !== "cheque" || (!!chq.number.trim() && !!chq.bank.trim() && !!chq.dueDate));
   return (
-    <Modal open={open} onClose={onClose} title="Felix le pasó la plata a Áridos">
+    <Modal open={open} onClose={onClose} title="Felix le paga a Áridos (retiro)">
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Importe" hint={`El Tecla debe ${ars(max)}`}>
+        <Field label="Importe" hint={max > 0 ? `El Tecla debe ${ars(max)}` : "Cuenta saldada"}>
           <NumberInput value={amount} onChange={setAmount} prefix="$" />
         </Field>
-        <Field label="Entra en">
-          <Select value={to} onChange={(e) => setTo(e.target.value as Bank)}>
-            <option value="Caja">Caja (efectivo)</option>
-            <option value="BBVA">BBVA</option>
-            <option value="Provincia">Provincia</option>
+        <Field label="Cómo le pagó">
+          <Select value={how} onChange={(e) => setHow(e.target.value as typeof how)}>
+            <option value="efectivo">Retiro de efectivo (entra en Caja)</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="cheque">Cheque (va a la cartera)</option>
+            <option value="otro">Otro</option>
           </Select>
         </Field>
+        {(how === "transferencia" || how === "otro") && (
+          <Field label="Entra en">
+            <Select value={to} onChange={(e) => setTo(e.target.value as Bank)}>
+              <option value="BBVA">BBVA</option>
+              <option value="Provincia">Provincia</option>
+              <option value="Caja">Caja</option>
+            </Select>
+          </Field>
+        )}
         <Field label="Fecha">
           <Input
             type="date"
@@ -723,16 +757,48 @@ function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => voi
             onChange={(e) => e.target.value && setDate(e.target.value)}
           />
         </Field>
-        <Field label="Nota (opcional)">
-          <Input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Transferencia, efectivo…"
-          />
+        {how === "cheque" && (
+          <>
+            <Field label="N° de cheque *">
+              <Input
+                value={chq.number}
+                onChange={(e) => setChq({ ...chq, number: e.target.value })}
+              />
+            </Field>
+            <Field label="Banco *">
+              <Input value={chq.bank} onChange={(e) => setChq({ ...chq, bank: e.target.value })} />
+            </Field>
+            <Field label="Librador">
+              <Input
+                value={chq.drawer}
+                onChange={(e) => setChq({ ...chq, drawer: e.target.value })}
+                placeholder="Felix (El Tecla)"
+              />
+            </Field>
+            <Field label="Vencimiento (fecha de cobro)">
+              <Input
+                type="date"
+                value={chq.dueDate}
+                onChange={(e) => setChq({ ...chq, dueDate: e.target.value })}
+              />
+            </Field>
+            <div className="col-span-2">
+              <Toggle
+                checked={chq.echeq}
+                onChange={(v) => setChq({ ...chq, echeq: v })}
+                label="Es e-cheq"
+              />
+            </div>
+          </>
+        )}
+        <Field label="Nota (opcional)" className="col-span-2">
+          <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <p className="col-span-2 text-xs text-muted-foreground">
-          Baja la deuda de El Tecla con Áridos y suma la plata en {to}. Si es un pago parcial, el
-          resto sigue en la cuenta corriente.
+          {how === "cheque"
+            ? "El saldo con Felix baja ya y el cheque queda en la cartera de Áridos: la plata entra al banco cuando lo depositás."
+            : `El saldo con Felix baja y la plata suma en ${dest}.`}{" "}
+          {amount > 0 && max > 0 && amount < max ? `Le queda debiendo ${ars(max - amount)}.` : ""}
         </p>
       </div>
       <div className="mt-4 flex justify-end gap-2">
@@ -741,19 +807,20 @@ function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => voi
         </button>
         <button
           className={btn.primary}
-          disabled={amount <= 0}
+          disabled={!ok}
           onClick={() => {
             const iso =
               date === todayISO()
                 ? new Date().toISOString()
                 : new Date(`${date}T12:00:00`).toISOString();
-            addTransfer(
-              iso,
-              FELIX_BANK,
-              to,
+            settleFelix({
+              date: iso,
               amount,
-              `Felix (El Tecla) → Áridos${note.trim() ? " · " + note.trim() : ""}`,
-            );
+              how,
+              to: dest,
+              note,
+              cheque: how === "cheque" ? chq : undefined,
+            });
             onClose();
           }}
         >

@@ -152,6 +152,16 @@ type Actions = {
   addStockpile: (s: Omit<Stockpile, "id" | "payments" | "withdrawals">) => string;
   /** Plata que sale de una cuenta sin ser gasto del negocio (ej. de la cuenta de El Tecla). */
   addOutflow: (date: string, concept: string, amount: number, account: Bank) => void;
+  /** Felix le paga a Áridos parte del saldo: efectivo a la Caja, transferencia a un banco o un cheque a la cartera. */
+  settleFelix: (p: {
+    date: string;
+    amount: number;
+    how: "efectivo" | "transferencia" | "cheque" | "otro";
+    to: Bank;
+    note?: string | undefined;
+    cheque?:
+      { number: string; bank: string; drawer: string; dueDate: string; echeq: boolean } | undefined;
+  }) => void;
   /** Pasa plata de una cuenta a otra (ej. Felix le transfiere a Áridos lo que cobró). */
   addTransfer: (date: string, from: Bank, to: Bank, amount: number, concept: string) => void;
   updateStockpile: (
@@ -1033,6 +1043,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             err = `Es el cobro de la venta #${link.sale.number}: se borra editando o borrando la venta.`;
             return d;
           }
+          if (m.kind === "transferencia" && m.refId && link.cheque) {
+            // Pago de Felix con cheque: se borra el cheque si sigue en la cartera.
+            if (link.cheque.status !== "cartera") {
+              err = `El cheque N° ${link.cheque.number} ya está ${link.cheque.status}: no se puede borrar este pago.`;
+              return d;
+            }
+            const chId = link.cheque.id;
+            d.cheques = d.cheques.filter((x) => x.id !== chId);
+            d.movements = d.movements.filter((x) => x.id !== m.id);
+            return d;
+          }
           if (m.kind === "transferencia" && m.refId) {
             // Transferencia: se borran las dos patas.
             d.movements = d.movements.filter(
@@ -1389,6 +1410,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!s || !w) return d;
           stockpileStock(d, s, w, 1, "Retiro de acopio borrado");
           s.withdrawals = s.withdrawals.filter((x) => x.id !== wId);
+          return d;
+        }),
+      settleFelix: (x) =>
+        mutate((d) => {
+          const a = Math.abs(Math.round(x.amount));
+          const note = x.note?.trim() ? " · " + x.note.trim() : "";
+          if (x.how === "cheque" && x.cheque) {
+            // El cheque entra a la cartera de Áridos; el saldo con Felix baja ya.
+            const ch: Cheque = {
+              id: uid(),
+              number: x.cheque.number,
+              bank: x.cheque.bank,
+              drawer: x.cheque.drawer || "Felix (El Tecla)",
+              dueDate: x.cheque.dueDate,
+              amount: a,
+              status: "cartera",
+              clientName: "Felix (El Tecla)",
+              echeq: x.cheque.echeq,
+              receivedDate: x.date.slice(0, 10),
+            };
+            d.cheques.unshift(ch);
+            d.movements.unshift({
+              id: uid(),
+              date: x.date,
+              kind: "transferencia",
+              account: "Felix",
+              amount: -a,
+              concept: `Felix pagó con cheque N° ${ch.number} ${ch.bank}${note}`,
+              method: "cheque",
+              via: `Cheque · N° ${ch.number} · ${ch.bank} · vence ${ch.dueDate.split("-").reverse().join("/")}`,
+              settled: true,
+              refId: ch.id,
+            });
+            return d;
+          }
+          const pair = uid();
+          const what =
+            x.how === "efectivo"
+              ? "Retiro de efectivo de Felix"
+              : x.how === "transferencia"
+                ? "Transferencia de Felix"
+                : "Pago de Felix";
+          for (const [account, amount] of [
+            [x.to, a],
+            ["Felix", -a],
+          ] as [Bank, number][])
+            d.movements.unshift({
+              id: uid(),
+              date: x.date,
+              kind: "transferencia",
+              account,
+              amount,
+              concept: `${what}${note}`,
+              via:
+                x.how === "efectivo"
+                  ? "Efectivo"
+                  : x.how === "transferencia"
+                    ? "Transferencia"
+                    : "Otro",
+              settled: true,
+              refId: pair,
+            });
           return d;
         }),
       addTransfer: (date, from, to, amount, concept) =>
