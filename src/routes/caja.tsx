@@ -6,12 +6,14 @@ import {
   CalendarClock,
   Clock,
   FileCheck2,
+  Pencil,
   Plus,
   Upload,
   Scale,
+  Trash2,
 } from "lucide-react";
-import type { Bank, Cheque, ChequeStatus } from "@/lib/types";
-import { accountBalance, pendingSettlements, useStore } from "@/lib/store";
+import type { Bank, Cheque, ChequeStatus, Movement } from "@/lib/types";
+import { accountBalance, movementLink, pendingSettlements, useStore } from "@/lib/store";
 import { chequeLabel } from "@/lib/cheque-labels";
 import { ChequeForm } from "@/components/cheque-form";
 import { Link } from "@tanstack/react-router";
@@ -57,7 +59,32 @@ const kindLabel: Record<string, string> = {
 };
 
 function Caja() {
-  const { db, settleMovement, setChequeStatus } = useStore();
+  const { db, settleMovement, setChequeStatus, removeMovement } = useStore();
+  const [editMove, setEditMove] = useState<Movement | null>(null);
+  const [moveMsg, setMoveMsg] = useState<{ text: string; saleId?: string } | null>(null);
+  const saleOf = (m: Movement) => movementLink(db, m).sale;
+  const delMove = (m: Movement) => {
+    const l = movementLink(db, m);
+    const extra = l.due
+      ? " La cuota vuelve a quedar pendiente."
+      : l.cheque
+        ? " El cheque vuelve a la cartera."
+        : l.supplierPay
+          ? " También se borra el pago al proveedor y vuelve su deuda."
+          : l.expense
+            ? " También se borra el gasto."
+            : l.stockpilePay
+              ? " También se saca el pago del acopio."
+              : "";
+    if (
+      !window.confirm(
+        `Eliminar "${m.concept}" (${ars(Math.abs(m.amount))})?${extra}${m.closureId ? " Ojo: ya estaba en un cierre del día." : ""}`,
+      )
+    )
+      return;
+    const err = removeMovement(m.id);
+    setMoveMsg(err ? { text: err } : null);
+  };
   const [acc, setAcc] = useState<Bank | "todas">("todas");
   const [newCheque, setNewCheque] = useState(false);
   const [income, setIncome] = useState(false);
@@ -228,6 +255,11 @@ function Caja() {
             />
           }
         >
+          {moveMsg && (
+            <p className="mb-3 rounded-2xl bg-danger-soft px-4 py-2 text-xs text-danger-soft-foreground">
+              {moveMsg.text}
+            </p>
+          )}
           <Table
             head={[
               "Fecha",
@@ -236,8 +268,9 @@ function Caja() {
               "Cuenta",
               "Estado",
               { label: "Monto", right: true },
+              "",
             ]}
-            min={640}
+            min={720}
           >
             {moves.map((m) => (
               <tr key={m.id} className={tr}>
@@ -265,6 +298,37 @@ function Caja() {
                   {m.amount < 0 ? "−" : "+"}
                   {ars(Math.abs(m.amount))}
                 </td>
+                <td className="whitespace-nowrap text-right">
+                  {saleOf(m) ? (
+                    <Link
+                      to="/ventas"
+                      search={{ id: m.refId }}
+                      className="text-[11px] text-muted-foreground underline"
+                      title="Los cobros de una venta se cambian editando la venta"
+                    >
+                      Ver venta
+                    </Link>
+                  ) : (
+                    <>
+                      <button
+                        className={btn.icon}
+                        aria-label="Editar movimiento"
+                        title="Editar movimiento"
+                        onClick={() => setEditMove(m)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      </button>
+                      <button
+                        className={btn.icon}
+                        aria-label="Eliminar movimiento"
+                        title="Eliminar movimiento"
+                        onClick={() => delMove(m)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      </button>
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>
@@ -274,6 +338,13 @@ function Caja() {
       <ChequeForm open={newCheque} onClose={() => setNewCheque(false)} />
       <NewIncome open={income} onClose={() => setIncome(false)} />
       <AdjustBalance open={adjust} onClose={() => setAdjust(false)} />
+      <MoveEdit
+        move={editMove}
+        onClose={(err) => {
+          setEditMove(null);
+          setMoveMsg(err ? { text: err } : null);
+        }}
+      />
     </>
   );
 }
@@ -354,6 +425,89 @@ function ChequeRow({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Editar un movimiento: fecha, concepto, monto y cuenta. Se corrige también lo que depende de él. */
+function MoveEdit({
+  move,
+  onClose,
+}: {
+  move: Movement | null;
+  onClose: (err?: string | null) => void;
+}) {
+  const { db, updateMovement } = useStore();
+  const [date, setDate] = useState("");
+  const [concept, setConcept] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [account, setAccount] = useState<Bank>("Caja");
+  const [last, setLast] = useState<string | undefined>(undefined);
+  if (move?.id !== last) {
+    setLast(move?.id);
+    if (move) {
+      setDate(move.date.slice(0, 10));
+      setConcept(move.concept);
+      setAmount(Math.abs(move.amount));
+      setAccount(move.account);
+    }
+  }
+  if (!move) return null;
+  const l = movementLink(db, move);
+  const note = l.due
+    ? "Es el cobro de una cuota: si cambiás el monto, se corrige lo pagado de la cuota."
+    : l.cheque
+      ? "Es el depósito de un cheque: el monto se cambia editando el cheque."
+      : l.supplierPay
+        ? "Es un pago a proveedor: se corrige también en su cuenta corriente y en Gastos."
+        : l.expense
+          ? "Se corrige también en Gastos."
+          : l.stockpilePay
+            ? "Es un pago de acopio: se corrige también en el acopio."
+            : "";
+  const save = () => {
+    const iso =
+      date === move.date.slice(0, 10) ? move.date : new Date(`${date}T12:00:00`).toISOString();
+    onClose(updateMovement(move.id, { date: iso, concept, amount, account }));
+  };
+  return (
+    <Modal open onClose={() => onClose()} title="Editar movimiento">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Concepto" className="col-span-2">
+          <Input value={concept} onChange={(e) => setConcept(e.target.value)} />
+        </Field>
+        <Field label={move.amount < 0 ? "Monto (sale)" : "Monto (entra)"}>
+          <NumberInput value={amount} onChange={setAmount} prefix="$" disabled={!!l.cheque} />
+        </Field>
+        <Field label="Fecha">
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+        </Field>
+        <Field label="Cuenta">
+          <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
+            <option value="Caja">Caja</option>
+            <option value="BBVA">BBVA</option>
+            <option value="Provincia">Provincia</option>
+          </Select>
+        </Field>
+        {note && <p className="col-span-2 text-xs text-muted-foreground">{note}</p>}
+        {move.closureId && (
+          <p className="col-span-2 text-xs text-danger-soft-foreground">
+            Este movimiento ya está en un cierre del día: el resumen de ese cierre no se recalcula.
+          </p>
+        )}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={() => onClose()}>
+          Cancelar
+        </button>
+        <button className={btn.primary} disabled={amount <= 0} onClick={save}>
+          Guardar cambios
+        </button>
+      </div>
+    </Modal>
   );
 }
 

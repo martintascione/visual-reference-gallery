@@ -166,6 +166,7 @@ const fullSteps: Step[] = [
 const NEWS_KEY = "ap-novedades-vistas";
 const NEWS_VERSION = "2026-11-26";
 const newsList = [
+  "Caja y bancos: editar o eliminar cualquier movimiento, y se corrige en todos lados",
   "Venta en acopio: en Entrega elegís cuándo retira y queda en Acopios con el saldo a favor",
   "Acopios: editar cantidades, sumar o sacar productos",
   "Lista de precios: cada producto con su total, sin sumarlos, para que el cliente compare",

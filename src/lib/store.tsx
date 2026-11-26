@@ -115,6 +115,13 @@ type Actions = {
       >
     >,
   ) => string | null;
+  /** Corrige un movimiento de caja o banco y lo que depende de él (cuota, gasto, pago, acopio). */
+  updateMovement: (
+    id: string,
+    patch: { date?: string; concept?: string; amount?: number; account?: Bank },
+  ) => string | null;
+  /** Borra un movimiento y deshace lo que generó. Devuelve el motivo si no se puede. */
+  removeMovement: (id: string) => string | null;
   /** Borra un cheque mal cargado. Devuelve el motivo si no se puede. */
   removeCheque: (id: string) => string | null;
   setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank, givenTo?: string) => void;
@@ -304,6 +311,21 @@ function purchaseCosts(d: DB, pur: Purchase) {
       p.price = Math.round(p.cost * margin);
     }
   }
+}
+
+/** De dónde viene un movimiento de caja o banco, para corregir o deshacer todo junto. */
+export function movementLink(d: DB, m: Movement) {
+  const ref = m.refId;
+  const sale = m.kind === "venta" && ref ? d.sales.find((x) => x.id === ref) : undefined;
+  const due = ref ? d.dues.find((x) => x.id === ref) : undefined;
+  const cheque = m.method === "cheque" && ref ? d.cheques.find((x) => x.id === ref) : undefined;
+  const stockpile = ref ? (d.stockpiles ?? []).find((x) => x.id === ref) : undefined;
+  const stockpilePay = stockpile?.payments.find((x) => x.movementId === m.id);
+  const expense = ref ? d.expenses.find((x) => x.id === ref) : undefined;
+  const supplierPay = expense
+    ? d.supplierPayments.find((x) => x.expenseId === expense.id)
+    : undefined;
+  return { sale, due, cheque, stockpile, stockpilePay, expense, supplierPay };
 }
 
 /** Anula un pago a proveedor: saca el gasto y el movimiento, y devuelve o anula el cheque. */
@@ -912,6 +934,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
           }
           Object.assign(ch, p);
+          return d;
+        });
+        return err;
+      },
+      updateMovement: (id, patch) => {
+        let err: string | null = null;
+        mutate((d) => {
+          const m = d.movements.find((x) => x.id === id);
+          if (!m) return d;
+          const link = movementLink(d, m);
+          if (link.sale) {
+            err = `Es el cobro de la venta #${link.sale.number}: se cambia editando la venta.`;
+            return d;
+          }
+          const sign = m.amount < 0 ? -1 : 1;
+          const abs =
+            patch.amount !== undefined ? Math.abs(Math.round(patch.amount)) : Math.abs(m.amount);
+          const diff = abs - Math.abs(m.amount);
+          if (link.cheque && diff) {
+            err = "El monto es el del cheque: cambialo editando el cheque en Cheques.";
+            return d;
+          }
+          if (link.due && diff)
+            link.due.paid = Math.max(0, Math.min(link.due.amount, link.due.paid + diff));
+          if (patch.date) m.date = patch.date;
+          if (patch.concept !== undefined && patch.concept.trim()) m.concept = patch.concept.trim();
+          if (patch.account) m.account = patch.account;
+          m.amount = sign * abs;
+          if (link.cheque && patch.account) link.cheque.depositBank = patch.account;
+          if (link.stockpilePay) {
+            link.stockpilePay.amount = abs;
+            link.stockpilePay.date = m.date;
+            link.stockpilePay.account = m.account;
+          }
+          if (link.expense) {
+            link.expense.amount = abs;
+            link.expense.date = m.date;
+            link.expense.account = m.account;
+            link.expense.concept = m.concept;
+          }
+          if (link.supplierPay) {
+            link.supplierPay.amount = abs;
+            link.supplierPay.account = m.account;
+          }
+          return d;
+        });
+        return err;
+      },
+      removeMovement: (id) => {
+        let err: string | null = null;
+        mutate((d) => {
+          const m = d.movements.find((x) => x.id === id);
+          if (!m) return d;
+          const link = movementLink(d, m);
+          if (link.sale) {
+            err = `Es el cobro de la venta #${link.sale.number}: se borra editando o borrando la venta.`;
+            return d;
+          }
+          if (link.due) link.due.paid = Math.max(0, link.due.paid - Math.abs(m.amount));
+          if (link.cheque) {
+            // Depósito borrado: el cheque vuelve a la cartera.
+            link.cheque.status = "cartera";
+            link.cheque.depositBank = undefined;
+          }
+          if (link.stockpile && link.stockpilePay)
+            link.stockpile.payments = link.stockpile.payments.filter(
+              (x) => x !== link.stockpilePay,
+            );
+          if (link.supplierPay) undoSupplierPayment(d, link.supplierPay);
+          else if (link.expense) d.expenses = d.expenses.filter((x) => x !== link.expense);
+          d.movements = d.movements.filter((x) => x.id !== m.id);
           return d;
         });
         return err;
