@@ -59,6 +59,7 @@ const methodNames: Record<PaymentMethod, string> = {
   credito: "Crédito",
   cheque: "Cheque",
   cta_cte: "Cuenta corriente",
+  felix: "Felix (El Tecla)",
 };
 
 function Configuracion() {

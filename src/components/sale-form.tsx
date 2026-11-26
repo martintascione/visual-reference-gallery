@@ -31,6 +31,7 @@ import {
   unitLabelFor,
   qtyUnit,
 } from "@/lib/pricing";
+import { FelixViaFields, type FelixVia, viaParse, viaText } from "@/components/felix-via";
 import { addDays, ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { Badge, Card, Field, Input, NumberInput, Segmented, Select, Toggle, btn } from "./ui-bits";
 
@@ -43,7 +44,14 @@ type Line = {
   /** Bonificación % del ítem cargada a mano (manda sobre el descuento por cantidad). */
   disc?: number | undefined;
 };
-type PayDraft = { methodId: string; amount: number; installments: number; dues: number };
+type PayDraft = {
+  methodId: string;
+  amount: number;
+  installments: number;
+  dues: number;
+  /** Cobro por Felix: cómo le pagó el cliente. */
+  via?: FelixVia | undefined;
+};
 type ChequeDraft = {
   number: string;
   bank: string;
@@ -311,6 +319,7 @@ export function SaleForm({
         amount: p.amount,
         installments: p.installments ?? 1,
         dues: p.dues ?? 1,
+        via: p.via ? viaParse(p.via) : undefined,
       };
     });
     if (ps.length) setPays(ps);
@@ -451,6 +460,7 @@ export function SaleForm({
         gateway: cfg.gateway,
         installments: cfg.method === "credito" ? p.installments : undefined,
         dues: cfg.method === "cta_cte" ? p.dues : undefined,
+        via: cfg.method === "felix" ? viaText(p.via ?? viaParse()) : undefined,
       };
     });
     const chequeDraft: Omit<Cheque, "id"> | undefined = chequePay
@@ -1222,8 +1232,20 @@ export function SaleForm({
                           ? "Queda en cartera de cheques"
                           : cfg.method === "cta_cte"
                             ? "Se carga a la cuenta corriente del cliente"
-                            : `Acredita en ${cfg.bank}${cfg.settleDays ? ` en ${cfg.settleDays} días` : " en el día"}${cfg.feePct ? ` · comisión ${num(cfg.feePct, 2)} % (${ars(Math.round((p.amount * cfg.feePct) / 100))})` : ""}`}
+                            : cfg.method === "felix"
+                              ? "Le pagó a Felix: el cliente no debe nada y queda en la cuenta corriente con El Tecla"
+                              : `Acredita en ${cfg.bank}${cfg.settleDays ? ` en ${cfg.settleDays} días` : " en el día"}${cfg.feePct ? ` · comisión ${num(cfg.feePct, 2)} % (${ars(Math.round((p.amount * cfg.feePct) / 100))})` : ""}`}
                       </p>
+                    )}
+                    {cfg?.method === "felix" && (
+                      <div className="mt-2">
+                        <FelixViaFields
+                          value={p.via ?? viaParse()}
+                          onChange={(v) =>
+                            setPays(pays.map((x, j) => (j === i ? { ...x, via: v } : x)))
+                          }
+                        />
+                      </div>
                     )}
                     {cfg?.method === "credito" && (
                       <Field label="Cuotas" className="mt-2 w-28">

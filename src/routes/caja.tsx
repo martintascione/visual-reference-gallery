@@ -11,10 +11,20 @@ import {
   Upload,
   Scale,
   Trash2,
+  Minus,
+  Wallet,
 } from "lucide-react";
 import type { Bank, Cheque, ChequeStatus, Movement } from "@/lib/types";
 import { accountBalance, movementLink, pendingSettlements, useStore } from "@/lib/store";
 import { chequeLabel } from "@/lib/cheque-labels";
+import {
+  BUSINESS_BANKS,
+  FELIX_BANK,
+  FELIX_NAME,
+  SEPARATE_BANK,
+  SEPARATE_NAME,
+  bankLabel,
+} from "@/lib/banks";
 import { ChequeForm } from "@/components/cheque-form";
 import { Link } from "@tanstack/react-router";
 import { addDays, ars, dayOf, daysBetween, fmtDate, fmtTime, todayISO } from "@/lib/format";
@@ -56,6 +66,8 @@ const kindLabel: Record<string, string> = {
   compra: "Compra",
   flete: "Flete",
   ajuste: "Ajuste de saldo",
+  egreso: "Egreso",
+  transferencia: "Transferencia",
 };
 
 function Caja() {
@@ -89,6 +101,26 @@ function Caja() {
   const [newCheque, setNewCheque] = useState(false);
   const [income, setIncome] = useState(false);
   const [adjust, setAdjust] = useState(false);
+  // Cuenta aparte (Corralón El Tecla): sus propios botones con la cuenta ya elegida.
+  const [teclaCheque, setTeclaCheque] = useState(false);
+  const [teclaIncome, setTeclaIncome] = useState(false);
+  const [teclaOut, setTeclaOut] = useState(false);
+  const [teclaAdjust, setTeclaAdjust] = useState(false);
+  const [felixPay, setFelixPay] = useState(false);
+  const [felixAdjust, setFelixAdjust] = useState(false);
+  const felixBal = accountBalance(db, FELIX_BANK);
+  // Cobros que entraron por Felix, por cómo le pagó el cliente (efectivo, transferencia, cheque…).
+  const felixIn = Object.entries(
+    db.movements
+      .filter((m) => m.account === FELIX_BANK && m.method === "felix" && m.amount > 0)
+      .reduce<Record<string, { amount: number; n: number }>>((acc, m) => {
+        const how = (m.via ?? "Sin detalle").split(" · ")[0] || "Sin detalle";
+        const x = (acc[how] ??= { amount: 0, n: 0 });
+        x.amount += m.amount;
+        x.n += 1;
+        return acc;
+      }, {}),
+  );
   const today = todayISO();
   const pending = pendingSettlements(db);
   const pendingByBank = (b: Bank) =>
@@ -96,12 +128,21 @@ function Caja() {
       .filter((m) => m.account === b)
       .reduce((a, m) => a + m.amount - Math.round((m.amount * (m.feePct ?? 0)) / 100), 0);
   const moves = useMemo(
-    () => db.movements.filter((m) => acc === "todas" || m.account === acc).slice(0, 60),
+    () =>
+      db.movements
+        .filter((m) => (acc === "todas" ? BUSINESS_BANKS.includes(m.account) : m.account === acc))
+        .slice(0, 60),
     [db.movements, acc],
   );
-  const cheques = db.cheques
+  const isTecla = (c: Cheque) =>
+    c.ownerAccount === SEPARATE_BANK ||
+    (c.status === "depositado" && c.depositBank === SEPARATE_BANK);
+  const openCheques = db.cheques
     .filter((c) => c.status === "cartera" || c.status === "depositado")
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const cheques = openCheques.filter((c) => !isTecla(c));
+  const teclaCheques = openCheques.filter(isTecla);
+  const teclaPending = pendingByBank(SEPARATE_BANK);
   const chequesTotal = cheques.reduce((a, c) => a + c.amount, 0);
 
   return (
@@ -119,7 +160,7 @@ function Caja() {
       </PageHeader>
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {(["Caja", "BBVA", "Provincia"] as Bank[]).map((b) => (
+        {BUSINESS_BANKS.map((b) => (
           <button
             key={b}
             onClick={() => setAcc(acc === b ? "todas" : b)}
@@ -149,6 +190,100 @@ function Caja() {
           </p>
           <p className="mt-2 text-lg font-bold tracking-tight md:text-xl">{ars(chequesTotal)}</p>
           <p className="mt-1 text-[11px] text-muted-foreground">{cheques.length} cheques</p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-3xl border border-dashed border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" /> {SEPARATE_NAME} · responsable inscripto (Factura
+              A) · cuenta aparte
+            </p>
+            <p className="mt-1 text-xl font-bold tracking-tight">
+              {ars(accountBalance(db, SEPARATE_BANK))}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {teclaPending ? `+ ${ars(teclaPending)} por acreditar · ` : ""}
+              {teclaCheques.length
+                ? `${teclaCheques.length} cheques · ${ars(teclaCheques.reduce((a, c) => a + c.amount, 0))}`
+                : "sin cheques pendientes"}{" "}
+              · no se suma a la caja del negocio
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={btn.soft} onClick={() => setTeclaAdjust(true)}>
+              <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial
+            </button>
+            <button className={btn.soft} onClick={() => setTeclaIncome(true)}>
+              <Plus className="h-4 w-4" /> Ingreso
+            </button>
+            <button className={btn.soft} onClick={() => setTeclaOut(true)}>
+              <Minus className="h-4 w-4" /> Egreso
+            </button>
+            <button className={btn.primary} onClick={() => setTeclaCheque(true)}>
+              <FileCheck2 className="h-4 w-4" strokeWidth={1.6} /> Cargar cheque
+            </button>
+            <button className={btn.ghost} onClick={() => setAcc(SEPARATE_BANK)}>
+              Ver movimientos
+            </button>
+          </div>
+        </div>
+        {teclaCheques.length > 0 && (
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {teclaCheques.map((c) => (
+              <ChequeRow
+                key={c.id}
+                c={c}
+                days={daysBetween(today, c.dueDate)}
+                onStatus={setChequeStatus}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4 rounded-3xl border border-dashed border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wallet className="h-3.5 w-3.5" /> Cuenta corriente con Felix · {SEPARATE_NAME} ↔
+              Áridos
+            </p>
+            <p className="mt-1 text-xl font-bold tracking-tight">{ars(Math.abs(felixBal))}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {felixBal > 0
+                ? "El Tecla le debe a Áridos: lo que los clientes le pagaron a Felix"
+                : felixBal < 0
+                  ? "Áridos le debe a El Tecla"
+                  : "Cuenta saldada"}{" "}
+              · se carga cobrando con "Otra: Felix (El Tecla)"
+            </p>
+            {felixIn.length > 0 && (
+              <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                {felixIn.map(([how, v]) => (
+                  <Badge key={how}>
+                    {how}: {ars(v.amount)} ({v.n})
+                  </Badge>
+                ))}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={btn.primary}
+              disabled={felixBal <= 0}
+              onClick={() => setFelixPay(true)}
+            >
+              <Banknote className="h-4 w-4" /> Felix le pasó la plata a Áridos
+            </button>
+            <button className={btn.soft} onClick={() => setFelixAdjust(true)}>
+              <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
+            </button>
+            <button className={btn.ghost} onClick={() => setAcc(FELIX_BANK)}>
+              Ver movimientos
+            </button>
+          </div>
         </div>
       </div>
 
@@ -251,6 +386,8 @@ function Caja() {
                 { value: "Caja", label: "Caja" },
                 { value: "BBVA", label: "BBVA" },
                 { value: "Provincia", label: "Provincia" },
+                { value: SEPARATE_BANK, label: "El Tecla" },
+                { value: FELIX_BANK, label: "Felix" },
               ]}
             />
           }
@@ -277,7 +414,14 @@ function Caja() {
                 <td className="whitespace-nowrap text-muted-foreground">
                   {fmtDate(m.date)} {m.date.length > 10 ? fmtTime(m.date) : ""}
                 </td>
-                <td className="font-medium">{m.concept}</td>
+                <td className="font-medium">
+                  {m.concept}
+                  {m.method === "felix" && (
+                    <p className="text-[11px] font-normal text-muted-foreground">
+                      Le pagó a Felix{m.via ? `: ${m.via}` : ""}
+                    </p>
+                  )}
+                </td>
                 <td>
                   <Badge tone={m.amount < 0 ? "danger" : "muted"}>
                     {kindLabel[m.kind] ?? m.kind}
@@ -338,6 +482,33 @@ function Caja() {
       <ChequeForm open={newCheque} onClose={() => setNewCheque(false)} />
       <NewIncome open={income} onClose={() => setIncome(false)} />
       <AdjustBalance open={adjust} onClose={() => setAdjust(false)} />
+      <ChequeForm
+        open={teclaCheque}
+        onClose={() => setTeclaCheque(false)}
+        ownerAccount={SEPARATE_BANK}
+      />
+      <NewIncome
+        open={teclaIncome}
+        onClose={() => setTeclaIncome(false)}
+        fixedAccount={SEPARATE_BANK}
+      />
+      <NewIncome
+        open={teclaOut}
+        onClose={() => setTeclaOut(false)}
+        fixedAccount={SEPARATE_BANK}
+        out
+      />
+      <FelixSettle open={felixPay} onClose={() => setFelixPay(false)} max={felixBal} />
+      <AdjustBalance
+        open={felixAdjust}
+        onClose={() => setFelixAdjust(false)}
+        fixedAccount={FELIX_BANK}
+      />
+      <AdjustBalance
+        open={teclaAdjust}
+        onClose={() => setTeclaAdjust(false)}
+        fixedAccount={SEPARATE_BANK}
+      />
       <MoveEdit
         move={editMove}
         onClose={(err) => {
@@ -358,7 +529,9 @@ function ChequeRow({
   days: number;
   onStatus: (id: string, s: ChequeStatus, bank?: Bank, givenTo?: string) => void;
 }) {
-  const [bank, setBank] = useState<Bank>("Provincia");
+  const [bank, setBank] = useState<Bank>(
+    c.ownerAccount === SEPARATE_BANK ? SEPARATE_BANK : "Provincia",
+  );
   const [to, setTo] = useState("");
   const tone = days < 0 ? "danger" : days <= 3 ? "dark" : "muted";
   return (
@@ -390,6 +563,7 @@ function ChequeRow({
             >
               <option value="BBVA">BBVA</option>
               <option value="Provincia">Provincia</option>
+              <option value={SEPARATE_BANK}>El Tecla</option>
             </Select>
             <button
               className={`${btn.primary} h-8 px-3 text-xs`}
@@ -417,7 +591,7 @@ function ChequeRow({
             className={`${btn.primary} h-8 px-3 text-xs`}
             onClick={() => onStatus(c.id, "acreditado")}
           >
-            Acreditado en {c.depositBank}
+            Acreditado en {c.depositBank ? bankLabel(c.depositBank) : ""}
           </button>
         )}
         <button className={btn.danger} onClick={() => onStatus(c.id, "rechazado")}>
@@ -490,6 +664,8 @@ function MoveEdit({
             <option value="Caja">Caja</option>
             <option value="BBVA">BBVA</option>
             <option value="Provincia">Provincia</option>
+            <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
+            <option value={FELIX_BANK}>{FELIX_NAME}</option>
           </Select>
         </Field>
         {note && <p className="col-span-2 text-xs text-muted-foreground">{note}</p>}
@@ -511,10 +687,96 @@ function MoveEdit({
   );
 }
 
+/** Felix le pasa a Áridos lo que cobró: sale de la cuenta corriente y entra en la cuenta elegida. */
+function FelixSettle({ open, onClose, max }: { open: boolean; onClose: () => void; max: number }) {
+  const { addTransfer } = useStore();
+  const [amount, setAmount] = useState(0);
+  const [to, setTo] = useState<Bank>("BBVA");
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
+  const [last, setLast] = useState(false);
+  if (open !== last) {
+    setLast(open);
+    if (open) {
+      setAmount(Math.max(0, max));
+      setDate(todayISO());
+      setNote("");
+    }
+  }
+  return (
+    <Modal open={open} onClose={onClose} title="Felix le pasó la plata a Áridos">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Importe" hint={`El Tecla debe ${ars(max)}`}>
+          <NumberInput value={amount} onChange={setAmount} prefix="$" />
+        </Field>
+        <Field label="Entra en">
+          <Select value={to} onChange={(e) => setTo(e.target.value as Bank)}>
+            <option value="Caja">Caja (efectivo)</option>
+            <option value="BBVA">BBVA</option>
+            <option value="Provincia">Provincia</option>
+          </Select>
+        </Field>
+        <Field label="Fecha">
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+        </Field>
+        <Field label="Nota (opcional)">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Transferencia, efectivo…"
+          />
+        </Field>
+        <p className="col-span-2 text-xs text-muted-foreground">
+          Baja la deuda de El Tecla con Áridos y suma la plata en {to}. Si es un pago parcial, el
+          resto sigue en la cuenta corriente.
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          className={btn.primary}
+          disabled={amount <= 0}
+          onClick={() => {
+            const iso =
+              date === todayISO()
+                ? new Date().toISOString()
+                : new Date(`${date}T12:00:00`).toISOString();
+            addTransfer(
+              iso,
+              FELIX_BANK,
+              to,
+              amount,
+              `Felix (El Tecla) → Áridos${note.trim() ? " · " + note.trim() : ""}`,
+            );
+            onClose();
+          }}
+        >
+          Registrar {amount > 0 ? ars(amount) : ""}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /** Carga el saldo real de una cuenta: el sistema registra solo la diferencia. */
-function AdjustBalance({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AdjustBalance({
+  open,
+  onClose,
+  fixedAccount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  fixedAccount?: Bank;
+}) {
   const { db, adjustBalance } = useStore();
-  const [account, setAccount] = useState<Bank>("Caja");
+  const [accountSel, setAccount] = useState<Bank>("Caja");
+  const account = fixedAccount ?? accountSel;
   const [real, setReal] = useState(0);
   const [note, setNote] = useState("");
   // "saldo": cargo lo que hay hoy en la cuenta. "importe": sumo (o resto) un monto para que cierre.
@@ -525,13 +787,23 @@ function AdjustBalance({ open, onClose }: { open: boolean; onClose: () => void }
   const target = mode === "saldo" ? real : now + (minus ? -delta : delta);
   const diff = Math.round(target - now);
   return (
-    <Modal open={open} onClose={onClose} title="Saldo inicial / ajuste de saldo">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={
+        fixedAccount
+          ? `Saldo inicial / ajuste · ${bankLabel(fixedAccount)}`
+          : "Saldo inicial / ajuste de saldo"
+      }
+    >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Cuenta">
+        <Field label="Cuenta" className={fixedAccount ? "hidden" : ""}>
           <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
             <option value="Caja">Caja</option>
             <option value="BBVA">BBVA</option>
             <option value="Provincia">Provincia</option>
+            <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
+            <option value={FELIX_BANK}>{FELIX_NAME}</option>
           </Select>
         </Field>
         <div className="col-span-2">
@@ -598,31 +870,69 @@ function AdjustBalance({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
-function NewIncome({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addIncome } = useStore();
+function NewIncome({
+  open,
+  onClose,
+  fixedAccount,
+  out,
+}: {
+  open: boolean;
+  onClose: () => void;
+  fixedAccount?: Bank;
+  /** Egreso: plata que sale de la cuenta. */
+  out?: boolean;
+}) {
+  const { addIncome, addOutflow } = useStore();
   const [concept, setConcept] = useState("");
   const [amount, setAmount] = useState(0);
-  const [account, setAccount] = useState<Bank>("Caja");
+  const [date, setDate] = useState(todayISO());
+  const [accountSel, setAccount] = useState<Bank>("Caja");
+  const account = fixedAccount ?? accountSel;
   return (
-    <Modal open={open} onClose={onClose} title="Ingreso extra">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={
+        fixedAccount
+          ? `${out ? "Egreso" : "Ingreso"} · ${bankLabel(fixedAccount)}`
+          : out
+            ? "Egreso"
+            : "Ingreso extra"
+      }
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label="Concepto" className="col-span-2">
           <Input
             value={concept}
             onChange={(e) => setConcept(e.target.value)}
-            placeholder="Aporte, devolución, venta de un equipo…"
+            placeholder={
+              out
+                ? "Transferencia, comisión del banco, retiro…"
+                : "Aporte, devolución, venta de un equipo…"
+            }
           />
         </Field>
         <Field label="Monto">
           <NumberInput value={amount} onChange={setAmount} prefix="$" />
         </Field>
-        <Field label="Entra en">
-          <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
-            <option value="Caja">Caja</option>
-            <option value="BBVA">BBVA</option>
-            <option value="Provincia">Provincia</option>
-          </Select>
-        </Field>
+        {fixedAccount ? (
+          <Field label="Fecha">
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => e.target.value && setDate(e.target.value)}
+            />
+          </Field>
+        ) : (
+          <Field label={out ? "Sale de" : "Entra en"}>
+            <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
+              <option value="Caja">Caja</option>
+              <option value="BBVA">BBVA</option>
+              <option value="Provincia">Provincia</option>
+              <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
+            </Select>
+          </Field>
+        )}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <button className={btn.soft} onClick={onClose}>
@@ -632,7 +942,14 @@ function NewIncome({ open, onClose }: { open: boolean; onClose: () => void }) {
           className={btn.primary}
           disabled={!concept || amount <= 0}
           onClick={() => {
-            addIncome(new Date().toISOString(), concept, amount, account);
+            const iso =
+              date === todayISO()
+                ? new Date().toISOString()
+                : new Date(`${date}T12:00:00`).toISOString();
+            if (out) addOutflow(iso, concept, amount, account);
+            else addIncome(iso, concept, amount, account);
+            setConcept("");
+            setAmount(0);
             onClose();
           }}
         >

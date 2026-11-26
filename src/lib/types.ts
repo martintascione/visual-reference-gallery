@@ -1,6 +1,8 @@
 // Modelo de datos del corralón. Todo corre en el navegador (sin servidor).
 
-export type Bank = "Caja" | "BBVA" | "Provincia";
+/** "El Tecla": cuenta de Corralón El Tecla (responsable inscripto), aparte del negocio. */
+/** "Felix": cuenta corriente entre Corralón El Tecla (Felix) y Áridos: lo que los clientes le pagaron a Felix. */
+export type Bank = "Caja" | "BBVA" | "Provincia" | "El Tecla" | "Felix";
 export type Category = "piedra" | "laja" | "liquido" | "unitario";
 export type BaseUnit = "kg" | "m2" | "l" | "u";
 /** bolson = bolsa chica (25 kg); bigbag = bolsón grande (1.000 kg). */
@@ -105,7 +107,7 @@ export type InstallService = {
 };
 
 export type PaymentMethod =
-  "efectivo" | "transferencia" | "debito" | "credito" | "cheque" | "cta_cte";
+  "efectivo" | "transferencia" | "debito" | "credito" | "cheque" | "cta_cte" | "felix";
 
 export type Payment = {
   method: PaymentMethod;
@@ -116,6 +118,8 @@ export type Payment = {
   chequeId?: string | undefined;
   /** Para cta cte: cantidad de cuotas acordadas. */
   dues?: number | undefined;
+  /** Cobro por Felix: cómo le pagó el cliente. */
+  via?: string | undefined;
 };
 
 export type Delivery = {
@@ -240,6 +244,8 @@ export type Cheque = {
   givenDate?: string | undefined;
   /** Cuota de cuenta corriente que se cobró con este cheque. */
   dueId?: string | undefined;
+  /** Cheque de la cuenta aparte (Corralón El Tecla): no entra en la cartera del negocio. */
+  ownerAccount?: Bank | undefined;
 };
 
 /** Datos del cheque con el que se le paga a un proveedor. */
@@ -257,7 +263,16 @@ export type SupplierCheque = {
 };
 
 export type MovementKind =
-  "venta" | "cobro" | "gasto" | "debito" | "ingreso" | "compra" | "flete" | "ajuste";
+  | "venta"
+  | "cobro"
+  | "gasto"
+  | "debito"
+  | "ingreso"
+  | "compra"
+  | "flete"
+  | "ajuste"
+  | "egreso"
+  | "transferencia";
 
 /** Movimiento de caja/banco. */
 export type Movement = {
@@ -274,6 +289,8 @@ export type Movement = {
   settled?: boolean | undefined;
   refId?: string | undefined;
   closureId?: string | undefined;
+  /** Cobros por Felix (El Tecla): cómo le pagó el cliente (efectivo, transferencia, cheque…). */
+  via?: string | undefined;
 };
 
 export type ExpenseType = "fijo" | "imprevisto" | "debito" | "flete" | "compra";

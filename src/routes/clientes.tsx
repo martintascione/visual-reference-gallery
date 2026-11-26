@@ -5,6 +5,7 @@ import type { Client, Due } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
 import { padronLookup } from "@/lib/arca";
 import { ClientDebtForm } from "@/components/debt-forms";
+import { FelixViaFields, type FelixVia, viaParse, viaText } from "@/components/felix-via";
 import { ars, daysBetween, fmtDate, todayISO, uid } from "@/lib/format";
 import {
   Badge,
@@ -217,6 +218,7 @@ function Account({ client }: { client: Client }) {
     echeq: false,
   });
   const [undoMsg, setUndoMsg] = useState<string | null>(null);
+  const [via, setVia] = useState<FelixVia>(viaParse());
   const dueIds = new Set(b.dues.map((d) => d.id));
   const dueLabel = (id?: string) => {
     const d = b.dues.find((x) => x.id === id);
@@ -253,6 +255,7 @@ function Account({ client }: { client: Client }) {
     setPaying(d);
     setAmount(d.amount - d.paid);
     setPayDate(today);
+    setVia(viaParse());
     setChq({ number: "", bank: "", drawer: client.name, dueDate: today, echeq: false });
   };
   const cfgSel = methods.find((m) => m.id === methodId);
@@ -264,6 +267,7 @@ function Account({ client }: { client: Client }) {
       payDate === today ? new Date().toISOString() : new Date(`${payDate}T12:00:00`).toISOString();
     payDue(paying.id, amount, cfg.method, cfg.bank, cfg.gateway, {
       date,
+      via: cfg.method === "felix" ? viaText(via) : undefined,
       cheque: isCheque ? chq : undefined,
     });
     setPaying(null);
@@ -399,6 +403,14 @@ function Account({ client }: { client: Client }) {
           <Field label={isCheque ? "Fecha en que te dio el cheque" : "Fecha del cobro"}>
             <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
           </Field>
+          {cfgSel?.method === "felix" && (
+            <>
+              <FelixViaFields value={via} onChange={setVia} />
+              <p className="text-xs text-muted-foreground">
+                La cuota queda pagada y el importe pasa a la cuenta corriente con Felix (El Tecla).
+              </p>
+            </>
+          )}
           {isCheque && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="N° de cheque *">

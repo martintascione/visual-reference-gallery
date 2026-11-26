@@ -44,6 +44,7 @@ const methodLabel: Record<PaymentMethod, string> = {
   credito: "Crédito",
   cheque: "Cheque",
   cta_cte: "Cta. cte.",
+  felix: "Felix (El Tecla)",
 };
 
 function Gastos() {

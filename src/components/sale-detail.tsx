@@ -16,6 +16,7 @@ const methodLabel: Record<string, string> = {
   credito: "Crédito",
   cheque: "Cheque",
   cta_cte: "Cta. cte.",
+  felix: "Felix (El Tecla)",
 };
 
 export function PayChips({ sale }: { sale: Sale }) {
@@ -171,6 +172,7 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
                 {cfg?.label ?? methodLabel[p.method]}
                 {p.installments && p.installments > 1 ? ` · ${p.installments} cuotas` : ""}
                 {p.dues ? ` · ${p.dues} cuotas` : ""}
+                {p.via ? ` · ${p.via}` : ""}
               </span>
               <span className="tabular-nums">
                 {ars(p.amount)}

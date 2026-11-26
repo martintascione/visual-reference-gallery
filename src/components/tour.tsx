@@ -166,6 +166,8 @@ const fullSteps: Step[] = [
 const NEWS_KEY = "ap-novedades-vistas";
 const NEWS_VERSION = "2026-11-26";
 const newsList = [
+  'Cobro "Otra: Felix (El Tecla)": el cliente queda sin deuda y el saldo pasa a la cuenta corriente con El Tecla',
+  "Cuenta aparte de Corralón El Tecla (responsable inscripto): saldo, ingresos, egresos y cheques",
   "Caja y bancos: editar o eliminar cualquier movimiento, y se corrige en todos lados",
   "Venta en acopio: en Entrega elegís cuándo retira y queda en Acopios con el saldo a favor",
   "Acopios: editar cantidades, sumar o sacar productos",

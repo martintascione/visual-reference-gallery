@@ -1,11 +1,24 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { addDays, todayISO } from "@/lib/format";
+import type { Bank } from "@/lib/types";
+import { SEPARATE_BANK, SEPARATE_NAME } from "@/lib/banks";
 import { Field, Input, Modal, NumberInput, Select, Toggle, btn } from "@/components/ui-bits";
 
 /** Carga de un cheque recibido: queda en la cartera y en el historial de cheques. */
-export function ChequeForm({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ChequeForm({
+  open,
+  onClose,
+  ownerAccount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Cheque para la cuenta aparte (Corralón El Tecla). */
+  ownerAccount?: Bank;
+}) {
   const { db, addCheque } = useStore();
+  const [tecla, setTecla] = useState(false);
+  const isTecla = ownerAccount === SEPARATE_BANK || tecla;
   const blank = () => ({
     number: "",
     bank: "",
@@ -32,12 +45,18 @@ export function ChequeForm({ open, onClose }: { open: boolean; onClose: () => vo
       clientId: client?.id,
       clientName: from || c.drawer.trim(),
       echeq: c.echeq,
+      ownerAccount: isTecla ? SEPARATE_BANK : undefined,
     });
+    setTecla(false);
     setC(blank());
     onClose();
   };
   return (
-    <Modal open={open} onClose={onClose} title="Cargar cheque recibido">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isTecla ? `Cargar cheque · ${SEPARATE_NAME}` : "Cargar cheque recibido"}
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field
           label="Quién me lo dio"
@@ -89,6 +108,15 @@ export function ChequeForm({ open, onClose }: { open: boolean; onClose: () => vo
         </Field>
         <div className="col-span-2">
           <Toggle checked={c.echeq} onChange={(v) => setC({ ...c, echeq: v })} label="Es e-cheq" />
+          {!ownerAccount && (
+            <div className="mt-2">
+              <Toggle
+                checked={tecla}
+                onChange={setTecla}
+                label={`Es para ${SEPARATE_NAME} (cuenta aparte, Factura A)`}
+              />
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-4 flex justify-end gap-2">

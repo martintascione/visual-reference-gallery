@@ -109,7 +109,7 @@ export function businessContext(db: DB) {
     `Productos (${products.length}): ${products.slice(0, 40).join("; ") || "ninguno cargado todavía"}.`,
     `Clientes cargados: ${db.clients.length}. Con deuda: ${debtors.map((x) => `${x.c.name} ${ars(x.b.balance)}${x.b.overdue ? " (vencido " + ars(x.b.overdue) + ")" : ""}`).join("; ") || "ninguno"}.`,
     `Hoy: ventas ${ars(day.salesTotal)} (${day.sales.length} operaciones), ganancia estimada ${ars(day.profit)}. Última semana: ventas ${ars(week.salesTotal)}, ganancia ${ars(week.profit)}.`,
-    `Saldos: Caja ${ars(accountBalance(db, "Caja"))}, BBVA ${ars(accountBalance(db, "BBVA"))}, Provincia ${ars(accountBalance(db, "Provincia"))}.`,
+    `Saldos: Caja ${ars(accountBalance(db, "Caja"))}, BBVA ${ars(accountBalance(db, "BBVA"))}, Provincia ${ars(accountBalance(db, "Provincia"))} (aparte, cuenta de Corralón El Tecla responsable inscripto: ${ars(accountBalance(db, "El Tecla"))}, no se suma al negocio); cuenta corriente con Felix (El Tecla): ${ars(accountBalance(db, "Felix"))} (positivo = El Tecla le debe a Áridos).`,
     `Stock bajo: ${low.join(", ") || "ninguno"}.`,
     `Cheques en cartera: ${db.cheques.filter((c) => c.status === "cartera").length}. Presupuestos abiertos: ${db.quotes.filter((q) => q.status === "enviado" || q.status === "seguimiento").length}. Ventas sin cerrar: ${db.sales.filter((s) => !s.closureId).length}.`,
     `Medios de cobro configurados: ${db.settings.methods

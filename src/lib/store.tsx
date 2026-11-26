@@ -1,3 +1,4 @@
+import { FELIX_METHOD } from "@/lib/banks";
 import {
   createContext,
   useCallback,
@@ -91,6 +92,7 @@ type Actions = {
     gateway?: "Payway",
     extra?: {
       date?: string | undefined;
+      via?: string | undefined;
       cheque?:
         | { number: string; bank: string; drawer: string; dueDate: string; echeq?: boolean }
         | undefined;
@@ -140,6 +142,10 @@ type Actions = {
   addIncome: (date: string, concept: string, amount: number, account: Bank) => void;
   /** Acopios: el cliente paga a cuenta y retira mercadería contra ese saldo. */
   addStockpile: (s: Omit<Stockpile, "id" | "payments" | "withdrawals">) => string;
+  /** Plata que sale de una cuenta sin ser gasto del negocio (ej. de la cuenta de El Tecla). */
+  addOutflow: (date: string, concept: string, amount: number, account: Bank) => void;
+  /** Pasa plata de una cuenta a otra (ej. Felix le transfiere a Áridos lo que cobró). */
+  addTransfer: (date: string, from: Bank, to: Bank, amount: number, concept: string) => void;
   updateStockpile: (
     id: string,
     patch: Partial<Pick<Stockpile, "note" | "closed" | "items" | "pickupBy">>,
@@ -227,6 +233,9 @@ async function loadAll(): Promise<DB> {
   if (st.error) throw st.error;
   if (st.data) {
     db.settings = { ...db.settings, ...(st.data.data as Settings) };
+    // Medio "Otra: Felix" (cuenta corriente con El Tecla): se agrega si la configuración guardada no lo tiene.
+    if (!db.settings.methods.some((m) => m.method === "felix"))
+      db.settings.methods = [...db.settings.methods, FELIX_METHOD];
     db.counters = { ...db.counters, ...(st.data.counters as DB["counters"]) };
   } else {
     const ins = await supabase
@@ -481,6 +490,7 @@ function applySale(d: DB, sale: Sale, chequeDraft?: Draft<Cheque>, prevMoves: Mo
       amount: pay.amount,
       concept: `Venta #${sale.number} · ${sale.clientName}`,
       method: pay.method,
+      via: pay.method === "felix" ? pay.via : undefined,
       gateway: pay.gateway,
       feePct: cfg?.feePct ?? 0,
       settleDays: cfg?.settleDays ?? 0,
@@ -815,6 +825,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             account: bank,
             amount,
             concept: `Cobro cuota ${due.n}/${due.of} · ${client?.name ?? ""}`,
+            via: method === "felix" ? extra?.via : undefined,
             method,
             gateway,
             feePct: cfg?.feePct ?? 0,
@@ -962,6 +973,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (patch.concept !== undefined && patch.concept.trim()) m.concept = patch.concept.trim();
           if (patch.account) m.account = patch.account;
           m.amount = sign * abs;
+          if (m.kind === "transferencia" && m.refId)
+            for (const x of d.movements)
+              if (x !== m && x.kind === "transferencia" && x.refId === m.refId) {
+                x.amount = -sign * abs;
+                if (patch.date) x.date = m.date;
+                x.concept = m.concept;
+              }
           if (link.cheque && patch.account) link.cheque.depositBank = patch.account;
           if (link.stockpilePay) {
             link.stockpilePay.amount = abs;
@@ -990,6 +1008,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const link = movementLink(d, m);
           if (link.sale) {
             err = `Es el cobro de la venta #${link.sale.number}: se borra editando o borrando la venta.`;
+            return d;
+          }
+          if (m.kind === "transferencia" && m.refId) {
+            // Transferencia: se borran las dos patas.
+            d.movements = d.movements.filter(
+              (x) => !(x.kind === "transferencia" && x.refId === m.refId),
+            );
             return d;
           }
           if (link.due) link.due.paid = Math.max(0, link.due.paid - Math.abs(m.amount));
@@ -1341,6 +1366,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!s || !w) return d;
           stockpileStock(d, s, w, 1, "Retiro de acopio borrado");
           s.withdrawals = s.withdrawals.filter((x) => x.id !== wId);
+          return d;
+        }),
+      addTransfer: (date, from, to, amount, concept) =>
+        mutate((d) => {
+          const a = Math.abs(Math.round(amount));
+          const pair = uid();
+          d.movements.unshift(
+            {
+              id: uid(),
+              date,
+              kind: "transferencia",
+              account: to,
+              amount: a,
+              concept,
+              settled: true,
+              refId: pair,
+            },
+            {
+              id: uid(),
+              date,
+              kind: "transferencia",
+              account: from,
+              amount: -a,
+              concept,
+              settled: true,
+              refId: pair,
+            },
+          );
+          return d;
+        }),
+      addOutflow: (date, concept, amount, account) =>
+        mutate((d) => {
+          d.movements.unshift({
+            id: uid(),
+            date,
+            kind: "egreso",
+            account,
+            amount: -Math.abs(amount),
+            concept,
+            settled: true,
+          });
           return d;
         }),
       addIncome: (date, concept, amount, account) =>

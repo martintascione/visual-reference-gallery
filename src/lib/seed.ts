@@ -116,6 +116,15 @@ export const defaultSettings: Settings = {
       active: true,
     },
     {
+      id: "felix",
+      label: "Otra: Felix (El Tecla)",
+      method: "felix",
+      bank: "Felix",
+      feePct: 0,
+      settleDays: 0,
+      active: true,
+    },
+    {
       id: "cta-cte",
       label: "Cuenta corriente",
       method: "cta_cte",

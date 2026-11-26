@@ -5,6 +5,7 @@ import type { Cheque } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDateNum, todayISO } from "@/lib/format";
 import { chequeFrom, chequeLabel } from "@/lib/cheque-labels";
+import { SEPARATE_BANK, SEPARATE_NAME, bankLabel } from "@/lib/banks";
 import {
   Badge,
   Card,
@@ -37,19 +38,22 @@ export const Route = createFileRoute("/cheques")({
   component: Cheques,
 });
 
-type Filter = "todos" | "cartera" | "entregados" | "propios" | "cobrados" | "rechazados";
+type Filter = "todos" | "cartera" | "entregados" | "propios" | "cobrados" | "rechazados" | "tecla";
+const isTecla = (c: Cheque) => c.ownerAccount === SEPARATE_BANK || c.depositBank === SEPARATE_BANK;
 const match = (c: Cheque, f: Filter) =>
   f === "todos"
     ? true
-    : f === "cartera"
-      ? c.status === "cartera" || c.status === "depositado"
-      : f === "entregados"
-        ? c.status === "endosado"
-        : f === "propios"
-          ? !!c.own
-          : f === "cobrados"
-            ? c.status === "acreditado"
-            : c.status === "rechazado";
+    : f === "tecla"
+      ? isTecla(c)
+      : f === "cartera"
+        ? c.status === "cartera" || c.status === "depositado"
+        : f === "entregados"
+          ? c.status === "endosado"
+          : f === "propios"
+            ? !!c.own
+            : f === "cobrados"
+              ? c.status === "acreditado"
+              : c.status === "rechazado";
 
 function Cheques() {
   const { db, removeCheque } = useStore();
@@ -141,6 +145,7 @@ function Cheques() {
               { value: "propios", label: "Propios" },
               { value: "cobrados", label: "Cobrados" },
               { value: "rechazados", label: "Rechazados" },
+              { value: "tecla", label: "El Tecla" },
             ]}
           />
         </div>
@@ -179,6 +184,11 @@ function Cheques() {
                   <p className="font-medium">
                     N° {c.number || "s/n"}
                     {c.echeq && <Badge className="ml-1">e-cheq</Badge>}
+                    {isTecla(c) && (
+                      <Badge className="ml-1" tone="dark">
+                        {SEPARATE_NAME}
+                      </Badge>
+                    )}
                   </p>
                   <p className="text-[11px] text-muted-foreground">{c.bank}</p>
                 </td>
@@ -195,7 +205,9 @@ function Cheques() {
                 <td className="align-top">
                   <Badge tone={tone(c)}>{chequeLabel[c.status]}</Badge>
                   {c.depositBank && c.status !== "cartera" && !c.own && c.status !== "endosado" && (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">en {c.depositBank}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      en {bankLabel(c.depositBank)}
+                    </p>
                   )}
                 </td>
                 <td className="align-top">
