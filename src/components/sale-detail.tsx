@@ -117,6 +117,24 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
             <span className="tabular-nums">{ars(sale.install.amount)}</span>
           </p>
         )}
+        {!!sale.stockpileUntil && (
+          <button
+            type="button"
+            className="flex w-full justify-between gap-3 rounded-xl bg-surface px-3 py-2 text-left text-xs"
+            onClick={() => {
+              try {
+                sessionStorage.setItem("ap-acopio-abrir", sale.id);
+              } catch {
+                /* sin storage */
+              }
+              onClose();
+              void navigate({ to: "/acopios" });
+            }}
+          >
+            <span>Queda en acopio · retira hasta {fmtDate(sale.stockpileUntil)}</span>
+            <span className="underline">Ver acopio</span>
+          </button>
+        )}
         {!sale.delivery && !!sale.pickupFee && (
           <p className="flex justify-between gap-3">
             <span>Servicio de embolsado</span>

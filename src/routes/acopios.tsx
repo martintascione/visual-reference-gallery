@@ -73,6 +73,19 @@ function Acopios() {
   }, []);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = list.find((s) => s.id === openId) ?? null;
+  // Desde el detalle de una venta "queda en acopio": se abre ese acopio.
+  useEffect(() => {
+    try {
+      const saleId = sessionStorage.getItem("ap-acopio-abrir");
+      if (!saleId) return;
+      sessionStorage.removeItem("ap-acopio-abrir");
+      const sp = list.find((x) => x.saleId === saleId);
+      if (sp) setOpenId(sp.id);
+    } catch {
+      /* sin storage */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const rows = list
     .filter((s) => showClosed || !s.closed)
@@ -143,7 +156,16 @@ function Acopios() {
                   {s.note && <p className="text-[11px] text-muted-foreground">{s.note}</p>}
                   {s.closed && <Badge>Cerrado</Badge>}
                 </td>
-                <td className="whitespace-nowrap">{fmtDateNum(s.date.slice(0, 10))}</td>
+                <td className="whitespace-nowrap">
+                  {fmtDateNum(s.date.slice(0, 10))}
+                  {s.pickupBy && (
+                    <p
+                      className={`text-[11px] ${!s.closed && s.pickupBy < todayISO() ? "text-danger-soft-foreground" : "text-muted-foreground"}`}
+                    >
+                      retira hasta {fmtDateNum(s.pickupBy)}
+                    </p>
+                  )}
+                </td>
                 <td className="text-right tabular-nums">{ars(b.paid)}</td>
                 <td className="text-right tabular-nums">{ars(b.taken)}</td>
                 <td
@@ -388,6 +410,215 @@ function NewStockpile({
   );
 }
 
+type AcItem = NonNullable<Stockpile["items"]>[number];
+
+/** Productos del acopio: retira hasta, y editar cantidades, precios, sumar o sacar productos. */
+function ItemsEditor({ s }: { s: Stockpile }) {
+  const { db, updateStockpile } = useStore();
+  const [edit, setEdit] = useState(false);
+  const [rows, setRows] = useState<AcItem[]>([]);
+  const [pid, setPid] = useState("");
+  const [unit, setUnit] = useState<SaleUnit>("t");
+  const [qty, setQty] = useState(0);
+  const [price, setPrice] = useState<number | undefined>(undefined);
+  useEffect(() => setEdit(false), [s.id]);
+  const products = useMemo(
+    () => db.products.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name)),
+    [db.products],
+  );
+  const items = s.items ?? [];
+  const b = stockpileBalance(s);
+  const value = items.reduce((a, i) => a + Math.round(i.unitPrice * i.qty), 0);
+  const ivaK = s.withIva ? 1 + db.settings.ivaPct / 100 : 1;
+  const p = products.find((x) => x.id === pid);
+  const units = p ? saleUnitsFor(p) : [];
+  const u = p && units.includes(unit) ? unit : (units[0] ?? "u");
+  const unitPrice = price ?? (p ? Math.round(listPrice(p, u) * ivaK) : 0);
+  const took = (it: AcItem) =>
+    s.withdrawals
+      .filter((w) => w.productId === it.productId && w.unit === it.unit)
+      .reduce((a, w) => a + w.qty, 0);
+  const sale = s.saleId ? db.sales.find((x) => x.id === s.saleId) : undefined;
+  const start = () => {
+    setRows(items.map((i) => ({ ...i })));
+    setPid("");
+    setQty(0);
+    setPrice(undefined);
+    setEdit(true);
+  };
+  const addRow = () => {
+    if (!p || qty <= 0) return;
+    setRows((r) => [...r, { productId: p.id, name: p.name, qty, unit: u, unitPrice }]);
+    setPid("");
+    setQty(0);
+    setPrice(undefined);
+  };
+  const save = () => {
+    updateStockpile(s.id, { items: rows.filter((r) => r.qty > 0) });
+    setEdit(false);
+  };
+  const newValue = rows.reduce((a, i) => a + Math.round(i.unitPrice * i.qty), 0);
+  const diff = (edit ? newValue : value) - b.paid;
+  return (
+    <div className="on-surface rounded-3xl bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-xs font-semibold">
+          <Package className="h-4 w-4" strokeWidth={1.6} /> Productos acopiados
+          {sale && (
+            <span className="font-normal text-muted-foreground">· venta #{sale.number}</span>
+          )}
+        </p>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Retira hasta</span>
+          <span className="w-40">
+            <Input
+              type="date"
+              value={s.pickupBy ?? ""}
+              onChange={(e) => updateStockpile(s.id, { pickupBy: e.target.value || undefined })}
+            />
+          </span>
+        </div>
+      </div>
+      {!edit ? (
+        <>
+          {items.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Sin productos cargados: los retiros se cargan con cualquier producto.
+            </p>
+          )}
+          {items.map((it) => (
+            <p
+              key={it.productId + it.unit}
+              className="flex justify-between gap-2 border-b border-border/40 py-1 text-xs last:border-0"
+            >
+              <span>
+                {qtyUnit(it.qty, it.unit)} {it.name}
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {ars(it.unitPrice)} c/u · retiró {qtyUnit(took(it), it.unit)}
+                </span>
+              </span>
+              <span className="tabular-nums">{ars(Math.round(it.unitPrice * it.qty))}</span>
+            </p>
+          ))}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span>
+              Acopiado {ars(value)} · pagado {ars(b.paid)}
+              {items.length > 0 && diff !== 0 && (
+                <b className={diff > 0 ? "text-danger-soft-foreground" : ""}>
+                  {" "}
+                  · {diff > 0 ? `falta cobrar ${ars(diff)}` : `a favor ${ars(-diff)}`}
+                </b>
+              )}
+            </span>
+            <button className={`${btn.soft} h-8 px-3 text-xs`} onClick={start}>
+              Editar productos
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[minmax(0,1fr)_110px_120px_auto] items-center gap-2 rounded-2xl bg-card p-2 text-xs"
+            >
+              <span className="truncate font-medium">
+                {r.name}
+                {took(r) > 0 && (
+                  <span className="block font-normal text-muted-foreground">
+                    ya retiró {qtyUnit(took(r), r.unit)}
+                  </span>
+                )}
+              </span>
+              <NumberInput
+                value={r.qty}
+                onChange={(v) =>
+                  setRows((x) => x.map((y, j) => (j === i ? { ...y, qty: Math.max(0, v) } : y)))
+                }
+                suffix={unitShort[r.unit]}
+              />
+              <NumberInput
+                value={r.unitPrice}
+                onChange={(v) =>
+                  setRows((x) =>
+                    x.map((y, j) => (j === i ? { ...y, unitPrice: Math.max(0, v) } : y)),
+                  )
+                }
+                prefix="$"
+              />
+              <button
+                className={btn.icon}
+                aria-label="Sacar producto"
+                title="Sacar este producto del acopio"
+                onClick={() => setRows((x) => x.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </button>
+            </div>
+          ))}
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-card p-2 sm:grid-cols-[minmax(0,1fr)_110px_110px_120px_auto]">
+            <Select
+              value={pid}
+              onChange={(e) => {
+                setPid(e.target.value);
+                setPrice(undefined);
+              }}
+              className="col-span-2 sm:col-span-1"
+            >
+              <option value="">Sumar un producto…</option>
+              {products.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </Select>
+            <Select value={u} onChange={(e) => setUnit(e.target.value as SaleUnit)} disabled={!p}>
+              {units.map((x) => (
+                <option key={x} value={x}>
+                  {unitShort[x]}
+                </option>
+              ))}
+            </Select>
+            <NumberInput value={qty} onChange={setQty} suffix={unitShort[u]} />
+            <NumberInput value={unitPrice} onChange={(v) => setPrice(v)} prefix="$" />
+            <button
+              className={`${btn.soft} h-9 px-3 text-xs`}
+              disabled={!p || qty <= 0}
+              onClick={addRow}
+            >
+              <Plus className="h-3.5 w-3.5" /> Sumar
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span>
+              Acopiado {ars(newValue)} · pagado {ars(b.paid)}
+              {diff !== 0 && (
+                <b className={diff > 0 ? "text-danger-soft-foreground" : ""}>
+                  {" "}
+                  · {diff > 0 ? `falta cobrar ${ars(diff)}` : `a favor ${ars(-diff)}`}
+                </b>
+              )}
+            </span>
+            <span className="flex gap-2">
+              <button className={btn.soft} onClick={() => setEdit(false)}>
+                Cancelar
+              </button>
+              <button className={btn.primary} onClick={save}>
+                Guardar productos
+              </button>
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Si suma productos, cobrá la diferencia con "Otro pago a cuenta". La venta original no se
+            modifica: el acopio lleva la cuenta de lo que falta retirar.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => void }) {
   const {
     db,
@@ -511,7 +742,11 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
       id: x.id,
       kind: "pago" as const,
       date: x.date,
-      detail: `Pago a cuenta · ${x.method === "efectivo" ? "Efectivo" : `Transferencia ${x.account}`}`,
+      detail:
+        x.method === "venta"
+          ? `Pagado en la ${x.detail ?? "venta"}`
+          : `Pago a cuenta · ${x.method === "efectivo" ? "Efectivo" : `Transferencia ${x.account}`}`,
+      fromSale: x.method === "venta",
       plus: x.amount,
       minus: 0,
     })),
@@ -522,6 +757,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
       detail: `${qtyUnit(x.qty, x.unit)} ${x.name} × ${ars(x.unitPrice)} · ${x.place}`,
       plus: 0,
       minus: x.total,
+      fromSale: false,
     })),
   ].sort((x, y) => x.date.localeCompare(y.date));
   let run = 0;
@@ -536,6 +772,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
       subtitle={`Pagó ${ars(b.paid)} · retiró ${ars(b.taken)} · ${b.saldo >= 0 ? `le quedan ${ars(b.saldo)}` : `debe ${ars(-b.saldo)}`}`}
     >
       <div className="flex flex-col gap-4">
+        <ItemsEditor s={s} />
         <div className="on-surface rounded-3xl bg-surface p-4">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold">
             <Truck className="h-4 w-4" strokeWidth={1.6} /> Registrar un retiro
@@ -565,8 +802,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
           {quotedRows.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-[11px] font-medium text-muted-foreground">
-                Productos del presupuesto{s.withIva ? " (precios con IVA)" : ""}: poné cuánto se
-                lleva hoy
+                Productos acopiados{s.withIva ? " (precios con IVA)" : ""}: poné cuánto se lleva hoy
               </p>
               {quotedRows.map((r) => (
                 <div
@@ -576,7 +812,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{r.it.name}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {qtyUnit(r.it.qty, r.it.unit)} presupuestado · {ars(r.it.unitPrice)} c/u ·{" "}
+                      {qtyUnit(r.it.qty, r.it.unit)} acopiado · {ars(r.it.unitPrice)} c/u ·{" "}
                       {r.left > 0 ? (
                         <b className="text-foreground">faltan {qtyUnit(r.left, r.it.unit)}</b>
                       ) : (
@@ -611,13 +847,13 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
               className={`${btn.ghost} mt-2`}
               onClick={() => setShowOther(true)}
             >
-              <Plus className="h-3.5 w-3.5" /> Otro producto (fuera del presupuesto)
+              <Plus className="h-3.5 w-3.5" /> Otro producto (fuera del acopio)
             </button>
           ) : (
             <div className={quotedRows.length ? "mt-3 rounded-2xl bg-card p-3" : ""}>
               {quotedRows.length > 0 && (
                 <p className="mb-2 text-[11px] font-medium text-muted-foreground">
-                  Otro producto, fuera del presupuesto
+                  Otro producto, fuera del acopio
                 </p>
               )}
               <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
@@ -752,7 +988,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
                 {ars(m.saldo)}
               </td>
               <td className="text-right">
-                {confirm === m.id ? (
+                {m.fromSale ? null : confirm === m.id ? (
                   <button
                     className={btn.danger}
                     onClick={() => {
@@ -816,7 +1052,7 @@ function StockpileDetail({ s, onClose }: { s: Stockpile | null; onClose: () => v
               >
                 {s.closed ? "Reabrir acopio" : "Cerrar acopio"}
               </button>
-              {confirm === "all" ? (
+              {s.saleId ? null : confirm === "all" ? (
                 <button
                   className={btn.danger}
                   onClick={() => {

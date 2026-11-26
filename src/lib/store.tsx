@@ -89,8 +89,34 @@ type Actions = {
     method: PaymentMethod,
     bank: Bank,
     gateway?: "Payway",
+    extra?: {
+      date?: string | undefined;
+      cheque?:
+        | { number: string; bank: string; drawer: string; dueDate: string; echeq?: boolean }
+        | undefined;
+    },
   ) => void;
+  /** Borra un cobro de cuota mal cargado: la cuota vuelve a quedar pendiente. */
+  undoDuePayment: (ref: { movementId?: string; chequeId?: string }) => string | null;
+  /** Borra un cliente sin deuda. Las ventas y presupuestos viejos quedan con su nombre. */
+  removeClient: (id: string) => void;
+  /** Une dos clientes (ej. duplicados): todo lo de "from" pasa a "to" y "from" se borra. */
+  mergeClients: (fromId: string, toId: string) => void;
+  /** Deja una cuenta con el saldo real de hoy (saldo inicial o ajuste). */
+  adjustBalance: (account: Bank, real: number, note?: string) => void;
   addCheque: (c: Draft<Cheque>) => Cheque;
+  /** Corrige los datos de un cheque. Devuelve un aviso si algo no se pudo cambiar. */
+  updateCheque: (
+    id: string,
+    patch: Partial<
+      Pick<
+        Cheque,
+        "number" | "bank" | "drawer" | "dueDate" | "receivedDate" | "echeq" | "amount" | "givenTo"
+      >
+    >,
+  ) => string | null;
+  /** Borra un cheque mal cargado. Devuelve el motivo si no se puede. */
+  removeCheque: (id: string) => string | null;
   setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank, givenTo?: string) => void;
   addExpense: (e: Draft<Expense>) => void;
   /** Asienta una descarga: suma stock, guarda el historial y (si se pide) actualiza costos y precios. */
@@ -107,7 +133,10 @@ type Actions = {
   addIncome: (date: string, concept: string, amount: number, account: Bank) => void;
   /** Acopios: el cliente paga a cuenta y retira mercadería contra ese saldo. */
   addStockpile: (s: Omit<Stockpile, "id" | "payments" | "withdrawals">) => string;
-  updateStockpile: (id: string, patch: Partial<Pick<Stockpile, "note" | "closed">>) => void;
+  updateStockpile: (
+    id: string,
+    patch: Partial<Pick<Stockpile, "note" | "closed" | "items" | "pickupBy">>,
+  ) => void;
   removeStockpile: (id: string) => void;
   addStockpilePayment: (id: string, pay: Omit<StockpilePayment, "id" | "movementId">) => void;
   removeStockpilePayment: (id: string, payId: string) => void;
@@ -295,8 +324,74 @@ function undoSupplierPayment(d: DB, pay: SupplierPayment) {
 }
 
 /** Registra todo lo que genera una venta: baja de stock, movimientos de caja/banco, cheque y cuotas. */
+/** Productos de una venta con el precio final por unidad (bonificaciones e IVA incluidos), para el acopio. */
+export function saleStockpileItems(d: DB, sale: Sale): NonNullable<Stockpile["items"]> {
+  const k = (1 - (sale.discountPct ?? 0) / 100) * (sale.withIva ? 1 + d.settings.ivaPct / 100 : 1);
+  return sale.items.map((i) => ({
+    productId: i.productId,
+    name: i.name,
+    qty: i.qty,
+    unit: i.unit,
+    unitPrice: Math.round((i.qty ? i.subtotal / i.qty : i.unitPrice) * k),
+  }));
+}
+
+const itemsValue = (items: NonNullable<Stockpile["items"]>) =>
+  items.reduce((a, i) => a + Math.round(i.unitPrice * i.qty), 0);
+
+/** Crea, actualiza o borra el acopio que sale de una venta "queda en acopio". */
+function syncSaleStockpile(d: DB, sale: Sale | null, old?: Sale) {
+  d.stockpiles = d.stockpiles ?? [];
+  const id = sale?.id ?? old?.id;
+  const sp = d.stockpiles.find((x) => x.saleId === id);
+  if (!sale?.stockpileUntil) {
+    if (sp) {
+      // Lo retirado vuelve al stock: la venta (si sigue) descuenta todo de una.
+      for (const w of sp.withdrawals) stockpileStock(d, sp, w, 1, "Acopio de venta quitado");
+      d.stockpiles = d.stockpiles.filter((x) => x !== sp);
+    }
+    return;
+  }
+  const items = saleStockpileItems(d, sale);
+  const amount = itemsValue(items);
+  if (!sp) {
+    d.stockpiles.unshift({
+      id: uid(),
+      clientId: sale.clientId,
+      clientName: sale.clientName,
+      date: sale.date,
+      note: `Venta #${sale.number}`,
+      saleId: sale.id,
+      pickupBy: sale.stockpileUntil,
+      withIva: sale.withIva || undefined,
+      items,
+      payments: [
+        {
+          id: uid(),
+          date: sale.date,
+          amount,
+          method: "venta",
+          account: "Caja",
+          detail: `Venta #${sale.number}`,
+        },
+      ],
+      withdrawals: [],
+    });
+    return;
+  }
+  sp.pickupBy = sale.stockpileUntil;
+  sp.clientId = sale.clientId;
+  sp.clientName = sale.clientName;
+  const pay = sp.payments.find((x) => x.method === "venta");
+  if (pay) pay.amount = amount;
+  // Si nadie tocó los productos del acopio, siguen a la venta.
+  const prev = old ? JSON.stringify(saleStockpileItems(d, old)) : "";
+  if (!sp.withdrawals.length && JSON.stringify(sp.items ?? []) === prev) sp.items = items;
+}
+
 function applySale(d: DB, sale: Sale, chequeDraft?: Draft<Cheque>, prevMoves: Movement[] = []) {
-  for (const it of sale.items) {
+  // En acopio el stock no sale con la venta: sale con cada retiro.
+  for (const it of sale.stockpileUntil ? [] : sale.items) {
     const p = d.products.find((x) => x.id === it.productId);
     if (p) {
       p.stock -= it.baseQty;
@@ -376,7 +471,7 @@ function applySale(d: DB, sale: Sale, chequeDraft?: Draft<Cheque>, prevMoves: Mo
 
 /** Deshace lo que generó una venta. Los cobros de cuotas ya registrados y los cheques ya movidos no se tocan. */
 function reverseSale(d: DB, sale: Sale) {
-  for (const it of sale.items) {
+  for (const it of sale.stockpileUntil ? [] : sale.items) {
     const p = d.products.find((x) => x.id === it.productId);
     if (p) p.stock += it.baseQty;
     const k = d.stockMoves.findIndex(
@@ -543,6 +638,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.counters.sale += 1;
           sale.number = d.counters.sale;
           applySale(d, sale, chequeDraft);
+          syncSaleStockpile(d, sale);
           if (sale.fromQuoteId) {
             const q = d.quotes.find((x) => x.id === sale.fromQuoteId);
             if (q) q.status = "aceptado";
@@ -568,6 +664,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             fromQuoteId: old.fromQuoteId,
           };
           applySale(d, sale, chequeDraft, prevMoves);
+          syncSaleStockpile(d, sale, old);
           d.sales[i] = sale;
           return d;
         }),
@@ -576,6 +673,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const sale = d.sales.find((x) => x.id === id);
           if (!sale) return d;
           reverseSale(d, sale);
+          syncSaleStockpile(d, null, sale);
           if (sale.fromQuoteId) {
             const q = d.quotes.find((x) => x.id === sale.fromQuoteId);
             if (q && q.status === "aceptado") q.status = "enviado";
@@ -662,16 +760,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           else d.clients.push(c);
           return d;
         }),
-      payDue: (dueId, amount, method, bank, gateway) =>
+      payDue: (dueId, amount, method, bank, gateway, extra) =>
         mutate((d) => {
           const due = d.dues.find((x) => x.id === dueId);
           if (!due) return d;
           due.paid = Math.min(due.amount, due.paid + amount);
           const client = d.clients.find((c) => c.id === due.clientId);
+          const when = extra?.date ?? new Date().toISOString();
+          // Cobro con cheque: queda en la cartera; la plata entra al banco cuando se deposita.
+          if (method === "cheque" && extra?.cheque) {
+            d.cheques.unshift({
+              id: uid(),
+              number: extra.cheque.number,
+              bank: extra.cheque.bank,
+              drawer: extra.cheque.drawer || client?.name || "",
+              dueDate: extra.cheque.dueDate,
+              amount,
+              status: "cartera",
+              clientId: due.clientId,
+              clientName: client?.name ?? "",
+              echeq: !!extra.cheque.echeq,
+              receivedDate: when.slice(0, 10),
+              dueId: due.id,
+            });
+            return d;
+          }
           const cfg = methodCfg(d, { method, bank, gateway, amount });
           d.movements.unshift({
             id: uid(),
-            date: new Date().toISOString(),
+            date: when,
             kind: "cobro",
             account: bank,
             amount,
@@ -685,6 +802,85 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
           return d;
         }),
+      undoDuePayment: (ref) => {
+        let err: string | null = null;
+        mutate((d) => {
+          if (ref.movementId) {
+            const m = d.movements.find((x) => x.id === ref.movementId);
+            const due = m ? d.dues.find((x) => x.id === m.refId) : undefined;
+            if (!m || !due) return d;
+            if (m.closureId) {
+              err = "Ese cobro ya está en un cierre del día: no se puede borrar.";
+              return d;
+            }
+            due.paid = Math.max(0, due.paid - m.amount);
+            d.movements = d.movements.filter((x) => x.id !== m.id);
+          }
+          if (ref.chequeId) {
+            const ch = d.cheques.find((x) => x.id === ref.chequeId);
+            const due = ch ? d.dues.find((x) => x.id === ch.dueId) : undefined;
+            if (!ch || !due) return d;
+            if (ch.status !== "cartera") {
+              err = "Ese cheque ya se depositó o se entregó: marcalo como rechazado desde Caja.";
+              return d;
+            }
+            due.paid = Math.max(0, due.paid - ch.amount);
+            d.cheques = d.cheques.filter((x) => x.id !== ch.id);
+          }
+          return d;
+        });
+        return err;
+      },
+      removeClient: (id) =>
+        mutate((d) => {
+          d.clients = d.clients.filter((c) => c.id !== id);
+          d.dues = d.dues.filter((x) => x.clientId !== id);
+          return d;
+        }),
+      mergeClients: (fromId, toId) =>
+        mutate((d) => {
+          const to = d.clients.find((c) => c.id === toId);
+          const from = d.clients.find((c) => c.id === fromId);
+          if (!to || !from || fromId === toId) return d;
+          for (const s of d.sales)
+            if (s.clientId === fromId) Object.assign(s, { clientId: toId, clientName: to.name });
+          for (const q of d.quotes)
+            if (q.clientId === fromId) Object.assign(q, { clientId: toId, clientName: to.name });
+          for (const x of d.dues) if (x.clientId === fromId) x.clientId = toId;
+          for (const c of d.cheques)
+            if (c.clientId === fromId) Object.assign(c, { clientId: toId, clientName: to.name });
+          for (const s of d.stockpiles ?? [])
+            if (s.clientId === fromId) Object.assign(s, { clientId: toId, clientName: to.name });
+          // Los datos que le falten al que queda se completan con los del duplicado.
+          for (const k of [
+            "phone",
+            "email",
+            "cuit",
+            "address",
+            "city",
+            "dni",
+            "ivaCategory",
+          ] as const)
+            if (!to[k] && from[k]) to[k] = from[k];
+          d.clients = d.clients.filter((c) => c.id !== fromId);
+          return d;
+        }),
+      adjustBalance: (account, real, note) =>
+        mutate((d) => {
+          const now = accountBalance(d, account);
+          const diff = Math.round(real - now);
+          if (!diff) return d;
+          d.movements.unshift({
+            id: uid(),
+            date: new Date().toISOString(),
+            kind: "ajuste",
+            account,
+            amount: diff,
+            concept: note?.trim() || (now === 0 ? "Saldo inicial" : "Ajuste de saldo"),
+            settled: true,
+          });
+          return d;
+        }),
       addCheque: (c) => {
         const ch: Cheque = { receivedDate: todayISO(), ...c, id: uid() };
         mutate((d) => {
@@ -692,6 +888,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         return ch;
+      },
+      updateCheque: (id, patch) => {
+        let err: string | null = null;
+        mutate((d) => {
+          const ch = d.cheques.find((x) => x.id === id);
+          if (!ch) return d;
+          const p = { ...patch };
+          if (p.amount !== undefined && p.amount !== ch.amount) {
+            const sale = ch.saleId ? d.sales.find((x) => x.id === ch.saleId) : undefined;
+            const pay = d.supplierPayments.find((x) => x.chequeId === ch.id);
+            if (sale || pay) {
+              err = sale
+                ? `El importe es el cobro de la venta #${sale.number}: se cambia editando la venta.`
+                : "El importe es el de un pago a proveedor: se cambia desde ese pago.";
+              delete p.amount;
+            } else {
+              const diff = p.amount - ch.amount;
+              const due = ch.dueId ? d.dues.find((x) => x.id === ch.dueId) : undefined;
+              if (due) due.paid = Math.max(0, Math.min(due.amount, due.paid + diff));
+              const m = d.movements.find((x) => x.refId === ch.id);
+              if (m) m.amount = p.amount;
+            }
+          }
+          Object.assign(ch, p);
+          return d;
+        });
+        return err;
+      },
+      removeCheque: (id) => {
+        let err: string | null = null;
+        mutate((d) => {
+          const ch = d.cheques.find((x) => x.id === id);
+          if (!ch) return d;
+          const sale = ch.saleId ? d.sales.find((x) => x.id === ch.saleId) : undefined;
+          if (sale) {
+            err = `Es el cobro de la venta #${sale.number}: se borra o cambia editando la venta.`;
+            return d;
+          }
+          if (d.supplierPayments.some((x) => x.chequeId === ch.id)) {
+            err = "Se usó para pagar a un proveedor: borrá ese pago desde Descargas.";
+            return d;
+          }
+          const due = ch.dueId ? d.dues.find((x) => x.id === ch.dueId) : undefined;
+          if (due && ch.status !== "rechazado") due.paid = Math.max(0, due.paid - ch.amount);
+          d.movements = d.movements.filter((x) => x.refId !== ch.id);
+          d.cheques = d.cheques.filter((x) => x.id !== ch.id);
+          return d;
+        });
+        return err;
       },
       setChequeStatus: (id, status, depositBank, givenTo) =>
         mutate((d) => {
@@ -951,7 +1196,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeStockpile: (id) =>
         mutate((d) => {
           const s = (d.stockpiles ?? []).find((x) => x.id === id);
-          if (!s) return d;
+          // El acopio de una venta se quita editando o borrando la venta.
+          if (!s || s.saleId) return d;
           for (const p of s.payments)
             d.movements = d.movements.filter((m) => m.id !== p.movementId);
           for (const w of s.withdrawals) stockpileStock(d, s, w, 1, "Acopio eliminado");
@@ -970,7 +1216,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             account: pay.method === "efectivo" ? "Caja" : pay.account,
             amount: pay.amount,
             concept: `Acopio · ${s.clientName}${pay.detail ? " · " + pay.detail : ""}`,
-            method: pay.method,
+            method: pay.method === "venta" ? undefined : pay.method,
             settled: true,
             refId: s.id,
           });

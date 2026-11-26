@@ -100,6 +100,8 @@ export type InstallService = {
   /** % que queda para la empresa (habitual 20 a 30). */
   feePct: number;
   installer?: string | undefined;
+  /** Se le suma IVA a la colocación. Sin dato: sigue al IVA del documento. */
+  iva?: boolean | undefined;
 };
 
 export type PaymentMethod =
@@ -150,6 +152,8 @@ export type Sale = {
   /** Flete por su cuenta (retira el cliente). */
   pickupFee?: number | undefined;
   install?: InstallService | undefined;
+  /** Queda en acopio: el cliente retira más adelante, hasta esta fecha (aaaa-mm-dd). */
+  stockpileUntil?: string | undefined;
 };
 
 export type QuoteStatus =
@@ -173,6 +177,8 @@ export type Quote = {
   status: QuoteStatus;
   note?: string | undefined;
   lostReason?: string | undefined;
+  /** Lista de precios: cada producto con su total, sin sumar entre ellos (para comparar). */
+  priceList?: boolean | undefined;
   /** Bonificación % sobre el subtotal. */
   discountPct?: number | undefined;
   /** Cliente que retira o pone su transporte: flete por su cuenta que se le cobra aparte. */
@@ -232,6 +238,8 @@ export type Cheque = {
   /** A quién se le entregó (proveedor o transporte) y cuándo. */
   givenTo?: string | undefined;
   givenDate?: string | undefined;
+  /** Cuota de cuenta corriente que se cobró con este cheque. */
+  dueId?: string | undefined;
 };
 
 /** Datos del cheque con el que se le paga a un proveedor. */
@@ -248,7 +256,8 @@ export type SupplierCheque = {
   dueDate: string;
 };
 
-export type MovementKind = "venta" | "cobro" | "gasto" | "debito" | "ingreso" | "compra" | "flete";
+export type MovementKind =
+  "venta" | "cobro" | "gasto" | "debito" | "ingreso" | "compra" | "flete" | "ajuste";
 
 /** Movimiento de caja/banco. */
 export type Movement = {
@@ -461,7 +470,8 @@ export type StockpilePayment = {
   id: string;
   date: string;
   amount: number;
-  method: "efectivo" | "transferencia";
+  /** "venta": lo pagado en la venta que originó el acopio (la plata ya entró con la venta). */
+  method: "efectivo" | "transferencia" | "venta";
   account: Bank;
   detail?: string | undefined;
   movementId?: string | undefined;
@@ -502,6 +512,10 @@ export type Stockpile = {
     | undefined;
   /** El acopio se pactó con IVA: los retiros se valorizan con IVA incluido. */
   withIva?: boolean | undefined;
+  /** Venta de la que salió el acopio. */
+  saleId?: string | undefined;
+  /** Hasta cuándo retira (aaaa-mm-dd). */
+  pickupBy?: string | undefined;
 };
 
 export type DB = {

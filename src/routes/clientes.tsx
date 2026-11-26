@@ -20,6 +20,7 @@ import {
   Table,
   btn,
   tr,
+  Toggle,
 } from "@/components/ui-bits";
 
 export const Route = createFileRoute("/clientes")({
@@ -202,11 +203,45 @@ function Clientes() {
 }
 
 function Account({ client }: { client: Client }) {
-  const { db, payDue } = useStore();
+  const { db, payDue, undoDuePayment } = useStore();
   const b = clientBalance(db, client.id);
   const today = todayISO();
   const [paying, setPaying] = useState<Due | null>(null);
   const [amount, setAmount] = useState(0);
+  const [payDate, setPayDate] = useState(today);
+  const [chq, setChq] = useState({
+    number: "",
+    bank: "",
+    drawer: "",
+    dueDate: today,
+    echeq: false,
+  });
+  const [undoMsg, setUndoMsg] = useState<string | null>(null);
+  const dueIds = new Set(b.dues.map((d) => d.id));
+  const dueLabel = (id?: string) => {
+    const d = b.dues.find((x) => x.id === id);
+    return d ? `Cuota ${d.n}/${d.of}` : "Cuota";
+  };
+  const cobros = [
+    ...db.movements
+      .filter((m) => m.kind === "cobro" && m.refId && dueIds.has(m.refId))
+      .map((m) => ({
+        key: m.id,
+        date: m.date.slice(0, 10),
+        amount: m.amount,
+        label: `${dueLabel(m.refId)} · ${m.account}`,
+        ref: { movementId: m.id },
+      })),
+    ...db.cheques
+      .filter((c) => c.dueId && dueIds.has(c.dueId))
+      .map((c) => ({
+        key: c.id,
+        date: c.receivedDate ?? c.dueDate,
+        amount: c.amount,
+        label: `${dueLabel(c.dueId)} · cheque ${c.bank} ${c.number}`.trim(),
+        ref: { chequeId: c.id },
+      })),
+  ].sort((x, y) => y.date.localeCompare(x.date));
   const [methodId, setMethodId] = useState(db.settings.methods[0]?.id ?? "");
   const methods = db.settings.methods.filter((m) => m.active && m.method !== "cta_cte");
   const pending = b.dues
@@ -217,12 +252,25 @@ function Account({ client }: { client: Client }) {
   const open = (d: Due) => {
     setPaying(d);
     setAmount(d.amount - d.paid);
+    setPayDate(today);
+    setChq({ number: "", bank: "", drawer: client.name, dueDate: today, echeq: false });
   };
+  const cfgSel = methods.find((m) => m.id === methodId);
+  const isCheque = cfgSel?.method === "cheque";
   const confirm = () => {
-    const cfg = methods.find((m) => m.id === methodId);
+    const cfg = cfgSel;
     if (!paying || !cfg) return;
-    payDue(paying.id, amount, cfg.method, cfg.bank, cfg.gateway);
+    const date =
+      payDate === today ? new Date().toISOString() : new Date(`${payDate}T12:00:00`).toISOString();
+    payDue(paying.id, amount, cfg.method, cfg.bank, cfg.gateway, {
+      date,
+      cheque: isCheque ? chq : undefined,
+    });
     setPaying(null);
+  };
+  const undo = (ref: { movementId?: string; chequeId?: string }, label: string) => {
+    if (!window.confirm(`Borrar el cobro "${label}"? La cuota vuelve a quedar pendiente.`)) return;
+    setUndoMsg(undoDuePayment(ref));
   };
 
   const waText = encodeURIComponent(
@@ -305,6 +353,31 @@ function Account({ client }: { client: Client }) {
         </details>
       )}
 
+      {cobros.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer px-1 text-muted-foreground">
+            Cobros registrados ({cobros.length}) · borrar uno mal cargado
+          </summary>
+          {undoMsg && <p className="px-1 py-1 text-danger-soft-foreground">{undoMsg}</p>}
+          {cobros.map((c) => (
+            <div key={c.key} className="flex items-center justify-between gap-2 px-1 py-1">
+              <span className="text-muted-foreground">
+                {fmtDate(c.date)} · {c.label}
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="tabular-nums">{ars(c.amount)}</span>
+                <button
+                  className="text-danger-soft-foreground underline"
+                  onClick={() => undo(c.ref, c.label)}
+                >
+                  Borrar
+                </button>
+              </span>
+            </div>
+          ))}
+        </details>
+      )}
+
       <Modal
         open={!!paying}
         onClose={() => setPaying(null)}
@@ -323,11 +396,59 @@ function Account({ client }: { client: Client }) {
               ))}
             </Select>
           </Field>
+          <Field label={isCheque ? "Fecha en que te dio el cheque" : "Fecha del cobro"}>
+            <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+          </Field>
+          {isCheque && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="N° de cheque *">
+                <Input
+                  value={chq.number}
+                  onChange={(e) => setChq({ ...chq, number: e.target.value })}
+                />
+              </Field>
+              <Field label="Banco *">
+                <Input
+                  value={chq.bank}
+                  onChange={(e) => setChq({ ...chq, bank: e.target.value })}
+                />
+              </Field>
+              <Field label="Librador">
+                <Input
+                  value={chq.drawer}
+                  onChange={(e) => setChq({ ...chq, drawer: e.target.value })}
+                />
+              </Field>
+              <Field label="Vencimiento (fecha de cobro)">
+                <Input
+                  type="date"
+                  value={chq.dueDate}
+                  onChange={(e) => setChq({ ...chq, dueDate: e.target.value })}
+                />
+              </Field>
+              <Toggle
+                checked={chq.echeq}
+                onChange={(v) => setChq({ ...chq, echeq: v })}
+                label="Es e-cheq"
+              />
+              <p className="col-span-2 text-xs text-muted-foreground">
+                El cheque queda en la cartera (Cheques). La plata entra al banco cuando lo
+                depositás.
+              </p>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button className={btn.soft} onClick={() => setPaying(null)}>
               Cancelar
             </button>
-            <button className={btn.primary} disabled={amount <= 0} onClick={confirm}>
+            <button
+              className={btn.primary}
+              disabled={
+                amount <= 0 ||
+                (isCheque && (!chq.number.trim() || !chq.bank.trim() || !chq.dueDate))
+              }
+              onClick={confirm}
+            >
               Registrar cobro
             </button>
           </div>
@@ -346,6 +467,37 @@ function ClientEditor({
   onClose: () => void;
   onSave: (c: Client) => void;
 }) {
+  const { db, removeClient, mergeClients } = useStore();
+  const [mergeTo, setMergeTo] = useState("");
+  const editing = client && client !== "new" ? client : null;
+  const debt = editing ? clientBalance(db, editing.id).balance : 0;
+  const del = () => {
+    if (!editing) return;
+    if (debt > 0) {
+      window.alert(
+        `${editing.name} debe ${ars(debt)}. Cobrá o borrá esas cuotas primero, o unilo con otro cliente.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(`Eliminar a ${editing.name}? Sus ventas y presupuestos quedan con el nombre.`)
+    )
+      return;
+    removeClient(editing.id);
+    onClose();
+  };
+  const merge = () => {
+    const to = db.clients.find((x) => x.id === mergeTo);
+    if (!editing || !to) return;
+    if (
+      !window.confirm(
+        `Unir ${editing.name} con ${to.name}? Todas sus ventas, cuotas, cheques y acopios pasan a ${to.name} y ${editing.name} se elimina.`,
+      )
+    )
+      return;
+    mergeClients(editing.id, to.id);
+    onClose();
+  };
   const base: Client =
     client && client !== "new" ? client : { id: uid(), name: "", creditLimit: 0 };
   const [c, setC] = useState<Client>(base);
@@ -467,6 +619,30 @@ function ClientEditor({
           <Input value={c.note ?? ""} onChange={(e) => setC({ ...c, note: e.target.value })} />
         </Field>
       </div>
+      {editing && (
+        <div className="mt-4 flex flex-col gap-2 rounded-2xl bg-surface p-3 text-xs">
+          <p className="font-semibold">Cliente repetido o mal cargado</p>
+          <div className="flex items-center gap-2">
+            <Select value={mergeTo} onChange={(e) => setMergeTo(e.target.value)}>
+              <option value="">Unir con otro cliente…</option>
+              {db.clients
+                .filter((x) => x.id !== editing.id)
+                .sort((x, y) => x.name.localeCompare(y.name))
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+            </Select>
+            <button className={`${btn.soft} h-9 px-3`} disabled={!mergeTo} onClick={merge}>
+              Unir
+            </button>
+          </div>
+          <button className="self-start text-danger-soft-foreground underline" onClick={del}>
+            Eliminar cliente
+          </button>
+        </div>
+      )}
       <div className="mt-4 flex justify-end gap-2">
         <button className={btn.soft} onClick={onClose}>
           Cancelar

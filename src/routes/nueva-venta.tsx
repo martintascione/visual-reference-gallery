@@ -12,8 +12,8 @@ export const Route = createFileRoute("/nueva-venta")({
     ],
   }),
   // ?modo=presupuesto: entrar directo a armar un presupuesto (desde Presupuestos).
-  validateSearch: (s: Record<string, unknown>): { modo?: "presupuesto" | undefined } =>
-    s["modo"] === "presupuesto" ? { modo: "presupuesto" } : {},
+  validateSearch: (s: Record<string, unknown>): { modo?: "presupuesto" | "lista" | undefined } =>
+    s["modo"] === "presupuesto" || s["modo"] === "lista" ? { modo: s["modo"] } : {},
   component: NuevaVenta,
 });
 
@@ -32,16 +32,15 @@ function NuevaVenta() {
   const editQuote = db.quotes.find((q) => q.id === editQuoteId);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const [mode, setModeState] = useState<"venta" | "presupuesto">(
-    search.modo === "presupuesto" ? "presupuesto" : "venta",
-  );
+  type Mode = "venta" | "presupuesto" | "lista";
+  const [mode, setModeState] = useState<Mode>(search.modo ?? "venta");
   // Si se vuelve a entrar con otro modo (ej. desde Presupuestos), se respeta.
   useEffect(() => {
-    setModeState(search.modo === "presupuesto" ? "presupuesto" : "venta");
+    setModeState(search.modo ?? "venta");
   }, [search.modo]);
-  const setMode = (m: "venta" | "presupuesto") => {
+  const setMode = (m: Mode) => {
     setModeState(m);
-    void navigate({ search: m === "presupuesto" ? { modo: "presupuesto" } : {}, replace: true });
+    void navigate({ search: m === "venta" ? {} : { modo: m }, replace: true });
   };
 
   if (editSale)
@@ -59,23 +58,35 @@ function NuevaVenta() {
     return (
       <>
         <PageHeader
-          title={`Editar presupuesto #${editQuote.number}`}
+          title={`Editar ${editQuote.priceList ? "lista de precios" : "presupuesto"} #${editQuote.number}`}
           subtitle={`${editQuote.clientName || "Sin cliente"} · al guardar se actualiza el mismo presupuesto`}
         />
-        <SaleForm key={"edit" + editQuote.id} mode="presupuesto" editQuote={editQuote} />
+        <SaleForm
+          key={"edit" + editQuote.id}
+          mode={editQuote.priceList ? "lista" : "presupuesto"}
+          editQuote={editQuote}
+        />
       </>
     );
 
   return (
     <>
       <PageHeader
-        title={mode === "venta" ? "Nueva venta" : "Nuevo presupuesto"}
+        title={
+          mode === "venta"
+            ? "Nueva venta"
+            : mode === "lista"
+              ? "Nueva lista de precios"
+              : "Nuevo presupuesto"
+        }
         subtitle={
           fromQuote
             ? `Convirtiendo el presupuesto #${fromQuote.number}`
-            : mode === "presupuesto"
-              ? "Se guarda en Presupuestos, no descuenta stock ni cobra"
-              : "Mostrador: descuenta stock y registra el cobro"
+            : mode === "lista"
+              ? "Cada producto con su total, sin sumarlos: para que el cliente compare y elija"
+              : mode === "presupuesto"
+                ? "Se guarda en Presupuestos, no descuenta stock ni cobra"
+                : "Mostrador: descuenta stock y registra el cobro"
         }
       >
         {!fromQuote && (
@@ -85,6 +96,7 @@ function NuevaVenta() {
             options={[
               { value: "venta", label: "Venta" },
               { value: "presupuesto", label: "Presupuesto" },
+              { value: "lista", label: "Lista de precios" },
             ]}
           />
         )}

@@ -24,10 +24,15 @@ export function documentHtml(
   const s = db.settings;
   const client = doc.clientId ? db.clients.find((c) => c.id === doc.clientId) : undefined;
   const number = String(doc.number).padStart(4, "0");
-  const title = kind === "presupuesto" ? `COTIZACIÓN ${number}` : `COMPROBANTE DE VENTA ${number}`;
+  const isList = "priceList" in doc && !!doc.priceList;
+  const title = isList
+    ? `LISTA DE PRECIOS ${number}`
+    : kind === "presupuesto"
+      ? `COTIZACIÓN ${number}`
+      : `COMPROBANTE DE VENTA ${number}`;
   // Nombre del archivo al guardar el PDF: el cliente primero, para encontrarlo fácil.
   const who = (doc.clientName || "").trim();
-  const fileName = `${who && who.toLowerCase() !== "consumidor final" ? who + " - " : ""}${kind === "presupuesto" ? "Presupuesto" : "Comprobante"} ${number}`;
+  const fileName = `${who && who.toLowerCase() !== "consumidor final" ? who + " - " : ""}${isList ? "Lista de precios" : kind === "presupuesto" ? "Presupuesto" : "Comprobante"} ${number}`;
   const itemsTotal = doc.items.reduce((a, i) => a + i.subtotal, 0);
   const discountPct = doc.discountPct ?? 0;
   const discount = Math.round((itemsTotal * discountPct) / 100);
@@ -35,14 +40,19 @@ export function documentHtml(
   const descarga = doc.delivery?.unloadPrice ?? 0;
   const pickupFee = doc.delivery ? 0 : (doc.pickupFee ?? 0);
   const install = doc.install?.amount ?? 0;
-  const flete = fleteSolo + descarga + pickupFee + install;
+  const flete = fleteSolo + descarga + pickupFee;
   const base = itemsTotal - discount + flete;
-  const iva = doc.withIva ? Math.round(base * (s.ivaPct / 100)) : 0;
-  const total = base + iva;
+  // La colocación lleva su propio IVA (se elige aparte); sin dato, sigue al documento.
+  const installIvaOn = doc.install?.iva ?? doc.withIva;
+  const installIva = installIvaOn ? Math.round(install * (s.ivaPct / 100)) : 0;
+  const iva = (doc.withIva ? Math.round(base * (s.ivaPct / 100)) : 0) + installIva;
+  const total = base + install + iva;
   // Con IVA: los precios salen con el IVA adentro y un solo total. Solo se discrimina
   // cuando el cliente es responsable inscripto (le corresponde Factura A).
   const incl = doc.withIva && client?.ivaCategory !== "Responsable inscripto";
   const k = incl ? 1 + s.ivaPct / 100 : 1;
+  // Colocación: con IVA adentro salvo que el IVA vaya discriminado (responsable inscripto).
+  const kInst = installIvaOn && !(doc.withIva && !incl) ? 1 + s.ivaPct / 100 : 1;
   const validUntil = "validUntil" in doc ? doc.validUntil : undefined;
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const logoUrl = new URL(logo, window.location.origin).href;
@@ -63,7 +73,7 @@ export function documentHtml(
       ? `<tr><td class="c">1</td><td><span class="name">Servicio de embolsado</span></td><td class="r">${ars2(pickupFee * k)}</td><td class="r">${ars2(pickupFee * k)}</td></tr>`
       : "";
   const installRow = install
-    ? `<tr><td class="c">1</td><td><span class="name">Servicio de colocación</span></td><td class="r">${ars2(install * k)}</td><td class="r">${ars2(install * k)}</td></tr>`
+    ? `<tr><td class="c">1</td><td><span class="name">Servicio de colocación</span>${installIvaOn ? "" : ` <span class="muted">(sin IVA)</span>`}</td><td class="r">${ars2(install * kInst)}</td><td class="r">${ars2(install * kInst)}</td></tr>`
     : "";
 
   const ico = {
@@ -80,6 +90,15 @@ export function documentHtml(
     client?.phone ? "Tel. " + esc(client.phone) : "",
   ].filter(Boolean);
 
+  // En la lista de precios no hay total: cada producto con su importe, para comparar.
+  const totalsHtml = isList
+    ? `<div class="notes"><div class="k">Importante</div><div>Cada producto tiene su precio por la cantidad indicada${incl ? ", con IVA incluido" : ""}. Los importes no se suman entre sí: elegí la opción que prefieras.</div></div>`
+    : `<div class="totals">
+      <div class="kv"><span>Subtotal</span><span>${ars2((itemsTotal + flete) * k + install * kInst)}</span></div>
+      ${discount ? `<div class="kv"><span>Bonificación ${discountPct}%</span><span>− ${ars2(discount * k)}</span></div>` : ""}
+      ${doc.withIva && !incl ? `<div class="kv"><span>IVA ${s.ivaPct}%</span><span>${ars2(iva)}</span></div>` : ""}
+      <div class="kv total"><span>Total</span><span>${ars2(total)}</span></div>
+    </div>`;
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(fileName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
@@ -129,7 +148,7 @@ export function documentHtml(
   <div class="head">
     <img src="${logoUrl}" alt="${esc(s.businessName)}">
     <div class="numbox">
-      <div class="k">${kind === "presupuesto" ? "Cotización" : "Comprobante de venta"}</div>
+      <div class="k">${isList ? "Lista de precios" : kind === "presupuesto" ? "Cotización" : "Comprobante de venta"}</div>
       <div class="n">N° ${number}</div>
       <div class="row"><span>Fecha</span><span>${fmtFull(doc.date)}</span></div>
       ${validUntil ? `<div class="row"><span>Válido hasta</span><span>${fmtFull(validUntil)}</span></div>` : ""}
@@ -147,12 +166,12 @@ export function documentHtml(
       <div class="kv"><span>Moneda</span><span>Pesos argentinos</span></div>
       <div class="kv"><span>IVA</span><span>${incl ? "Incluido en los precios" : doc.withIva ? `${s.ivaPct}% discriminado` : "Precios finales"}</span></div>
       ${discountPct ? `<div class="kv"><span>Bonificación</span><span>${discountPct}%</span></div>` : ""}
-      ${doc.delivery ? `<div class="kv"><span>Entrega</span><span>A domicilio</span></div>` : `<div class="kv"><span>Entrega</span><span>Retira en el local</span></div>`}
+      ${isList ? "" : doc.delivery ? `<div class="kv"><span>Entrega</span><span>A domicilio</span></div>` : `<div class="kv"><span>Entrega</span><span>Retira en el local</span></div>`}
     </div>
   </div>
 
   <div class="tbl"><table>
-    <thead><tr><th class="c">Cantidad</th><th>Producto / Servicio / Detalle</th><th class="r">P. unitario</th><th class="r">Subtotal</th></tr></thead>
+    <thead><tr><th class="c">Cantidad</th><th>Producto / Servicio / Detalle</th><th class="r">P. unitario</th><th class="r">${isList ? "Total del producto" : "Subtotal"}</th></tr></thead>
     <tbody>${rows}${fleteRow}${installRow}</tbody>
   </table></div>
 
@@ -161,12 +180,7 @@ export function documentHtml(
       ${doc.note ? `<div class="k">Observaciones</div><div>${esc(doc.note)}</div>` : ""}
       ${kind === "presupuesto" ? `<div style="margin-top:${doc.note ? "10px" : "0"}">${esc(s.quoteFooter ?? "Saludos cordiales, esperamos una pronta respuesta.")}</div>` : `<div>Gracias por su compra.</div>`}
     </div>
-    <div class="totals">
-      <div class="kv"><span>Subtotal</span><span>${ars2((itemsTotal + flete) * k)}</span></div>
-      ${discount ? `<div class="kv"><span>Bonificación ${discountPct}%</span><span>− ${ars2(discount * k)}</span></div>` : ""}
-      ${doc.withIva && !incl ? `<div class="kv"><span>IVA ${s.ivaPct}%</span><span>${ars2(iva)}</span></div>` : ""}
-      <div class="kv total"><span>Total</span><span>${ars2(total)}</span></div>
-    </div>
+    ${totalsHtml}
   </div>
 
   <div class="foot">

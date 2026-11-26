@@ -164,8 +164,19 @@ const fullSteps: Step[] = [
 // Novedades: cambiar NEWS_VERSION cada vez que se publican herramientas nuevas para que
 // el aviso vuelva a aparecer una vez a cada usuario.
 const NEWS_KEY = "ap-novedades-vistas";
-const NEWS_VERSION = "2026-11-24";
+const NEWS_VERSION = "2026-11-26";
 const newsList = [
+  "Venta en acopio: en Entrega elegís cuándo retira y queda en Acopios con el saldo a favor",
+  "Acopios: editar cantidades, sumar o sacar productos",
+  "Lista de precios: cada producto con su total, sin sumarlos, para que el cliente compare",
+  "Colocación con o sin IVA",
+  "Editar y eliminar cheques",
+  "Eliminar clientes y unir clientes repetidos (Editar cliente)",
+  "Borrar un cobro de cuota mal cargado, también si fue con cheque",
+  "Cobro de cuota con cheque: queda en la cartera con sus datos",
+  "Saldo inicial y ajuste de saldo en Caja y bancos",
+  "Deudas con proveedores separadas por deuda, con cuotas para marcar pagadas",
+  "Flete y descarga por palet",
   "Vista previa del presupuesto con envío por WhatsApp y por email en un clic",
   "Acopios: pagos a cuenta y retiros de mercadería con el saldo calculado solo",
   "Bonificación por ítem y por el total en presupuestos y ventas",

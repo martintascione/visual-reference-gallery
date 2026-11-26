@@ -15,6 +15,9 @@ export const Route = createFileRoute("/presupuestos")({
       { name: "description", content: "Presupuestos, seguimiento y conversión a venta." },
     ],
   }),
+  // ?id=…: abre directo la vista previa de ese presupuesto (desde la actividad reciente del inicio).
+  validateSearch: (s: Record<string, unknown>): { id?: string | undefined } =>
+    typeof s["id"] === "string" ? { id: s["id"] } : {},
   component: Presupuestos,
 });
 
@@ -48,6 +51,14 @@ function Presupuestos() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const { id: openId } = Route.useSearch();
+  useEffect(() => {
+    if (!openId) return;
+    const q = db.quotes.find((x) => x.id === openId);
+    if (q) setPreview(q);
+    void nav({ to: "/presupuestos", search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, db.quotes.length]);
   // WhatsApp abre la vista previa: ahí el PDF ya está armado y se comparte como archivo.
   const sendWa = (q: Quote) => setPreview(q);
   const editQ = (q: Quote) => {
@@ -74,9 +85,9 @@ function Presupuestos() {
   const openQuotes = db.quotes.filter(
     (q) => q.status === "borrador" || q.status === "enviado" || q.status === "seguimiento",
   );
-  const toFollow = openQuotes.filter((q) => (q.followUp ?? q.validUntil) <= today);
+  const toFollow = openQuotes.filter((q) => !q.priceList && (q.followUp ?? q.validUntil) <= today);
   const expiring = openQuotes.filter((q) => q.validUntil <= today);
-  const openTotal = openQuotes.reduce((a, q) => a + q.total, 0);
+  const openTotal = openQuotes.filter((q) => !q.priceList).reduce((a, q) => a + q.total, 0);
   const accepted = db.quotes.filter((q) => q.status === "aceptado").length;
   const closedCount = db.quotes.filter(
     (q) => q.status !== "borrador" && q.status !== "enviado" && q.status !== "seguimiento",
@@ -105,6 +116,9 @@ function Presupuestos() {
         <Link to="/nueva-venta" search={{ modo: "presupuesto" }} className={btn.primary}>
           <Plus className="h-4 w-4" /> Nuevo presupuesto
         </Link>
+        <Link to="/nueva-venta" search={{ modo: "lista" }} className={btn.soft}>
+          <Plus className="h-4 w-4" /> Lista de precios
+        </Link>
       </PageHeader>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         <Stat
@@ -129,13 +143,14 @@ function Presupuestos() {
         {list.map((q) => {
           const follow = q.followUp ?? q.validUntil;
           const due = daysBetween(today, q.validUntil);
-          const needsCall = tab === "abiertos" && follow <= today;
+          const needsCall = tab === "abiertos" && follow <= today && !q.priceList;
           return (
             <article key={q.id} className="card-soft flex flex-col gap-3 p-5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">
                     #{q.number} · {fmtDate(q.date)}
+                    {q.priceList && " · Lista de precios"}
                   </p>
                   <h3 className="truncate text-[15px] font-bold">{q.clientName}</h3>
                 </div>
@@ -202,7 +217,11 @@ function Presupuestos() {
                           : `Vence en ${due} d`}
                   {q.withIva && " · c/IVA"}
                 </div>
-                <p className="text-lg font-bold tabular-nums">{ars(q.total)}</p>
+                {q.priceList ? (
+                  <p className="text-xs font-semibold">Lista de precios · sin total</p>
+                ) : (
+                  <p className="text-lg font-bold tabular-nums">{ars(q.total)}</p>
+                )}
               </div>
               {tab === "abiertos" && (
                 <div className="flex flex-wrap gap-1.5">

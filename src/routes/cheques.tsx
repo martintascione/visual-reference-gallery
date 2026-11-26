@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { FileCheck2, Search } from "lucide-react";
+import { FileCheck2, Pencil, Search, Trash2 } from "lucide-react";
 import type { Cheque } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDateNum, todayISO } from "@/lib/format";
@@ -9,7 +9,11 @@ import {
   Badge,
   Card,
   Empty,
+  Field,
   Input,
+  Modal,
+  NumberInput,
+  Toggle,
   PageHeader,
   Segmented,
   Stat,
@@ -48,7 +52,20 @@ const match = (c: Cheque, f: Filter) =>
             : c.status === "rechazado";
 
 function Cheques() {
-  const { db } = useStore();
+  const { db, removeCheque } = useStore();
+  const [editing, setEditing] = useState<Cheque | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const del = (c: Cheque) => {
+    const extra =
+      c.status === "depositado" || c.status === "acreditado"
+        ? ` También se saca el depósito de ${c.depositBank ?? "el banco"}.`
+        : c.dueId
+          ? " La cuota que pagaba vuelve a quedar pendiente."
+          : "";
+    if (!window.confirm(`Eliminar el cheque N° ${c.number || "s/n"} de ${ars(c.amount)}?${extra}`))
+      return;
+    setMsg(removeCheque(c.id));
+  };
   const [q, setQ] = useState("");
   const [f, setF] = useState<Filter>("todos");
   const [adding, setAdding] = useState(false);
@@ -127,6 +144,11 @@ function Cheques() {
             ]}
           />
         </div>
+        {msg && (
+          <p className="mb-3 rounded-2xl bg-danger-soft px-4 py-2 text-xs text-danger-soft-foreground">
+            {msg}
+          </p>
+        )}
         <Table
           head={[
             "Vence",
@@ -136,6 +158,7 @@ function Cheques() {
             { label: "Monto", right: true },
             "Estado",
             "Entregado a",
+            "",
           ]}
           min={860}
         >
@@ -189,6 +212,24 @@ function Cheques() {
                     "—"
                   )}
                 </td>
+                <td className="whitespace-nowrap text-right align-top">
+                  <button
+                    className={btn.icon}
+                    aria-label="Editar cheque"
+                    title="Editar cheque"
+                    onClick={() => setEditing(c)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  </button>
+                  <button
+                    className={btn.icon}
+                    aria-label="Eliminar cheque"
+                    title="Eliminar cheque"
+                    onClick={() => del(c)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  </button>
+                </td>
               </tr>
             );
           })}
@@ -201,6 +242,111 @@ function Cheques() {
         )}
       </Card>
       <ChequeForm open={adding} onClose={() => setAdding(false)} />
+      <ChequeEdit
+        cheque={editing}
+        onClose={(m) => {
+          setEditing(null);
+          setMsg(m ?? null);
+        }}
+      />
     </>
+  );
+}
+
+function ChequeEdit({
+  cheque,
+  onClose,
+}: {
+  cheque: Cheque | null;
+  onClose: (msg?: string | null) => void;
+}) {
+  const { db, updateCheque } = useStore();
+  const [c, setC] = useState<Cheque | null>(cheque);
+  const [last, setLast] = useState(cheque?.id);
+  if (cheque?.id !== last) {
+    setLast(cheque?.id);
+    setC(cheque);
+  }
+  if (!cheque || !c) return null;
+  const sale = cheque.saleId ? db.sales.find((x) => x.id === cheque.saleId) : undefined;
+  const supplierPay = db.supplierPayments.some((x) => x.chequeId === cheque.id);
+  const lockAmount = !!sale || supplierPay;
+  const save = () =>
+    onClose(
+      updateCheque(cheque.id, {
+        number: c.number.trim(),
+        bank: c.bank.trim(),
+        drawer: c.drawer.trim(),
+        dueDate: c.dueDate,
+        receivedDate: c.receivedDate || undefined,
+        echeq: c.echeq,
+        amount: c.amount,
+        givenTo: c.givenTo?.trim() || undefined,
+      }),
+    );
+  return (
+    <Modal open onClose={() => onClose()} title={`Editar cheque N° ${cheque.number || "s/n"}`}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="N° de cheque">
+          <Input value={c.number} onChange={(e) => setC({ ...c, number: e.target.value })} />
+        </Field>
+        <Field label="Banco emisor">
+          <Input value={c.bank} onChange={(e) => setC({ ...c, bank: e.target.value })} />
+        </Field>
+        <Field label="De quién es (librador)">
+          <Input value={c.drawer} onChange={(e) => setC({ ...c, drawer: e.target.value })} />
+        </Field>
+        <Field
+          label="Monto"
+          hint={
+            sale
+              ? `Es el cobro de la venta #${sale.number}: el monto se cambia editando la venta`
+              : supplierPay
+                ? "Es un pago a proveedor: el monto se cambia desde ese pago"
+                : undefined
+          }
+        >
+          <NumberInput
+            value={c.amount}
+            onChange={(v) => setC({ ...c, amount: v })}
+            prefix="$"
+            disabled={lockAmount}
+          />
+        </Field>
+        <Field label="Vencimiento (fecha de cobro)">
+          <Input
+            type="date"
+            value={c.dueDate}
+            onChange={(e) => setC({ ...c, dueDate: e.target.value })}
+          />
+        </Field>
+        <Field label="Lo recibí el">
+          <Input
+            type="date"
+            value={c.receivedDate ?? ""}
+            onChange={(e) => setC({ ...c, receivedDate: e.target.value })}
+          />
+        </Field>
+        {cheque.status === "endosado" && (
+          <Field label="Entregado a" className="col-span-2">
+            <Input
+              value={c.givenTo ?? ""}
+              onChange={(e) => setC({ ...c, givenTo: e.target.value })}
+            />
+          </Field>
+        )}
+        <div className="col-span-2">
+          <Toggle checked={c.echeq} onChange={(v) => setC({ ...c, echeq: v })} label="Es e-cheq" />
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={() => onClose()}>
+          Cancelar
+        </button>
+        <button className={btn.primary} disabled={!c.dueDate || c.amount <= 0} onClick={save}>
+          Guardar cambios
+        </button>
+      </div>
+    </Modal>
   );
 }

@@ -68,7 +68,9 @@ export function buildAlerts(db: DB): Alert[] {
   }
 
   for (const q of db.quotes.filter(
-    (q) => q.status === "enviado" || q.status === "seguimiento" || q.status === "borrador",
+    (q) =>
+      !q.priceList &&
+      (q.status === "enviado" || q.status === "seguimiento" || q.status === "borrador"),
   )) {
     const f = q.followUp ?? q.validUntil;
     if (f <= today)

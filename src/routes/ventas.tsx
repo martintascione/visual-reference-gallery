@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Truck } from "lucide-react";
 import type { Sale } from "@/lib/types";
 import { feeFor, useStore } from "@/lib/store";
@@ -28,6 +28,9 @@ export const Route = createFileRoute("/ventas")({
       },
     ],
   }),
+  // ?id=…: abre directo esa venta (desde la actividad reciente del inicio).
+  validateSearch: (s: Record<string, unknown>): { id?: string | undefined } =>
+    typeof s["id"] === "string" ? { id: s["id"] } : {},
   component: Ventas,
 });
 
@@ -36,6 +39,19 @@ function Ventas() {
   const [range, setRange] = useState<"hoy" | "semana" | "mes" | "todo">("hoy");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<Sale | null>(null);
+  const { id: openId } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  useEffect(() => {
+    if (!openId) return;
+    const s = db.sales.find((x) => x.id === openId);
+    if (s) {
+      setOpen(s);
+      // Que también aparezca en la lista, aunque no sea de hoy.
+      if (dayOf(s.date) !== todayISO()) setRange("todo");
+    }
+    void navigate({ search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, db.sales.length]);
   const today = todayISO();
   const from =
     range === "hoy"

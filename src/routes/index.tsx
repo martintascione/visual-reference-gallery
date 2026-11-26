@@ -403,7 +403,12 @@ function Index() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activity.map((a) => (
-                  <Link key={a.id} to={a.to} className="card-soft group flex flex-col p-4">
+                  <Link
+                    key={a.id}
+                    to={a.to}
+                    search={{ id: a.id }}
+                    className="card-soft group flex flex-col p-4"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2.5">
                         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-xs font-semibold">

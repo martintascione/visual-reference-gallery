@@ -50,12 +50,17 @@ export function waCopy(db: DB, doc: Quote | Sale, kind: "presupuesto" | "venta",
           .split(" ")[0]!
           .replace(/^./, (c) => c.toUpperCase())}`
       : "";
-  const what = kind === "presupuesto" ? `el presupuesto N° ${n}` : `el comprobante N° ${n}`;
+  const isList = "priceList" in doc && !!doc.priceList;
+  const what = isList
+    ? `la lista de precios N° ${n}`
+    : kind === "presupuesto"
+      ? `el presupuesto N° ${n}`
+      : `el comprobante N° ${n}`;
   const valid =
     "validUntil" in doc
       ? `, válido hasta el ${doc.validUntil.slice(8, 10)}/${doc.validUntil.slice(5, 7)}`
       : "";
-  return `Hola${first}! Te paso ${what} por ${ars(doc.total)}${valid}.${link ? `\n${link}` : ""}\n\n${db.settings.businessName}`;
+  return `Hola${first}! Te paso ${what}${isList ? "" : ` por ${ars(doc.total)}`}${valid}.${link ? `\n${link}` : ""}\n\n${db.settings.businessName}`;
 }
 
 /** Número para wa.me: 54 + característica sin el 0 y sin el 15. */
@@ -114,8 +119,8 @@ export async function shareDocWhatsApp(
     const n = String(doc.number).padStart(4, "0");
     const link = await uploadDocPdf(blob, fileName, {
       cover: cover ?? made?.cover,
-      title: `${kind === "presupuesto" ? "Presupuesto" : "Comprobante"} N° ${n} · ${db.settings.businessName}`,
-      description: `${doc.clientName && doc.clientName.toLowerCase() !== "consumidor final" ? doc.clientName + " · " : ""}Total ${ars(doc.total)}. Tocá para ver el PDF.`,
+      title: `${"priceList" in doc && doc.priceList ? "Lista de precios" : kind === "presupuesto" ? "Presupuesto" : "Comprobante"} N° ${n} · ${db.settings.businessName}`,
+      description: `${doc.clientName && doc.clientName.toLowerCase() !== "consumidor final" ? doc.clientName + " · " : ""}${"priceList" in doc && doc.priceList ? "Precios por producto" : `Total ${ars(doc.total)}`}. Tocá para ver el PDF.`,
     });
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(waCopy(db, doc, kind, link))}`;
     if (win) win.location.href = url;

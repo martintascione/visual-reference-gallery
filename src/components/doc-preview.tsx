@@ -55,7 +55,12 @@ export function DocPreview({
     };
   }, [built]);
   if (!doc || !built) return null;
-  const label = kind === "presupuesto" ? "presupuesto" : "comprobante";
+  const isList = "priceList" in doc && !!doc.priceList;
+  const label = isList
+    ? "lista de precios"
+    : kind === "presupuesto"
+      ? "presupuesto"
+      : "comprobante";
   const fileShare = canShareFile();
 
   const sendWa = async (how: "archivo" | "link") => {
@@ -93,10 +98,10 @@ export function DocPreview({
         doc.clientName && doc.clientName.toLowerCase() !== "consumidor final"
           ? `Hola ${doc.clientName},`
           : "Hola,";
-      const body = `${hello}\n\nTe enviamos el ${label} N° ${n} por ${ars(doc.total)}${"validUntil" in doc ? `, válido hasta el ${doc.validUntil.slice(8, 10)}/${doc.validUntil.slice(5, 7)}/${doc.validUntil.slice(0, 4)}` : ""}. Va adjunto en PDF.\n\nCualquier consulta, respondé este mail${s.phone ? ` o escribinos al ${s.phone}` : ""}.\n\nSaludos,\n${s.businessName}`;
+      const body = `${hello}\n\nTe enviamos ${isList ? "la" : "el"} ${label} N° ${n}${isList ? "" : ` por ${ars(doc.total)}`}${"validUntil" in doc ? `, válido hasta el ${doc.validUntil.slice(8, 10)}/${doc.validUntil.slice(5, 7)}/${doc.validUntil.slice(0, 4)}` : ""}. Va adjunto en PDF.\n\nCualquier consulta, respondé este mail${s.phone ? ` o escribinos al ${s.phone}` : ""}.\n\nSaludos,\n${s.businessName}`;
       await mailSend({
         to: [to],
-        subject: `${kind === "presupuesto" ? "Presupuesto" : "Comprobante"} N° ${n} · ${s.businessName}`,
+        subject: `${isList ? "Lista de precios" : kind === "presupuesto" ? "Presupuesto" : "Comprobante"} N° ${n} · ${s.businessName}`,
         text: body,
         html: `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1d1d1f;max-width:560px">${esc(body).replace(/\n/g, "<br>")}</div>`,
         attachments: [
@@ -125,7 +130,11 @@ export function DocPreview({
       onClose={onClose}
       wide
       title={built.fileName}
-      subtitle={`Vista previa del ${label} · ${ars(doc.total)}`}
+      subtitle={
+        isList
+          ? "Vista previa de la lista de precios"
+          : `Vista previa del ${label} · ${ars(doc.total)}`
+      }
       footer={
         <div className="flex w-full flex-wrap items-center gap-2">
           <button className={`${btn.soft} mr-auto`} onClick={() => openDocumentPdf(db, doc, kind)}>

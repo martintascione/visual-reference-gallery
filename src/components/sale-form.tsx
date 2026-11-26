@@ -23,7 +23,14 @@ import type {
   SaleUnit,
 } from "@/lib/types";
 import { clientBalance, useStore } from "@/lib/store";
-import { lineTotals, listPrice, saleUnitsFor, unitLabel, unitLabelFor } from "@/lib/pricing";
+import {
+  lineTotals,
+  listPrice,
+  saleUnitsFor,
+  unitLabel,
+  unitLabelFor,
+  qtyUnit,
+} from "@/lib/pricing";
 import { addDays, ars, daysBetween, fmtDate, num, todayISO } from "@/lib/format";
 import { Badge, Card, Field, Input, NumberInput, Segmented, Select, Toggle, btn } from "./ui-bits";
 
@@ -51,13 +58,15 @@ export function SaleForm({
   editQuote,
   editSale,
 }: {
-  mode: "venta" | "presupuesto";
+  mode: "venta" | "presupuesto" | "lista";
   fromQuote?: Quote | undefined;
   /** Presupuesto existente que se edita (se guarda sobre el mismo número). */
   editQuote?: Quote | undefined;
   /** Venta existente que se corrige (se guarda sobre el mismo número). */
   editSale?: Sale | undefined;
 }) {
+  // Lista de precios: como un presupuesto, pero cada producto con su total y sin sumarlos.
+  const isList = mode === "lista";
   const {
     db,
     addSale,
@@ -84,6 +93,9 @@ export function SaleForm({
   const [withIva, setWithIva] = useState(false);
   const [note, setNote] = useState("");
   const [deliveryOn, setDeliveryOn] = useState(false);
+  // Queda en acopio: el cliente retira más adelante y el saldo va a Acopios.
+  const [acopioOn, setAcopioOn] = useState(false);
+  const [acopioUntil, setAcopioUntil] = useState(addDays(todayISO(), 30));
   // Cliente que lo busca en el corralón o pone su transporte: flete por su cuenta, editable.
   const [pickupOn, setPickupOn] = useState(false);
   const [pickupAmt, setPickupAmt] = useState(db.settings.pickupFee ?? 30000);
@@ -92,6 +104,8 @@ export function SaleForm({
   const [installAmt, setInstallAmt] = useState(0);
   const [installPct, setInstallPct] = useState(db.settings.installFeePct ?? 20);
   const [installer, setInstaller] = useState("");
+  // IVA de la colocación: null = sigue al IVA del presupuesto/venta.
+  const [installIva, setInstallIva] = useState<boolean | null>(null);
   const [delivery, setDelivery] = useState<Delivery>({
     address: "",
     zone: s.zones[0]?.name ?? "",
@@ -173,6 +187,7 @@ export function SaleForm({
       setInstallAmt(src.install.amount);
       setInstallPct(src.install.feePct);
       setInstaller(src.install.installer ?? "");
+      setInstallIva(src.install.iva ?? null);
     }
     if (src.pickupFee) setPickupAmt(src.pickupFee);
     if (src.delivery) {
@@ -221,7 +236,10 @@ export function SaleForm({
   const installFee = Math.round((install * installPct) / 100);
   const subtotal =
     itemsTotal - discount + (deliveryOn ? delivery.price : 0) + unload + pickup + install;
-  const iva = withIva ? Math.round(subtotal * (s.ivaPct / 100)) : 0;
+  const installIvaOn = installIva ?? withIva;
+  // El IVA de la colocación va aparte: se puede sumar o no, sin tocar el del resto.
+  const installIvaAmt = installIvaOn ? Math.round(install * (s.ivaPct / 100)) : 0;
+  const iva = (withIva ? Math.round((subtotal - install) * (s.ivaPct / 100)) : 0) + installIvaAmt;
   const total = subtotal + iva;
   const cost =
     items.reduce((a, i) => a + i.cost, 0) +
@@ -272,6 +290,7 @@ export function SaleForm({
       setInstallAmt(editSale.install.amount);
       setInstallPct(editSale.install.feePct);
       setInstaller(editSale.install.installer ?? "");
+      setInstallIva(editSale.install.iva ?? null);
     }
     if (editSale.pickupFee) setPickupAmt(editSale.pickupFee);
     setInvoicePending(!!editSale.invoicePending);
@@ -279,6 +298,8 @@ export function SaleForm({
       setDeliveryOn(true);
       setDelivery({ ...editSale.delivery });
     }
+    setAcopioOn(!!editSale.stockpileUntil);
+    if (editSale.stockpileUntil) setAcopioUntil(editSale.stockpileUntil);
     const ps = editSale.payments.map((p) => {
       const m =
         methods.find(
@@ -413,6 +434,13 @@ export function SaleForm({
   };
 
   const saveSale = () => {
+    if (
+      acopioOn &&
+      (!clientName.trim() || clientName.trim().toLowerCase() === "consumidor final")
+    ) {
+      window.alert("Para dejarlo en acopio poné el nombre del cliente.");
+      return;
+    }
     const cid = ensureClient();
     const payments: Payment[] = pays.map((p) => {
       const cfg = cfgOf(p.methodId) as MethodConfig;
@@ -446,7 +474,7 @@ export function SaleForm({
           clientId: cid,
           clientName: clientName.trim() || "Consumidor final",
           items,
-          delivery: deliveryOn ? delivery : undefined,
+          delivery: deliveryOn && !acopioOn ? delivery : undefined,
           payments,
           withIva,
           subtotal,
@@ -457,9 +485,15 @@ export function SaleForm({
           invoicePending: invoicePending || undefined,
           discountPct: discountPct || undefined,
           pickupFee: pickup || undefined,
+          stockpileUntil: acopioOn ? acopioUntil : undefined,
           install:
             install > 0
-              ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+              ? {
+                  amount: install,
+                  feePct: installPct,
+                  installer: installer.trim() || undefined,
+                  iva: installIvaOn,
+                }
               : undefined,
         },
         chequeDraft,
@@ -475,7 +509,7 @@ export function SaleForm({
         clientId: cid,
         clientName: clientName.trim() || "Consumidor final",
         items,
-        delivery: deliveryOn ? delivery : undefined,
+        delivery: deliveryOn && !acopioOn ? delivery : undefined,
         payments,
         withIva,
         subtotal,
@@ -487,9 +521,15 @@ export function SaleForm({
         invoicePending: invoicePending || undefined,
         discountPct: discountPct || undefined,
         pickupFee: pickup || undefined,
+        stockpileUntil: acopioOn ? acopioUntil : undefined,
         install:
           install > 0
-            ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+            ? {
+                amount: install,
+                feePct: installPct,
+                installer: installer.trim() || undefined,
+                iva: installIvaOn,
+              }
             : undefined,
       },
       chequeDraft,
@@ -520,12 +560,18 @@ export function SaleForm({
             ? "enviado"
             : editQuote.status,
         lostReason: editQuote.status === "perdido" ? undefined : editQuote.lostReason,
+        priceList: isList || undefined,
         note: note || undefined,
         discountPct: discountPct || undefined,
         pickupFee: pickup || undefined,
         install:
           install > 0
-            ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+            ? {
+                amount: install,
+                feePct: installPct,
+                installer: installer.trim() || undefined,
+                iva: installIvaOn,
+              }
             : undefined,
       });
       setEditQuote(undefined);
@@ -541,7 +587,8 @@ export function SaleForm({
     const newQ = addQuote({
       date: new Date().toISOString(),
       validUntil: addDays(today, validDays),
-      followUp: addDays(today, s.followUpDays),
+      followUp: isList ? undefined : addDays(today, s.followUpDays),
+      priceList: isList || undefined,
       clientId: cid,
       clientName: clientName.trim(),
       phone: phone || undefined,
@@ -557,7 +604,12 @@ export function SaleForm({
       pickupFee: pickup || undefined,
       install:
         install > 0
-          ? { amount: install, feePct: installPct, installer: installer.trim() || undefined }
+          ? {
+              amount: install,
+              feePct: installPct,
+              installer: installer.trim() || undefined,
+              iva: installIvaOn,
+            }
           : undefined,
     });
     // Al llegar a Presupuestos se abre sola la vista previa para mandarlo.
@@ -608,7 +660,13 @@ export function SaleForm({
         </Card>
 
         <Card
-          title={mode === "venta" ? "Productos de la venta" : "Productos del presupuesto"}
+          title={
+            mode === "venta"
+              ? "Productos de la venta"
+              : isList
+                ? "Productos de la lista de precios"
+                : "Productos del presupuesto"
+          }
           icon={ShoppingCart}
         >
           {lines.length === 0 && (
@@ -719,157 +777,223 @@ export function SaleForm({
           )}
         </Card>
 
-        <Card
-          title="Entrega a domicilio"
-          icon={Truck}
-          action={
-            <Toggle
-              checked={deliveryOn}
-              onChange={setDeliveryOn}
-              label={deliveryOn ? "Con flete" : "Retira en el local"}
-            />
-          }
-        >
-          {!deliveryOn && (
-            <div className="flex flex-wrap items-center gap-3">
-              <Toggle
-                checked={pickupOn}
-                onChange={setPickupOn}
-                label="Cobrar servicio de embolsado (retira el cliente)"
-              />
-              {pickupOn && (
-                <span className="w-40">
-                  <NumberInput value={pickupAmt} onChange={setPickupAmt} prefix="$" />
-                </span>
-              )}
-            </div>
-          )}
-          {deliveryOn && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field label="Dirección" className="col-span-2">
-                <Input
-                  value={delivery.address}
-                  onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
-                  placeholder="Calle, número, localidad"
-                />
-              </Field>
-              <Field label="Zona" className="col-span-2">
-                <Select value={delivery.zone} onChange={(e) => pickZone(e.target.value)}>
-                  {s.zones.map((z) => (
-                    <option key={z.id} value={z.name}>
-                      {z.name}
-                    </option>
-                  ))}
-                  <option value="Otra">Otra / a convenir</option>
-                </Select>
-              </Field>
-              <Field label="Cobra al cliente">
-                <NumberInput
-                  value={delivery.price}
-                  onChange={(v) => setDelivery({ ...delivery, price: v })}
-                  prefix="$"
-                />
-              </Field>
-              <Field label="Costo del viaje">
-                <NumberInput
-                  value={delivery.cost}
-                  onChange={(v) => setDelivery({ ...delivery, cost: v })}
-                  prefix="$"
-                />
-              </Field>
-              <Field
-                label="Descarga al cliente"
-                className="col-span-2"
-                hint={
-                  unloadTouched
-                    ? "Monto a mano para este pedido"
-                    : "Sugerido según bolsas o bolsón; se puede cambiar"
-                }
-              >
-                <NumberInput
-                  value={delivery.unloadPrice ?? 0}
+        {!isList && (
+          <>
+            <Card
+              title="Entrega a domicilio"
+              icon={Truck}
+              action={
+                <Toggle
+                  checked={deliveryOn}
                   onChange={(v) => {
-                    setUnloadTouched(true);
-                    setDelivery({ ...delivery, unloadPrice: v });
+                    setDeliveryOn(v);
+                    if (v) setAcopioOn(false);
                   }}
-                  prefix="$"
+                  label={deliveryOn ? "Con flete" : "Retira en el local"}
                 />
-              </Field>
-              <Field label="Fecha de entrega" className="col-span-2">
-                <Input
-                  type="date"
-                  value={delivery.date}
-                  onChange={(e) => setDelivery({ ...delivery, date: e.target.value })}
-                />
-              </Field>
-            </div>
-          )}
-        </Card>
-
-        <Card
-          title="Servicio de colocación"
-          icon={Hammer}
-          action={
-            <Toggle
-              checked={installOn}
-              onChange={setInstallOn}
-              label={installOn ? "Con colocación" : "Sin colocación"}
-            />
-          }
-        >
-          {installOn ? (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field
-                  label="Importe de la colocación"
-                  help="Lo que se le cobra al cliente por colocar. Se suma al total."
-                >
-                  <NumberInput value={installAmt} onChange={setInstallAmt} prefix="$" />
-                </Field>
-                <Field
-                  label="Queda para la empresa"
-                  help="El % de la colocación que queda para el corralón (habitual 20 a 30 %). El resto es del colocador."
-                >
-                  <NumberInput
-                    value={installPct}
-                    onChange={(v) => setInstallPct(Math.min(100, Math.max(0, v)))}
-                    suffix="%"
+              }
+            >
+              {mode === "venta" && (
+                <div className="mb-3 flex flex-col gap-3 rounded-2xl bg-surface p-3">
+                  <Toggle
+                    checked={acopioOn}
+                    onChange={(v) => {
+                      setAcopioOn(v);
+                      if (v) setDeliveryOn(false);
+                    }}
+                    label="Queda en acopio (el cliente retira más adelante)"
                   />
-                </Field>
-                <Field label="Colocador (opcional)" className="col-span-2">
-                  <Input
-                    value={installer}
-                    onChange={(e) => setInstaller(e.target.value)}
-                    placeholder="Nombre del colocador"
+                  {acopioOn && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Retira en</span>
+                        {[
+                          ["15 días", 15],
+                          ["1 mes", 30],
+                          ["2 meses", 60],
+                          ["3 meses", 90],
+                          ["6 meses", 180],
+                        ].map(([l, n]) => {
+                          const d = addDays(todayISO(), n as number);
+                          return (
+                            <button
+                              key={l}
+                              type="button"
+                              className={`${acopioUntil === d ? btn.primary : btn.soft} h-8 px-3 text-xs`}
+                              onClick={() => setAcopioUntil(d)}
+                            >
+                              {l}
+                            </button>
+                          );
+                        })}
+                        <span className="w-40">
+                          <Input
+                            type="date"
+                            value={acopioUntil}
+                            onChange={(e) => e.target.value && setAcopioUntil(e.target.value)}
+                          />
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        La venta se cobra hoy, pero el stock no se descuenta: queda en Acopios con
+                        el saldo a favor y los productos, y se descuenta con cada retiro. Desde
+                        Acopios se pueden cambiar cantidades, sumar o sacar productos.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {!deliveryOn && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Toggle
+                    checked={pickupOn}
+                    onChange={setPickupOn}
+                    label="Cobrar servicio de embolsado (retira el cliente)"
                   />
-                </Field>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                {[20, 25, 30].map((x) => (
-                  <button
-                    key={x}
-                    type="button"
-                    className={installPct === x ? btn.soft : btn.ghost}
-                    onClick={() => setInstallPct(x)}
+                  {pickupOn && (
+                    <span className="w-40">
+                      <NumberInput value={pickupAmt} onChange={setPickupAmt} prefix="$" />
+                    </span>
+                  )}
+                </div>
+              )}
+              {deliveryOn && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Field label="Dirección" className="col-span-2">
+                    <Input
+                      value={delivery.address}
+                      onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
+                      placeholder="Calle, número, localidad"
+                    />
+                  </Field>
+                  <Field label="Zona" className="col-span-2">
+                    <Select value={delivery.zone} onChange={(e) => pickZone(e.target.value)}>
+                      {s.zones.map((z) => (
+                        <option key={z.id} value={z.name}>
+                          {z.name}
+                        </option>
+                      ))}
+                      <option value="Otra">Otra / a convenir</option>
+                    </Select>
+                  </Field>
+                  <Field label="Cobra al cliente">
+                    <NumberInput
+                      value={delivery.price}
+                      onChange={(v) => setDelivery({ ...delivery, price: v })}
+                      prefix="$"
+                    />
+                  </Field>
+                  <Field label="Costo del viaje">
+                    <NumberInput
+                      value={delivery.cost}
+                      onChange={(v) => setDelivery({ ...delivery, cost: v })}
+                      prefix="$"
+                    />
+                  </Field>
+                  <Field
+                    label="Descarga al cliente"
+                    className="col-span-2"
+                    hint={
+                      unloadTouched
+                        ? "Monto a mano para este pedido"
+                        : "Sugerido según bolsas o bolsón; se puede cambiar"
+                    }
                   >
-                    {x} %
-                  </button>
-                ))}
-                {install > 0 && (
-                  <span className="ml-auto text-muted-foreground">
-                    Empresa <b className="text-foreground">{ars(installFee)}</b> · Colocador{" "}
-                    <b className="text-foreground">{ars(install - installFee)}</b>
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Prendelo para sumar la colocación como servicio adicional: el cliente ve un solo
-              importe y acá se reparte entre la empresa y el colocador.
-            </p>
-          )}
-        </Card>
+                    <NumberInput
+                      value={delivery.unloadPrice ?? 0}
+                      onChange={(v) => {
+                        setUnloadTouched(true);
+                        setDelivery({ ...delivery, unloadPrice: v });
+                      }}
+                      prefix="$"
+                    />
+                  </Field>
+                  <Field label="Fecha de entrega" className="col-span-2">
+                    <Input
+                      type="date"
+                      value={delivery.date}
+                      onChange={(e) => setDelivery({ ...delivery, date: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              )}
+            </Card>
+
+            <Card
+              title="Servicio de colocación"
+              icon={Hammer}
+              action={
+                <Toggle
+                  checked={installOn}
+                  onChange={setInstallOn}
+                  label={installOn ? "Con colocación" : "Sin colocación"}
+                />
+              }
+            >
+              {installOn ? (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Field
+                      label="Importe de la colocación"
+                      help="Lo que se le cobra al cliente por colocar. Se suma al total."
+                    >
+                      <NumberInput value={installAmt} onChange={setInstallAmt} prefix="$" />
+                    </Field>
+                    <Field
+                      label="Queda para la empresa"
+                      help="El % de la colocación que queda para el corralón (habitual 20 a 30 %). El resto es del colocador."
+                    >
+                      <NumberInput
+                        value={installPct}
+                        onChange={(v) => setInstallPct(Math.min(100, Math.max(0, v)))}
+                        suffix="%"
+                      />
+                    </Field>
+                    <Field label="Colocador (opcional)" className="col-span-2">
+                      <Input
+                        value={installer}
+                        onChange={(e) => setInstaller(e.target.value)}
+                        placeholder="Nombre del colocador"
+                      />
+                    </Field>
+                  </div>
+                  <Toggle
+                    checked={installIvaOn}
+                    onChange={(v) => setInstallIva(v)}
+                    label={
+                      installIvaOn
+                        ? `Colocación con IVA (+${ars(installIvaAmt)})`
+                        : "Colocación sin IVA"
+                    }
+                  />
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {[20, 25, 30].map((x) => (
+                      <button
+                        key={x}
+                        type="button"
+                        className={installPct === x ? btn.soft : btn.ghost}
+                        onClick={() => setInstallPct(x)}
+                      >
+                        {x} %
+                      </button>
+                    ))}
+                    {install > 0 && (
+                      <span className="ml-auto text-muted-foreground">
+                        Empresa <b className="text-foreground">{ars(installFee)}</b> · Colocador{" "}
+                        <b className="text-foreground">{ars(install - installFee)}</b>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Prendelo para sumar la colocación como servicio adicional: el cliente ve un solo
+                  importe y acá se reparte entre la empresa y el colocador.
+                </p>
+              )}
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Resumen y cobro */}
@@ -945,60 +1069,81 @@ export function SaleForm({
           </div>
         </Card>
 
-        <Card>
-          <div className="flex flex-col gap-1.5 text-sm">
-            <p className="flex justify-between text-muted-foreground">
-              <span>Productos</span>
-              <span className="tabular-nums">{ars(itemsTotal)}</span>
-            </p>
-            {discount > 0 && (
+        {isList ? (
+          <Card title="Lista de precios">
+            <div className="flex flex-col gap-1.5 text-sm">
+              {items.map((i, k) => (
+                <p key={k} className="flex justify-between gap-2">
+                  <span>
+                    {qtyUnit(i.qty, i.unit)} {i.name}
+                  </span>
+                  <span className="tabular-nums">
+                    {ars(withIva ? Math.round(i.subtotal * (1 + s.ivaPct / 100)) : i.subtotal)}
+                  </span>
+                </p>
+              ))}
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Cada producto con su precio por la cantidad pedida{withIva ? ", con IVA" : ""}. No
+                se suman entre sí: es para que el cliente compare y elija.
+              </p>
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div className="flex flex-col gap-1.5 text-sm">
               <p className="flex justify-between text-muted-foreground">
-                <span>Bonificación {num(discountPct, 1)} %</span>
-                <span className="tabular-nums">− {ars(discount)}</span>
+                <span>Productos</span>
+                <span className="tabular-nums">{ars(itemsTotal)}</span>
               </p>
-            )}
-            {deliveryOn && (
-              <p className="flex justify-between text-muted-foreground">
-                <span>Flete</span>
-                <span className="tabular-nums">{ars(delivery.price)}</span>
+              {discount > 0 && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Bonificación {num(discountPct, 1)} %</span>
+                  <span className="tabular-nums">− {ars(discount)}</span>
+                </p>
+              )}
+              {deliveryOn && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Flete</span>
+                  <span className="tabular-nums">{ars(delivery.price)}</span>
+                </p>
+              )}
+              {unload > 0 && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Descarga</span>
+                  <span className="tabular-nums">{ars(unload)}</span>
+                </p>
+              )}
+              {pickup > 0 && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Servicio de embolsado</span>
+                  <span className="tabular-nums">{ars(pickup)}</span>
+                </p>
+              )}
+              {install > 0 && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Servicio de colocación{installIvaOn ? " (con IVA)" : " (sin IVA)"}</span>
+                  <span className="tabular-nums">{ars(install)}</span>
+                </p>
+              )}
+              {iva > 0 && (
+                <p className="flex justify-between text-muted-foreground">
+                  <span>IVA</span>
+                  <span className="tabular-nums">{ars(iva)}</span>
+                </p>
+              )}
+              <p className="mt-1 flex items-baseline justify-between border-t border-border pt-2">
+                <span className="font-semibold">Total</span>
+                <span className="text-2xl font-bold tabular-nums">{ars(total)}</span>
               </p>
-            )}
-            {unload > 0 && (
-              <p className="flex justify-between text-muted-foreground">
-                <span>Descarga</span>
-                <span className="tabular-nums">{ars(unload)}</span>
-              </p>
-            )}
-            {pickup > 0 && (
-              <p className="flex justify-between text-muted-foreground">
-                <span>Servicio de embolsado</span>
-                <span className="tabular-nums">{ars(pickup)}</span>
-              </p>
-            )}
-            {install > 0 && (
-              <p className="flex justify-between text-muted-foreground">
-                <span>Servicio de colocación</span>
-                <span className="tabular-nums">{ars(install)}</span>
-              </p>
-            )}
-            {withIva && (
-              <p className="flex justify-between text-muted-foreground">
-                <span>IVA</span>
-                <span className="tabular-nums">{ars(iva)}</span>
-              </p>
-            )}
-            <p className="mt-1 flex items-baseline justify-between border-t border-border pt-2">
-              <span className="font-semibold">Total</span>
-              <span className="text-2xl font-bold tabular-nums">{ars(total)}</span>
-            </p>
-            {mode === "venta" && items.length > 0 && (
-              <p className="flex justify-between text-[11px] text-muted-foreground">
-                <span>Ganancia estimada</span>
-                <span className="tabular-nums">{ars(subtotal - cost)}</span>
-              </p>
-            )}
-          </div>
-        </Card>
+              {mode === "venta" && items.length > 0 && (
+                <p className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Ganancia estimada</span>
+                  <span className="tabular-nums">{ars(subtotal - cost)}</span>
+                </p>
+              )}
+            </div>
+          </Card>
+        )}
 
         {mode === "venta" ? (
           <Card
@@ -1223,14 +1368,14 @@ export function SaleForm({
             </div>
           </Card>
         ) : (
-          <Card title="Presupuesto" icon={FileText}>
+          <Card title={isList ? "Lista de precios" : "Presupuesto"} icon={FileText}>
             <div className="flex flex-col gap-3">
               <Field label="Válido por (días)">
                 <NumberInput value={validDays} onChange={setValidDays} suffix="días" />
               </Field>
               <p className="text-xs text-muted-foreground">
-                Vence el {fmtDate(addDays(todayISO(), validDays))} · recordatorio de seguimiento en{" "}
-                {s.followUpDays} días.
+                Vence el {fmtDate(addDays(todayISO(), validDays))}
+                {isList ? "." : ` · recordatorio de seguimiento en ${s.followUpDays} días.`}
               </p>
               <Input
                 value={note}
@@ -1242,7 +1387,12 @@ export function SaleForm({
                 disabled={!canSaveQuote || !!saved}
                 onClick={saveQuote}
               >
-                {saved ?? (editQuote ? "Guardar cambios" : "Guardar presupuesto")}
+                {saved ??
+                  (editQuote
+                    ? "Guardar cambios"
+                    : isList
+                      ? "Guardar lista de precios"
+                      : "Guardar presupuesto")}
               </button>
               {editQuote && !saved && (
                 <button

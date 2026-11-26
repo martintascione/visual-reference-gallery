@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Banknote, Building2, CalendarClock, Clock, FileCheck2, Plus, Upload } from "lucide-react";
+import {
+  Banknote,
+  Building2,
+  CalendarClock,
+  Clock,
+  FileCheck2,
+  Plus,
+  Upload,
+  Scale,
+} from "lucide-react";
 import type { Bank, Cheque, ChequeStatus } from "@/lib/types";
 import { accountBalance, pendingSettlements, useStore } from "@/lib/store";
 import { chequeLabel } from "@/lib/cheque-labels";
@@ -44,6 +53,7 @@ const kindLabel: Record<string, string> = {
   ingreso: "Ingreso",
   compra: "Compra",
   flete: "Flete",
+  ajuste: "Ajuste de saldo",
 };
 
 function Caja() {
@@ -51,6 +61,7 @@ function Caja() {
   const [acc, setAcc] = useState<Bank | "todas">("todas");
   const [newCheque, setNewCheque] = useState(false);
   const [income, setIncome] = useState(false);
+  const [adjust, setAdjust] = useState(false);
   const today = todayISO();
   const pending = pendingSettlements(db);
   const pendingByBank = (b: Bank) =>
@@ -69,6 +80,9 @@ function Caja() {
   return (
     <>
       <PageHeader title="Caja y bancos" subtitle="Dónde está la plata hoy">
+        <button className={btn.soft} onClick={() => setAdjust(true)}>
+          <Scale className="h-4 w-4" strokeWidth={1.6} /> Saldo inicial / ajuste
+        </button>
         <button className={btn.soft} onClick={() => setIncome(true)}>
           <Plus className="h-4 w-4" /> Ingreso extra
         </button>
@@ -259,6 +273,7 @@ function Caja() {
 
       <ChequeForm open={newCheque} onClose={() => setNewCheque(false)} />
       <NewIncome open={income} onClose={() => setIncome(false)} />
+      <AdjustBalance open={adjust} onClose={() => setAdjust(false)} />
     </>
   );
 }
@@ -339,6 +354,93 @@ function ChequeRow({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Carga el saldo real de una cuenta: el sistema registra solo la diferencia. */
+function AdjustBalance({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { db, adjustBalance } = useStore();
+  const [account, setAccount] = useState<Bank>("Caja");
+  const [real, setReal] = useState(0);
+  const [note, setNote] = useState("");
+  // "saldo": cargo lo que hay hoy en la cuenta. "importe": sumo (o resto) un monto para que cierre.
+  const [mode, setMode] = useState<"saldo" | "importe">("saldo");
+  const [delta, setDelta] = useState(0);
+  const [minus, setMinus] = useState(false);
+  const now = accountBalance(db, account);
+  const target = mode === "saldo" ? real : now + (minus ? -delta : delta);
+  const diff = Math.round(target - now);
+  return (
+    <Modal open={open} onClose={onClose} title="Saldo inicial / ajuste de saldo">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Cuenta">
+          <Select value={account} onChange={(e) => setAccount(e.target.value as Bank)}>
+            <option value="Caja">Caja</option>
+            <option value="BBVA">BBVA</option>
+            <option value="Provincia">Provincia</option>
+          </Select>
+        </Field>
+        <div className="col-span-2">
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "saldo", label: "Cargar el saldo que tengo hoy" },
+              { value: "importe", label: "Sumar o restar un importe" },
+            ]}
+          />
+        </div>
+        {mode === "saldo" ? (
+          <Field label="Saldo real hoy" hint={`En el sistema figura ${ars(now)}`}>
+            <NumberInput value={real} onChange={setReal} prefix="$" />
+          </Field>
+        ) : (
+          <Field label="Importe" hint={`En el sistema figura ${ars(now)}`}>
+            <div className="flex items-center gap-2">
+              <Select
+                value={minus ? "-" : "+"}
+                onChange={(e) => setMinus(e.target.value === "-")}
+                className="w-20"
+              >
+                <option value="+">+</option>
+                <option value="-">−</option>
+              </Select>
+              <NumberInput value={delta} onChange={setDelta} prefix="$" />
+            </div>
+          </Field>
+        )}
+        <Field label="Nota (opcional)" className="col-span-2">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={now === 0 ? "Saldo inicial" : "Ajuste de saldo"}
+          />
+        </Field>
+        <p className="col-span-2 text-xs text-muted-foreground">
+          {diff === 0
+            ? "El saldo ya coincide."
+            : `Se registra un ajuste de ${diff > 0 ? "+" : "−"}${ars(Math.abs(diff))} en ${account}. No cuenta como venta ni como gasto.`}
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          className={btn.primary}
+          disabled={diff === 0}
+          onClick={() => {
+            adjustBalance(account, target, note);
+            setReal(0);
+            setDelta(0);
+            setNote("");
+            onClose();
+          }}
+        >
+          Guardar saldo
+        </button>
+      </div>
+    </Modal>
   );
 }
 

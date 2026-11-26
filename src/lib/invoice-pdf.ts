@@ -26,23 +26,30 @@ const fmtCuit = (c: string) =>
 const qty = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
 
 let logoCache: { dataUrl: string; ratio: number } | null = null;
+/**
+ * El logo es un PNG con transparencia: algunos visores de PDF (por ejemplo en Windows) pintan
+ * la parte transparente de negro. Por eso se dibuja sobre fondo blanco y se pasa a JPEG,
+ * así se ve igual en cualquier computadora o celular.
+ */
 async function loadLogo() {
   if (logoCache) return logoCache;
-  const res = await fetch(new URL(logo, window.location.origin).href);
-  const blob = await res.blob();
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result));
-    fr.onerror = () => reject(new Error("logo"));
-    fr.readAsDataURL(blob);
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error("logo"));
+    im.src = new URL(logo, window.location.origin).href;
   });
-  const ratio = await new Promise<number>((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(img.width / img.height || 3.3);
-    img.onerror = () => resolve(3.3);
-    img.src = dataUrl;
-  });
-  logoCache = { dataUrl, ratio };
+  const ratio = img.naturalWidth / img.naturalHeight || 3.3;
+  const w = Math.min(1200, Math.max(600, img.naturalWidth));
+  const h = Math.round(w / ratio);
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const cx = c.getContext("2d")!;
+  cx.fillStyle = "#ffffff";
+  cx.fillRect(0, 0, w, h);
+  cx.drawImage(img, 0, 0, w, h);
+  logoCache = { dataUrl: c.toDataURL("image/jpeg", 0.92), ratio };
   return logoCache;
 }
 
@@ -104,7 +111,7 @@ export async function buildInvoicePdf(
 
   // Encabezado
   const logoH = 13;
-  doc.addImage(lg.dataUrl, "PNG", L, 14, logoH * lg.ratio, logoH);
+  doc.addImage(lg.dataUrl, "JPEG", L, 14, logoH * lg.ratio, logoH);
   font(6.5, "normal", GREY);
   doc.text(copy, L, 33, { charSpace: 0.6 });
   font(22, "normal", INK);
