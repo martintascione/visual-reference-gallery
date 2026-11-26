@@ -132,6 +132,8 @@ type Actions = {
   ) => string | null;
   /** Borra un movimiento y deshace lo que generó. Devuelve el motivo si no se puede. */
   removeMovement: (id: string) => string | null;
+  /** Cobra o deposita un cheque de la cartera en una cuenta, con su fecha. */
+  depositCheque: (id: string, bank: Bank, date: string, credited: boolean) => void;
   /** Borra un cheque mal cargado. Devuelve el motivo si no se puede. */
   removeCheque: (id: string) => string | null;
   setChequeStatus: (id: string, status: ChequeStatus, depositBank?: Bank, givenTo?: string) => void;
@@ -1078,6 +1080,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         return err;
       },
+      depositCheque: (id, bank, date, credited) =>
+        mutate((d) => {
+          const ch = d.cheques.find((x) => x.id === id);
+          if (!ch || (ch.status !== "cartera" && ch.status !== "depositado")) return d;
+          d.movements = d.movements.filter((m) => m.refId !== ch.id);
+          ch.status = credited ? "acreditado" : "depositado";
+          ch.depositBank = bank;
+          d.movements.unshift({
+            id: uid(),
+            date,
+            kind: "cobro",
+            account: bank,
+            amount: ch.amount,
+            concept: `${bank === "Caja" ? "Cobro" : "Depósito"} cheque ${ch.number} · ${ch.clientName}`,
+            method: "cheque",
+            feePct: 0,
+            settleDays: credited ? 0 : 2,
+            settled: credited,
+            refId: ch.id,
+          });
+          return d;
+        }),
       removeCheque: (id) => {
         let err: string | null = null;
         mutate((d) => {
@@ -1288,6 +1312,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               pay.chequeId = ch.id;
             }
           }
+          // Lo paga Felix: sale de la cuenta corriente con Felix (puede quedar en negativo).
+          if (pay.method === "felix") pay.account = "Felix";
           if (pay.method !== "gasoil" && !third) {
             // Sale de caja o banco. El cheque diferido se asienta en su fecha de cobro.
             const date =
@@ -1296,7 +1322,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               id: uid(),
               date,
               type: pay.kind === "transporte" ? "flete" : "compra",
-              concept: `Pago a ${pay.party}${pay.detail ? " · " + pay.detail : ""}`,
+              concept: `${pay.method === "felix" ? "Felix pagó a" : "Pago a"} ${pay.party}${pay.detail ? " · " + pay.detail : ""}`,
               amount: pay.amount,
               account: pay.account ?? "Caja",
               method: pay.method,

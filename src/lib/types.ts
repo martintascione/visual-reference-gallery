@@ -459,7 +459,8 @@ export type Purchase = {
   unloadDue?: string | undefined;
 };
 
-export type SupplierPayMethod = "efectivo" | "transferencia" | "cheque" | "gasoil";
+/** "felix": lo paga Felix (El Tecla) por Áridos y se descuenta de su cuenta corriente (puede quedar en negativo). */
+export type SupplierPayMethod = "efectivo" | "transferencia" | "cheque" | "gasoil" | "felix";
 
 /** Pago a una cantera o a un transporte. */
 export type SupplierPayment = {

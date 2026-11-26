@@ -41,6 +41,7 @@ const methodName: Record<SupplierPayMethod, string> = {
   transferencia: "Transferencia",
   cheque: "Cheque",
   gasoil: "Gasoil",
+  felix: "Cta. cte. Felix",
 };
 const key = (kind: string, party: string) => kind + "|" + party.trim().toLowerCase();
 
@@ -498,6 +499,7 @@ function PayFields({
           <option value="transferencia">Transferencia</option>
           <option value="efectivo">Efectivo</option>
           <option value="cheque">Cheque</option>
+          <option value="felix">Cuenta corriente Felix (El Tecla)</option>
           {allowGasoil && <option value="gasoil">Gasoil (carga en la estación)</option>}
         </Select>
       </Field>
@@ -522,6 +524,12 @@ function PayFields({
               </option>
             ))}
           </Select>
+        </Field>
+      ) : v.method === "felix" ? (
+        <Field label="Sale de">
+          <p className="flex h-10 items-center text-xs text-muted-foreground">
+            Lo paga Felix: se descuenta de su cuenta corriente (puede quedar en negativo)
+          </p>
         </Field>
       ) : v.method !== "gasoil" ? (
         <Field label="Sale de">
@@ -1790,7 +1798,7 @@ function DebtCard({
   const [payAmt, setPayAmt] = useState(0);
   const [payDate, setPayDate] = useState(todayISO());
   const [payHow, setPayHow] = useState<
-    "transferencia|BBVA" | "transferencia|Provincia" | "efectivo|Caja"
+    "transferencia|BBVA" | "transferencia|Provincia" | "efectivo|Caja" | "felix|Felix"
   >("transferencia|BBVA");
   const [label, setLabel] = useState(group.label);
   useEffect(() => setLabel(group.label), [group.label]);
@@ -1845,7 +1853,7 @@ function DebtCard({
     );
   };
   const markPaid = (c: Account["entries"][number], k: number) => {
-    const [method, acc] = payHow.split("|") as ["transferencia" | "efectivo", Bank];
+    const [method, acc] = payHow.split("|") as ["transferencia" | "efectivo" | "felix", Bank];
     addSupplierPayment({
       date: payDate === today ? new Date().toISOString() : payDate + "T12:00:00.000Z",
       party: account.party,
@@ -2032,6 +2040,7 @@ function DebtCard({
                         <option value="transferencia|BBVA">Transferencia BBVA</option>
                         <option value="transferencia|Provincia">Transferencia Provincia</option>
                         <option value="efectivo|Caja">Efectivo (caja)</option>
+                        <option value="felix|Felix">Cuenta corriente Felix</option>
                       </Select>
                     </Field>
                     <button className={btn.soft} onClick={() => setPayFor(null)}>

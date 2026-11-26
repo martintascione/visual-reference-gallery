@@ -161,7 +161,7 @@ function Caja() {
         {m.account === FELIX_BANK && m.kind === "transferencia" && m.via && (
           <p className="text-[11px] font-normal text-muted-foreground">Felix pagó: {m.via}</p>
         )}
-        {m.method === "felix" && (
+        {m.method === "felix" && m.amount > 0 && (
           <p className="text-[11px] font-normal text-muted-foreground">
             Le pagó a Felix{m.via ? `: ${m.via}` : ""}
           </p>

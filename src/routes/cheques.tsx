@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { FileCheck2, Pencil, Search, Trash2 } from "lucide-react";
-import type { Cheque } from "@/lib/types";
+import type { Bank, Cheque } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { ars, daysBetween, fmtDateNum, todayISO } from "@/lib/format";
 import { chequeFrom, chequeLabel } from "@/lib/cheque-labels";
@@ -21,6 +21,7 @@ import {
   Table,
   btn,
   tr,
+  Select,
 } from "@/components/ui-bits";
 import { ChequeForm } from "@/components/cheque-form";
 
@@ -56,8 +57,10 @@ const match = (c: Cheque, f: Filter) =>
               : c.status === "rechazado";
 
 function Cheques() {
-  const { db, removeCheque } = useStore();
+  const { db, removeCheque, setChequeStatus } = useStore();
   const [editing, setEditing] = useState<Cheque | null>(null);
+  const [depositing, setDepositing] = useState<Cheque | null>(null);
+  const [endorsing, setEndorsing] = useState<Cheque | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const del = (c: Cheque) => {
     const extra =
@@ -165,7 +168,7 @@ function Cheques() {
             "Entregado a",
             "",
           ]}
-          min={860}
+          min={1040}
         >
           {list.map((c) => {
             const d = daysBetween(today, c.dueDate);
@@ -225,6 +228,33 @@ function Cheques() {
                   )}
                 </td>
                 <td className="whitespace-nowrap text-right align-top">
+                  {(c.status === "cartera" || c.status === "depositado") && !c.own && (
+                    <span className="mr-1 inline-flex gap-1">
+                      {c.status === "cartera" ? (
+                        <button
+                          className={`${btn.primary} h-8 px-3 text-xs`}
+                          onClick={() => setDepositing(c)}
+                        >
+                          Cobrar / depositar
+                        </button>
+                      ) : (
+                        <button
+                          className={`${btn.primary} h-8 px-3 text-xs`}
+                          onClick={() => setChequeStatus(c.id, "acreditado")}
+                        >
+                          Acreditado
+                        </button>
+                      )}
+                      {c.status === "cartera" && (
+                        <button
+                          className={`${btn.soft} h-8 px-3 text-xs`}
+                          onClick={() => setEndorsing(c)}
+                        >
+                          Endosar
+                        </button>
+                      )}
+                    </span>
+                  )}
                   <button
                     className={btn.icon}
                     aria-label="Editar cheque"
@@ -254,6 +284,8 @@ function Cheques() {
         )}
       </Card>
       <ChequeForm open={adding} onClose={() => setAdding(false)} />
+      <ChequeDeposit cheque={depositing} onClose={() => setDepositing(null)} />
+      <ChequeEndorse cheque={endorsing} onClose={() => setEndorsing(null)} />
       <ChequeEdit
         cheque={editing}
         onClose={(m) => {
@@ -375,6 +407,140 @@ function ChequeEdit({
         </button>
         <button className={btn.primary} disabled={!c.dueDate || c.amount <= 0} onClick={save}>
           Guardar cambios
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Cobrar o depositar un cheque: fecha y cuenta donde entra. */
+function ChequeDeposit({ cheque, onClose }: { cheque: Cheque | null; onClose: () => void }) {
+  const { depositCheque } = useStore();
+  const [date, setDate] = useState(todayISO());
+  const [bank, setBank] = useState<Bank>("Provincia");
+  const [credited, setCredited] = useState(true);
+  const [last, setLast] = useState<string | undefined>(undefined);
+  if (cheque?.id !== last) {
+    setLast(cheque?.id);
+    if (cheque) {
+      setDate(todayISO());
+      setBank(cheque.ownerAccount === SEPARATE_BANK ? SEPARATE_BANK : "Provincia");
+      setCredited(true);
+    }
+  }
+  if (!cheque) return null;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Cobrar cheque N° ${cheque.number || "s/n"} · ${ars(cheque.amount)}`}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Fecha de cobro o depósito">
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+        </Field>
+        <Field label="Cuenta donde entra">
+          <Select value={bank} onChange={(e) => setBank(e.target.value as Bank)}>
+            <option value="Provincia">Provincia</option>
+            <option value="BBVA">BBVA</option>
+            <option value="Caja">Caja (cobrado en efectivo)</option>
+            <option value={SEPARATE_BANK}>{SEPARATE_NAME}</option>
+          </Select>
+        </Field>
+        <div className="col-span-2">
+          <Segmented
+            value={credited ? "si" : "no"}
+            onChange={(v) => setCredited(v === "si")}
+            options={[
+              { value: "si", label: "Cobrado (ya está la plata)" },
+              { value: "no", label: "Depositado (falta acreditar)" },
+            ]}
+          />
+        </div>
+        <p className="col-span-2 text-xs text-muted-foreground">
+          {credited
+            ? `Suma ${ars(cheque.amount)} en ${bankLabel(bank)} con esa fecha.`
+            : `Queda en "Liquidaciones pendientes" hasta que marques Acreditado.`}
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          className={btn.primary}
+          onClick={() => {
+            const iso =
+              date === todayISO()
+                ? new Date().toISOString()
+                : new Date(`${date}T12:00:00`).toISOString();
+            depositCheque(cheque.id, bank, iso, credited);
+            onClose();
+          }}
+        >
+          Confirmar
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Endosar: a quién se le entrega el cheque y cuándo. */
+function ChequeEndorse({ cheque, onClose }: { cheque: Cheque | null; onClose: () => void }) {
+  const { updateCheque } = useStore();
+  const [to, setTo] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [last, setLast] = useState<string | undefined>(undefined);
+  if (cheque?.id !== last) {
+    setLast(cheque?.id);
+    setTo("");
+    setDate(todayISO());
+  }
+  if (!cheque) return null;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Endosar cheque N° ${cheque.number || "s/n"} · ${ars(cheque.amount)}`}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="A quién se lo das">
+          <Input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="Proveedor, transporte…"
+            autoFocus
+          />
+        </Field>
+        <Field label="Fecha">
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+        </Field>
+        <p className="col-span-2 text-xs text-muted-foreground">
+          Para que además descuente la deuda con un proveedor, pagale desde su cuenta eligiendo este
+          cheque de la cartera.
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button className={btn.soft} onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          className={btn.primary}
+          disabled={to.trim().length < 2}
+          onClick={() => {
+            updateCheque(cheque.id, { givenTo: to.trim(), givenDate: date });
+            onClose();
+          }}
+        >
+          Endosar
         </button>
       </div>
     </Modal>
