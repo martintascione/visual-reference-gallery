@@ -70,9 +70,18 @@ export const defaultSettings: Settings = {
     },
     {
       id: "transf-bbva",
-      label: "Transferencia BBVA",
+      label: "Transferencia BBVA cta. cte.",
       method: "transferencia",
       bank: "BBVA",
+      feePct: 0,
+      settleDays: 0,
+      active: true,
+    },
+    {
+      id: "transf-bbva-ca",
+      label: "Transferencia BBVA caja de ahorro",
+      method: "transferencia",
+      bank: "BBVA CA",
       feePct: 0,
       settleDays: 0,
       active: true,
@@ -98,7 +107,7 @@ export const defaultSettings: Settings = {
     },
     {
       id: "cred-payway-bbva",
-      label: "Crédito Payway → BBVA",
+      label: "Crédito Payway → BBVA cta. cte.",
       method: "credito",
       bank: "BBVA",
       gateway: "Payway",

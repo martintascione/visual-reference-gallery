@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Package, Plus, Search, Trash2, Truck, Wallet } from "lucide-react";
 import type { Bank, Quote, SaleUnit, Stockpile } from "@/lib/types";
 import { stockpileBalance, useStore } from "@/lib/store";
+import { StockpileStockCard } from "@/components/stockpile-stock";
 import { ars, fmtDateNum, num, todayISO } from "@/lib/format";
 import { listPrice, qtyUnit, saleUnitsFor, toBaseQty, unitLabelFor } from "@/lib/pricing";
 import {
@@ -189,6 +190,10 @@ function Acopios() {
           />
         )}
       </Card>
+
+      <div className="mt-4">
+        <StockpileStockCard onOpen={(id) => setOpenId(id)} />
+      </div>
 
       <NewStockpile
         open={adding}

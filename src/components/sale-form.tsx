@@ -22,7 +22,7 @@ import type {
   SaleItem,
   SaleUnit,
 } from "@/lib/types";
-import { clientBalance, useStore } from "@/lib/store";
+import { clientBalance, useStore, stockpileReserved } from "@/lib/store";
 import {
   lineTotals,
   listPrice,
@@ -413,10 +413,11 @@ export function SaleForm({
   const ownQty = (productId: string) =>
     editSale?.items.filter((x) => x.productId === productId).reduce((a, x) => a + x.baseQty, 0) ??
     0;
-  const stockIssues = items.filter(
-    (i) =>
-      (db.products.find((p) => p.id === i.productId)?.stock ?? 0) + ownQty(i.productId) < i.baseQty,
-  );
+  // Lo acopiado no se puede vender: se compara contra el stock disponible.
+  const reservedStock = stockpileReserved(db);
+  const freeStock = (id: string) =>
+    (db.products.find((p) => p.id === id)?.stock ?? 0) - (reservedStock.get(id)?.base ?? 0);
+  const stockIssues = items.filter((i) => freeStock(i.productId) + ownQty(i.productId) < i.baseQty);
   const ctaPay = pays.find((p) => cfgOf(p.methodId)?.method === "cta_cte");
   const chequePay = pays.find((p) => cfgOf(p.methodId)?.method === "cheque");
   const client = db.clients.find((c) => c.id === clientId);
@@ -689,7 +690,7 @@ export function SaleForm({
               const p = db.products.find((x) => x.id === l.productId)!;
               const it = items[i];
               if (!it) return null;
-              const low = p.stock < it.baseQty;
+              const low = freeStock(p.id) + ownQty(p.id) < it.baseQty;
               return (
                 <div
                   key={i}
@@ -698,7 +699,10 @@ export function SaleForm({
                   <div className="col-span-2 sm:col-span-1">
                     <p className="text-sm font-semibold">{p.name}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      Stock {num(p.stock)} {p.unit === "m2" ? "m²" : p.unit}
+                      Disponible {num(freeStock(p.id))} {p.unit === "m2" ? "m²" : p.unit}
+                      {reservedStock.get(p.id)?.base
+                        ? ` · ${num(reservedStock.get(p.id)!.base)} en acopio`
+                        : ""}
                       {it.discountPct > 0 &&
                         ` · ${num(it.discountPct, 1)} % ${l.disc !== undefined ? "bonif." : "desc. por cantidad"}`}
                     </p>

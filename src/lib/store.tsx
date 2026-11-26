@@ -11,6 +11,7 @@ import {
 } from "react";
 import { reportError } from "./errors";
 import type {
+  SaleUnit,
   Bank,
   Cheque,
   ChequeStatus,
@@ -40,7 +41,7 @@ import { demoDB } from "./demo-seed";
 /** Modo demo: datos de ejemplo en memoria, sin Supabase (para previsualizar y probar). */
 export const DEMO = (import.meta.env as Record<string, string | undefined>)["VITE_DEMO"] === "1";
 import { addDays, dayOf, todayISO, uid } from "./format";
-import { stoneCalc } from "./pricing";
+import { stoneCalc, toBaseQty } from "./pricing";
 import { fromRow, supabase, toRow } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
 import type { AssistantAction } from "./assistant";
@@ -281,6 +282,47 @@ function stockpileStock(d: DB, s: Stockpile, w: StockpileWithdrawal, sign: 1 | -
     reason: sign < 0 ? "venta" : "ajuste",
     note: `${why} · ${s.clientName}${w.place ? " · " + w.place : ""}`,
   });
+}
+
+/** Mercadería acopiada que todavía no se retiró: es del cliente, no se puede vender.
+ *  Por producto: cantidad en unidad base y el detalle por acopio. */
+export function stockpileReserved(db: DB) {
+  const out = new Map<
+    string,
+    {
+      base: number;
+      rows: {
+        stockpileId: string;
+        client: string;
+        qty: number;
+        unit: SaleUnit;
+        pickupBy?: string | undefined;
+      }[];
+    }
+  >();
+  for (const s of db.stockpiles ?? []) {
+    if (s.closed || !s.items?.length) continue;
+    for (const it of s.items) {
+      const p = db.products.find((x) => x.id === it.productId);
+      if (!p) continue;
+      const took = s.withdrawals
+        .filter((w) => w.productId === it.productId && w.unit === it.unit)
+        .reduce((a, w) => a + w.qty, 0);
+      const left = Math.max(0, it.qty - took);
+      if (left <= 0) continue;
+      const e = out.get(p.id) ?? { base: 0, rows: [] };
+      e.base += toBaseQty(p, left, it.unit);
+      e.rows.push({
+        stockpileId: s.id,
+        client: s.clientName,
+        qty: left,
+        unit: it.unit,
+        pickupBy: s.pickupBy,
+      });
+      out.set(p.id, e);
+    }
+  }
+  return out;
 }
 
 /** Pagado, retirado y saldo a favor de un acopio. */

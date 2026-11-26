@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownToLine, History, Package, SlidersHorizontal } from "lucide-react";
 import type { Bank, Category, PaymentMethod, Product, StockMove } from "@/lib/types";
-import { useStore } from "@/lib/store";
+import { stockpileReserved, useStore } from "@/lib/store";
+import { StockpileStockCard } from "@/components/stockpile-stock";
 import { ars, fmtDate, fmtTime, num } from "@/lib/format";
 import { type CatFilter, matchCat, round, stoneCalc } from "@/lib/pricing";
 import {
@@ -59,6 +60,9 @@ function Stock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction]);
   const products = db.products.filter((p) => p.active && matchCat(p, cat));
+  // Lo acopiado ya es de un cliente: está en el depósito pero no se puede vender.
+  const reserved = stockpileReserved(db);
+  const resOf = (id: string) => reserved.get(id)?.base ?? 0;
   const low = db.products.filter((p) => p.active && p.stock < p.minStock);
   const valued = db.products
     .filter((p) => p.active)
@@ -71,7 +75,7 @@ function Stock() {
         title="Stock"
         subtitle="Se descuenta solo con cada venta y se suma con cada compra"
       />
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat
           label="Productos con stock bajo"
           value={String(low.length)}
@@ -82,6 +86,11 @@ function Stock() {
           tone={low.length ? "danger" : undefined}
         />
         <Stat label="Stock valorizado al costo" value={ars(valued)} />
+        <Stat
+          label="En acopio (no se vende)"
+          value={ars(db.products.reduce((a, p) => a + resOf(p.id) * p.cost, 0))}
+          sub={`${reserved.size} productos acopiados`}
+        />
         <Stat label="Movimientos registrados" value={String(db.stockMoves.length)} />
       </div>
 
@@ -94,13 +103,15 @@ function Stock() {
           <Table
             head={[
               "Producto",
-              { label: "Stock", right: true },
+              { label: "Stock total", right: true },
+              { label: "En acopio", right: true },
+              { label: "Disponible", right: true },
               { label: "Mínimo", right: true },
               { label: "Equivale a", right: true },
               "Estado",
               "",
             ]}
-            min={680}
+            min={860}
           >
             {products.map((p) => (
               <tr key={p.id} className={tr}>
@@ -109,6 +120,14 @@ function Stock() {
                   className={`text-right font-semibold tabular-nums ${p.stock < 0 ? "text-danger-soft-foreground" : ""}`}
                 >
                   {num(p.stock, 1)} {unitName[p.unit]}
+                </td>
+                <td className="text-right tabular-nums text-muted-foreground">
+                  {resOf(p.id) ? `${num(resOf(p.id), 1)} ${unitName[p.unit]}` : "—"}
+                </td>
+                <td
+                  className={`text-right font-semibold tabular-nums ${p.stock - resOf(p.id) < 0 ? "text-danger-soft-foreground" : ""}`}
+                >
+                  {num(p.stock - resOf(p.id), 1)} {unitName[p.unit]}
                 </td>
                 <td className="text-right tabular-nums text-muted-foreground">
                   {num(p.minStock)} {unitName[p.unit]}
@@ -171,6 +190,10 @@ function Stock() {
             )}
           </div>
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <StockpileStockCard />
       </div>
 
       <PurchaseModal product={purchase} onClose={() => setPurchase(null)} />
