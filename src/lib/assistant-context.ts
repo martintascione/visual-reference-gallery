@@ -88,7 +88,7 @@ export function fullContext(db: DB) {
 
   // Caja, bancos, cheques, liquidaciones
   push(
-    `\nCAJA Y BANCOS: Caja ${ars(accountBalance(db, "Caja"))} · BBVA ${ars(accountBalance(db, "BBVA"))} · Provincia ${ars(accountBalance(db, "Provincia"))} (aparte, cuenta de Corralón El Tecla responsable inscripto: ${ars(accountBalance(db, "El Tecla"))}, no se suma al negocio); cuenta corriente con Felix (El Tecla): ${ars(accountBalance(db, "Felix"))} (positivo = El Tecla le debe a Áridos).`,
+    `\nCAJA Y BANCOS: Caja ${ars(accountBalance(db, "Caja"))} · BBVA ${ars(accountBalance(db, "BBVA"))} · Provincia ${ars(accountBalance(db, "Provincia"))}. Aparte, cuenta de Felix / Corralón El Tecla (es lo mismo, CUIT responsable inscripto): ${ars(accountBalance(db, "Felix") + accountBalance(db, "El Tecla"))} (positivo = Felix le debe a Áridos; no se suma al negocio).`,
   );
   const pend = db.movements.filter((m) => m.settled === false && m.amount > 0);
   if (pend.length)
