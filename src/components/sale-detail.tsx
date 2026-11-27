@@ -8,6 +8,7 @@ import { Badge, Modal, btn } from "./ui-bits";
 import { FileCheck, FileDown, Pencil, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { DocPreview } from "@/components/doc-preview";
+import { openWorkSheet } from "@/lib/worksheet";
 
 const methodLabel: Record<string, string> = {
   efectivo: "Efectivo",
@@ -202,6 +203,13 @@ export function SaleDetail({ sale, onClose }: { sale: Sale | null; onClose: () =
         <div className="flex flex-wrap gap-2">
           <button className={btn.soft} onClick={() => setPreview(true)}>
             <FileDown className="h-4 w-4" strokeWidth={1.6} /> Ver comprobante
+          </button>
+          <button
+            className={btn.ghost}
+            title="Cómo se arma el precio, costos y ganancia. Solo para vos"
+            onClick={() => openWorkSheet(db, sale, "venta")}
+          >
+            Ganancia y precios
           </button>
           <button
             className={btn.soft}

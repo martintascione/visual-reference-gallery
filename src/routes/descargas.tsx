@@ -840,6 +840,10 @@ function NewPurchase({
   };
   const [pallets, setPallets] = useState(0);
   const [fTons, setFTons] = useState(0);
+  // Reparto del flete y la descarga por producto cuando el camión mezcla toneladas y m² (se puede tocar).
+  const [alloc, setAlloc] = useState<
+    Record<string, { f?: number | undefined; u?: number | undefined }>
+  >({});
   const [fValue, setFValue] = useState(0);
   const [uValue, setUValue] = useState(0);
   const [unloadBy, setUnloadBy] = useState("");
@@ -924,17 +928,22 @@ function NewPurchase({
     setDate(edit.date.slice(0, 10));
     setSupplier(edit.supplier);
     setRemito(edit.remito ?? "");
+    const al: Record<string, { f?: number | undefined; u?: number | undefined }> = {};
     setLines(
       edit.items.map((it) => {
         const k = kOf(it.productId ?? "");
+        const id = uid();
+        if (it.freight !== undefined || it.unload !== undefined)
+          al[id] = { f: it.freight, u: it.unload };
         return {
-          id: uid(),
+          id,
           productId: it.productId ?? "",
           tons: Math.round((it.tons / k) * 10000) / 10000,
           price: Math.round(it.pricePerTon * k * 100) / 100,
         };
       }),
     );
+    setAlloc(al);
     setCarrier(edit.carrier ?? "");
     const perTon = Math.round(edit.freightTons * edit.freightRate) === edit.freightTotal;
     setFMode(perTon ? "t" : "total");
@@ -947,7 +956,21 @@ function NewPurchase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, edit?.id]);
   const valid = lines.filter((l) => l.productId && l.tons > 0);
-  const tons = valid.reduce((a, l) => a + l.tons * kOf(l.productId), 0);
+  const unitOfLine = (l: Line) => {
+    const p = products.find((x) => x.id === l.productId);
+    return !p || p.unit === "kg" ? "t" : p.unit === "m2" ? "m²" : "u";
+  };
+  const qtyBy = valid.reduce<Record<string, number>>((a, l) => {
+    const u = unitOfLine(l);
+    a[u] = (a[u] ?? 0) + l.tons * kOf(l.productId);
+    return a;
+  }, {});
+  // Camión con toneladas y m² (o unidades) juntos: no se pueden sumar, el flete se reparte por producto.
+  const mixed = Object.keys(qtyBy).length > 1;
+  const qtyText = Object.entries(qtyBy)
+    .map(([u, q]) => `${num(q, 2)} ${u}`)
+    .join(" + ");
+  const tons = mixed ? (qtyBy["t"] ?? 0) : valid.reduce((a, l) => a + l.tons * kOf(l.productId), 0);
   const merch = valid.reduce((a, l) => a + l.tons * l.price, 0);
   // Si el camión trae solo lajas, la descarga arranca por palet.
   useEffect(() => {
@@ -976,6 +999,14 @@ function NewPurchase({
   const unloader = unload > 0 ? unloadBy.trim() : "";
   const sameUnloader = !!unloader && unloader.toLowerCase() === carrier.trim().toLowerCase();
   const carrierTotal = freightTotal + (sameUnloader ? unload : 0);
+  // Reparto por defecto: según lo que vale la mercadería de cada renglón.
+  const merchOf = (l: Line) => l.tons * l.price;
+  const share = (l: Line, total: number) =>
+    merch > 0 ? Math.round((total * merchOf(l)) / merch) : Math.round(total / valid.length);
+  const fOf = (l: Line) => alloc[l.id]?.f ?? share(l, freightTotal);
+  const uOf = (l: Line) => alloc[l.id]?.u ?? share(l, unload);
+  const fSum = valid.reduce((a, l) => a + fOf(l), 0);
+  const uSum = valid.reduce((a, l) => a + uOf(l), 0);
   const ok = supplier.trim().length > 1 && valid.length > 0;
 
   const save = () => {
@@ -985,6 +1016,7 @@ function NewPurchase({
       tons: l.tons * kOf(l.productId),
       pricePerTon: l.price / kOf(l.productId),
       total: Math.round(l.tons * l.price),
+      ...(mixed ? { freight: fOf(l), unload: uOf(l) } : {}),
     }));
     const iso = edit
       ? date === edit.date.slice(0, 10)
@@ -999,6 +1031,7 @@ function NewPurchase({
       setLines([blankLine()]);
       setCarrier("");
       setFTons(0);
+      setAlloc({});
       setFValue(0);
       setUValue(0);
       setPallets(0);
@@ -1261,12 +1294,8 @@ function NewPurchase({
               <Plus className="h-3.5 w-3.5" /> Producto nuevo
             </button>
             <p className="text-xs text-muted-foreground">
-              {num(tons, 2)}{" "}
-              {valid.length > 0 &&
-              valid.every((l) => products.find((x) => x.id === l.productId)?.category === "laja")
-                ? "m²"
-                : "t"}{" "}
-              en total · mercadería <b className="text-foreground">{ars(merch)}</b>
+              {qtyText || "0 t"} en total · mercadería{" "}
+              <b className="text-foreground">{ars(merch)}</b>
             </p>
           </div>
           {edit ? (
@@ -1429,6 +1458,74 @@ function NewPurchase({
               )}
             </div>
           </div>
+          {mixed && (freightTotal > 0 || unload > 0) && (
+            <div className="mt-3 rounded-2xl bg-card p-3">
+              <p className="text-xs font-semibold">Flete y descarga por producto</p>
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                El camión trae {qtyText}: no se pueden sumar toneladas y m², así que el flete y la
+                descarga se reparten por producto (de entrada, según lo que vale cada uno). Cambialo
+                si sabés cuánto corresponde a cada uno: el costo por tonelada o por m² se calcula
+                solo.
+              </p>
+              <div className="flex flex-col gap-2">
+                {valid.map((l) => {
+                  const q = l.tons * kOf(l.productId);
+                  const u = unitOfLine(l);
+                  return (
+                    <div
+                      key={l.id}
+                      className="grid grid-cols-2 items-center gap-2 text-xs sm:grid-cols-[minmax(0,1fr)_150px_150px]"
+                    >
+                      <span className="col-span-2 truncate font-medium sm:col-span-1">
+                        {products.find((x) => x.id === l.productId)?.name} · {num(q, 2)} {u}
+                      </span>
+                      {freightTotal > 0 && (
+                        <span>
+                          <NumberInput
+                            value={fOf(l)}
+                            onChange={(v) =>
+                              setAlloc((a) => ({ ...a, [l.id]: { ...a[l.id], f: v } }))
+                            }
+                            prefix="Flete $"
+                          />
+                          <span className="text-[10px] text-muted-foreground">
+                            {q > 0 ? `${ars(Math.round(fOf(l) / q))} por ${u}` : ""}
+                          </span>
+                        </span>
+                      )}
+                      {unload > 0 && (
+                        <span>
+                          <NumberInput
+                            value={uOf(l)}
+                            onChange={(v) =>
+                              setAlloc((a) => ({ ...a, [l.id]: { ...a[l.id], u: v } }))
+                            }
+                            prefix="Desc. $"
+                          />
+                          <span className="text-[10px] text-muted-foreground">
+                            {q > 0 ? `${ars(Math.round(uOf(l) / q))} por ${u}` : ""}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {((freightTotal > 0 && fSum !== freightTotal) || (unload > 0 && uSum !== unload)) && (
+                <p className="mt-2 text-[11px] text-danger-soft-foreground">
+                  {freightTotal > 0 && fSum !== freightTotal
+                    ? `El flete repartido suma ${ars(fSum)} y el total es ${ars(freightTotal)}. `
+                    : ""}
+                  {unload > 0 && uSum !== unload
+                    ? `La descarga repartida suma ${ars(uSum)} y el total es ${ars(unload)}.`
+                    : ""}{" "}
+                  <button type="button" className="underline" onClick={() => setAlloc({})}>
+                    Repartir de nuevo
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
           {!edit && carrier.trim() && carrierTotal > 0 && (
             <PayNowBox
               v={payC}

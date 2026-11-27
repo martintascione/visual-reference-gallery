@@ -431,6 +431,9 @@ export type PurchaseItem = {
   tons: number;
   pricePerTon: number;
   total: number;
+  /** Parte del flete y de la descarga de este producto (cuando el camión trae toneladas y m² juntos). */
+  freight?: number | undefined;
+  unload?: number | undefined;
 };
 
 /** Descarga de un proveedor (asiento): mercadería de la cantera + flete del transporte. */

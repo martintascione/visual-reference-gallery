@@ -1,3 +1,4 @@
+import { openWorkSheet } from "@/lib/worksheet";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Check, FileDown, MessageCircle, Pencil, Plus, Trash2, X, Warehouse } from "lucide-react";
@@ -261,6 +262,13 @@ function Presupuestos() {
                       Hablé, seguir en {db.settings.followUpDays} d
                     </button>
                   )}
+                  <button
+                    className={btn.ghost}
+                    title="Cómo se arma el precio, costos y ganancia. Solo para vos"
+                    onClick={() => openWorkSheet(db, q, "presupuesto")}
+                  >
+                    Ganancia y precios
+                  </button>
                   <button className={btn.ghost} onClick={() => editQ(q)}>
                     <Pencil className="h-3.5 w-3.5" /> Editar
                   </button>

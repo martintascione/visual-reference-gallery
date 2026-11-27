@@ -706,6 +706,21 @@ export function SaleForm({
                       {it.discountPct > 0 &&
                         ` · ${num(it.discountPct, 1)} % ${l.disc !== undefined ? "bonif." : "desc. por cantidad"}`}
                     </p>
+                    {it.subtotal > 0 &&
+                      (() => {
+                        // Solo se ve acá: no sale en el presupuesto ni en el comprobante.
+                        const v = Math.round(it.subtotal * (1 - (discountPct || 0) / 100));
+                        const g = v - it.cost;
+                        return (
+                          <p
+                            className={`text-[11px] font-medium ${g < 0 ? "text-danger-soft-foreground" : "text-success-foreground"}`}
+                            title="Solo lo ves vos: no sale en el PDF del cliente"
+                          >
+                            Costo {ars(it.cost)} · Ganancia {ars(g)}
+                            {v > 0 ? ` · ${num((g / v) * 100, 1)} %` : ""}
+                          </p>
+                        );
+                      })()}
                   </div>
                   <Field label="Cantidad">
                     <NumberInput
@@ -1149,10 +1164,13 @@ export function SaleForm({
                 <span className="font-semibold">Total</span>
                 <span className="text-2xl font-bold tabular-nums">{ars(total)}</span>
               </p>
-              {mode === "venta" && items.length > 0 && (
+              {items.length > 0 && (
                 <p className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>Ganancia estimada</span>
-                  <span className="tabular-nums">{ars(subtotal - cost)}</span>
+                  <span>Ganancia estimada (solo la ves vos)</span>
+                  <span className="tabular-nums">
+                    {ars(subtotal - cost)}
+                    {subtotal > 0 ? ` · ${num(((subtotal - cost) / subtotal) * 100, 1)} %` : ""}
+                  </span>
                 </p>
               )}
             </div>

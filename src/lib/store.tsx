@@ -364,12 +364,17 @@ function purchaseCosts(d: DB, pur: Purchase) {
   for (const it of pur.items) {
     const p = d.products.find((x) => x.id === it.productId);
     if (!p || it.tons <= 0 || it.pricePerTon <= 0) continue;
+    // Si el flete se repartió por producto (toneladas y m² en el mismo camión), se usa esa parte.
+    const frPer = it.freight !== undefined ? it.freight / it.tons : freightPerTon;
+    const unPer = it.unload !== undefined ? it.unload / it.tons : unloadPerTon;
+    const hasFr = it.freight !== undefined ? it.freight > 0 : pur.freightTotal > 0;
+    const hasUn = it.unload !== undefined ? it.unload > 0 : pur.unloadCost > 0;
     if (p.category === "piedra" && p.stoneCost) {
       p.stoneCost = {
         ...p.stoneCost,
         purchasePerTon: it.pricePerTon,
-        ...(pur.freightTotal > 0 ? { freightPerTon: Math.round(freightPerTon) } : {}),
-        ...(pur.unloadCost > 0 ? { unloadPerTon: Math.round(unloadPerTon) } : {}),
+        ...(hasFr ? { freightPerTon: Math.round(frPer) } : {}),
+        ...(hasUn ? { unloadPerTon: Math.round(unPer) } : {}),
       };
       const c = stoneCalc(p.stoneCost, p.bagKg ?? d.settings.bagKg);
       p.cost = c.costKg;
@@ -378,9 +383,10 @@ function purchaseCosts(d: DB, pur: Purchase) {
     } else {
       // Lajas, líquidos y unitarios: el precio es por unidad; se mantiene el mismo margen.
       const margin = p.cost > 0 ? p.price / p.cost : 1 + (d.settings.defaultMarginPct ?? 40) / 100;
-      const fr = pur.freightTotal > 0 ? freightPerTon : (p.freight ?? 0);
-      p.freight = fr || undefined;
-      p.cost = Math.round(it.pricePerTon + fr + unloadPerTon);
+      // "Flete + zampi" del producto incluye la descarga: el costo del proveedor queda limpio.
+      const extra = (hasFr ? frPer : (p.freight ?? 0)) + (hasUn ? unPer : 0);
+      p.freight = Math.round(extra) || undefined;
+      p.cost = Math.round(it.pricePerTon + extra);
       p.price = Math.round(p.cost * margin);
     }
   }
